@@ -1,17 +1,18 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { authApi } from '@/services/api/authApi';
 import EquipmentList from '@/components/EquipmentList';
+import StoreList from '@/components/StoresList'; 
 import { LayoutDashboard, Store, HardDrive, Wrench, LogOut } from 'lucide-react';
 
-// 1. Definimos la interfaz del usuario para evitar el 'any'
+// Interfaces para TypeScript (Cero 'any')
 interface Usuario {
   id: number;
   usuario: string;
 }
 
-// 2. Definimos una interfaz para el error de la API
 interface ApiError {
   response?: {
     data?: {
@@ -26,9 +27,10 @@ export default function Home() {
   const [contrasena, setContrasena] = useState<string>('');
   const [mensaje, setMensaje] = useState<string>('');
   
-  // Usamos la interfaz Usuario en el estado
+  // Estado del usuario
   const [usuarioLogueado, setUsuarioLogueado] = useState<Usuario | null>(null);
   
+  // Estado de navegación
   const [activeTab, setActiveTab] = useState<string>('Dashboard');
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -38,17 +40,15 @@ export default function Home() {
     try {
       if (isLogin) {
         const res = await authApi.login({ usuario, contrasena });
-        // Suponiendo que la respuesta tiene esta estructura según tus archivos previos
         setUsuarioLogueado(res.data.usuario);
       } else {
         await authApi.registro({ usuario, contrasena });
         setIsLogin(true);
-        setMensaje('✅ Registro exitoso. Ahora puedes iniciar sesión.');
+        setMensaje('✅ Registration successful. Please login.');
       }
     } catch (err: unknown) {
-      // Manejo de error tipado sin usar 'any'
       const error = err as ApiError;
-      setMensaje(`❌ ${error.response?.data?.error || 'Error en la conexión'}`);
+      setMensaje(`❌ ${error.response?.data?.error || 'Connection error'}`);
     }
   };
 
@@ -60,14 +60,22 @@ export default function Home() {
     setActiveTab('Dashboard');
   };
 
-  // Vista cuando el usuario ha iniciado sesión
+  // VISTA PRINCIPAL (USUARIO LOGUEADO)
   if (usuarioLogueado) {
     return (
-      <div className="flex h-screen bg-gray-50 text-gray-900">
+      <div className="flex h-screen bg-bone">
         {/* SIDEBAR */}
-        <aside className="w-64 bg-slate-900 text-white flex flex-col shadow-xl">
-          <div className="p-8">
-            <h1 className="text-2xl font-black tracking-tighter text-purple-400">LADYBIRD</h1>
+        <aside className="w-64 bg-night text-white flex flex-col shadow-2xl">
+          {/* LOGO EN EL SIDEBAR */}
+          <div className="p-8 flex justify-center items-center">
+            <Image 
+              src="/logo.png" 
+              alt="LadyBird Logo" 
+              width={160} 
+              height={50} 
+              priority 
+              className="object-contain"
+            />
           </div>
           
           <nav className="flex-1 px-4 space-y-2">
@@ -80,56 +88,54 @@ export default function Home() {
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
                   activeTab === item.id 
-                  ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/20' 
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                  ? 'bg-rose text-night shadow-lg font-bold' 
+                  : 'text-tumbleweed hover:bg-white/10 hover:text-white'
                 }`}
               >
-                <item.icon size={20} />
+                <item.icon size={20} className={activeTab === item.id ? 'text-night' : 'group-hover:scale-110 transition-transform'} />
                 <span className="font-semibold">{item.id}</span>
               </button>
             ))}
           </nav>
 
-          <div className="p-4 border-t border-slate-800">
-            <div className="flex items-center space-x-3 px-4 py-3 mb-2 text-slate-300">
-              <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-xs font-bold text-white">
-                {usuarioLogueado.usuario.substring(0, 2).toUpperCase()}
+          {/* User Info & Logout */}
+          <div className="p-4 border-t border-white/5">
+            <div className="flex items-center space-x-3 px-4 py-3 mb-2">
+              <div className="w-8 h-8 bg-rose text-night rounded-full flex items-center justify-center text-xs font-black uppercase shadow-inner">
+                {usuarioLogueado.usuario.substring(0, 2)}
               </div>
-              <span className="text-sm font-medium truncate">{usuarioLogueado.usuario}</span>
+              <span className="text-sm font-medium truncate text-tumbleweed tracking-tight">{usuarioLogueado.usuario}</span>
             </div>
             <button 
               onClick={handleLogout}
-              className="w-full flex items-center space-x-3 px-4 py-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
+              className="w-full flex items-center space-x-3 px-4 py-3 text-rose/60 hover:text-rose hover:bg-rose/10 rounded-xl transition-all font-black uppercase text-[10px] tracking-[0.2em]"
             >
-              <LogOut size={20} />
-              <span className="font-semibold">Logout</span>
+              <LogOut size={16} />
+              <span>Logout System</span>
             </button>
           </div>
         </aside>
 
-        {/* CONTENT AREA */}
-        <main className="flex-1 overflow-y-auto p-10">
-          {activeTab === 'Equipments' ? (
-            <EquipmentList />
-          ) : (
-            <div className="bg-white p-10 rounded-3xl shadow-sm border border-gray-100">
-              <h2 className="text-3xl font-bold mb-4 text-gray-800">{activeTab}</h2>
-              <p className="text-gray-500">This section is currently under development.</p>
-              
-              {activeTab === 'Dashboard' && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-                  <div className="p-6 bg-purple-50 rounded-2xl border border-purple-100">
-                    <p className="text-purple-600 font-bold mb-1">Welcome back,</p>
-                    <p className="text-2xl font-black text-purple-900">{usuarioLogueado.usuario}</p>
-                  </div>
-                  <div className="p-6 bg-blue-50 rounded-2xl border border-blue-100">
-                    <p className="text-blue-600 font-bold mb-1">System Status</p>
-                    <p className="text-2xl font-black text-blue-900">Stable</p>
-                  </div>
-                </div>
-              )}
+        {/* CONTENIDO PRINCIPAL */}
+        <main className="flex-1 overflow-y-auto p-10 bg-bone">
+          {activeTab === 'Stores' && <StoreList />}
+          {activeTab === 'Equipments' && <EquipmentList />}
+
+          {(activeTab === 'Dashboard' || activeTab === 'Maintenance') && (
+            <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-tumbleweed">
+              <h2 className="text-3xl font-black text-night uppercase italic tracking-tighter mb-4">{activeTab}</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+                 <div className="p-8 bg-sky/20 rounded-3xl border border-sky/30">
+                    <p className="text-night/60 font-black uppercase text-[10px] tracking-widest mb-1">Status</p>
+                    <p className="text-2xl font-black text-night uppercase italic">Systems Active</p>
+                 </div>
+                 <div className="p-8 bg-rose/10 rounded-3xl border border-rose/20">
+                    <p className="text-night/60 font-black uppercase text-[10px] tracking-widest mb-1">Welcome back</p>
+                    <p className="text-2xl font-black text-night">{usuarioLogueado.usuario}</p>
+                 </div>
+              </div>
             </div>
           )}
         </main>
@@ -137,50 +143,39 @@ export default function Home() {
     );
   }
 
-  // Vista de Login / Registro
+  // VISTA DE LOGIN / REGISTRO
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-4">
-      <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full">
+    <main className="min-h-screen bg-night flex items-center justify-center p-4">
+      <div className="bg-bone p-12 rounded-[3.5rem] shadow-2xl max-w-md w-full border border-tumbleweed">
+        {/* LOGO EN EL LOGIN */}
+        <div className="flex justify-center mb-10">
+          <Image src="/logo.png" alt="LadyBird Logo" width={220} height={70} priority />
+        </div>
+
         <div className="text-center mb-10">
-          <h2 className="text-4xl font-black text-slate-800 tracking-tight">
-            {isLogin ? 'Welcome Back' : 'Join Us'}
-          </h2>
-          <p className="text-slate-500 mt-2 font-medium">
-            {isLogin ? 'Please enter your details' : 'Create your manager account'}
-          </p>
+          <p className="text-night/60 font-black uppercase text-xs tracking-[0.3em]">Access Management</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">
-              Email
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. jdoe"
-              value={usuario}
-              onChange={(e) => setUsuario(e.target.value)}
-              className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-purple-500 transition-all text-slate-700"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">
-              Password
-            </label>
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={contrasena}
-              onChange={(e) => setContrasena(e.target.value)}
-              className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-purple-500 transition-all text-slate-700"
-              required
-            />
-          </div>
+          <input
+            type="text"
+            placeholder="Username"
+            value={usuario}
+            onChange={(e) => setUsuario(e.target.value)}
+            className="w-full p-5 bg-white border border-tumbleweed rounded-[1.5rem] outline-none focus:ring-2 focus:ring-night transition-all text-night font-bold shadow-sm"
+            required
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={contrasena}
+            onChange={(e) => setContrasena(e.target.value)}
+            className="w-full p-5 bg-white border border-tumbleweed rounded-[1.5rem] outline-none focus:ring-2 focus:ring-night transition-all text-night font-bold shadow-sm"
+            required
+          />
 
           {mensaje && (
-            <div className={`p-4 rounded-2xl text-sm font-bold text-center ${
+            <div className={`p-4 rounded-2xl text-[10px] font-black text-center uppercase tracking-widest ${
               mensaje.includes('❌') ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'
             }`}>
               {mensaje}
@@ -189,23 +184,18 @@ export default function Home() {
 
           <button 
             type="submit" 
-            className="w-full py-4 bg-purple-600 text-white rounded-2xl font-bold shadow-lg shadow-purple-200 hover:bg-purple-700 transition transform active:scale-[0.98]"
+            className="w-full py-5 bg-night text-bone rounded-[1.5rem] font-black uppercase tracking-[0.2em] shadow-xl hover:bg-night/90 transition-all transform active:scale-95 shadow-night/20"
           >
-            {isLogin ? 'Sign In' : 'Create Account'}
+            {isLogin ? 'Login' : 'Create Account'}
           </button>
         </form>
 
-        <div className="mt-8 text-center">
-          <button 
-            onClick={() => {
-              setIsLogin(!isLogin);
-              setMensaje('');
-            }} 
-            className="text-sm font-bold text-slate-400 hover:text-purple-600 transition-colors"
-          >
-            {isLogin ? "Don't have an account? Sign up" : "Already have an account? Login"}
-          </button>
-        </div>
+        <button 
+          onClick={() => { setIsLogin(!isLogin); setMensaje(''); }} 
+          className="w-full mt-10 text-[10px] font-black uppercase tracking-[0.3em] text-night/30 hover:text-night transition-colors"
+        >
+          {isLogin ? "Sign Up Now" : "Back to Login"}
+        </button>
       </div>
     </main>
   );

@@ -1,6 +1,6 @@
 import apiClient from './client';
-import type { Store } from './storesApi';
 
+// Interfaz que representa un Equipo en el sistema
 export interface Equipment {
   id: string;
   storeId: string;
@@ -10,88 +10,51 @@ export interface Equipment {
   yearCode: string;
   seq: number;
   isDown: boolean;
+  qrCodeText?: string; 
   status: string;
   createdAt: string;
-  fullName: string;
-  store: Store | null;
-}
-
-export interface EquipmentCreateData {
-  storeId: string;
-  equipmentCode: string;
-  type: string;
-  name: string;
-  yearCode?: string;
-  seq?: number;
-  isDown?: boolean;
-}
-
-export interface EquipmentUpdateData {
-  storeId?: string;
-  equipmentCode?: string;
-  type?: string;
-  name?: string;
-  yearCode?: string;
-  seq?: number;
-  isDown?: boolean;
-}
-
-interface EquipmentResponse {
-  success: boolean;
-  data: Equipment[];
-  count: number;
-  filters?: {
-    storeId?: string;
-    type?: string;
-    isDown?: boolean;
+  store?: {
+    id: string;
+    name: string;
+    code: string;
   };
 }
 
-interface SingleEquipmentResponse {
-  success: boolean;
-  data: Equipment;
-  message?: string;
+// Datos necesarios para crear un equipo (el código es opcional porque lo genera el back)
+export interface EquipmentCreateData {
+  storeId: string;
+  name: string;
+  type: string;
+  yearCode: string;
+  equipmentCode?: string; 
 }
 
-interface TypesResponse {
-  success: boolean;
-  data: string[];
-  count: number;
-}
-
-interface EquipmentParams {
-  storeId?: string;
-  type?: string;
-  isDown?: boolean;
-}
-
+// Objeto de la API con todos los métodos necesarios
 export const equipmentApi = {
-  getAll: (params?: EquipmentParams) => 
-    apiClient.get<EquipmentResponse>('/equipment', { params }),
+  getAll: (params?: { storeId?: string; type?: string; isDown?: boolean }) => 
+    apiClient.get('/equipment', { params }),
 
   getById: (id: string) => 
-    apiClient.get<SingleEquipmentResponse>(`/equipment/${id}`),
-
-  getByStore: (storeId: string) => 
-    apiClient.get<EquipmentResponse>(`/stores/${storeId}/equipment`),
-
-  getTypes: () => 
-    apiClient.get<TypesResponse>('/equipment/types'),
+    apiClient.get(`/equipment/${id}`),
 
   create: (data: EquipmentCreateData) => 
-    apiClient.post<SingleEquipmentResponse>('/equipment', data),
+    apiClient.post('/equipment', data),
 
-  update: (id: string, data: EquipmentUpdateData) => 
-    apiClient.put<SingleEquipmentResponse>(`/equipment/${id}`, data),
+  update: (id: string, data: Partial<EquipmentCreateData>) => 
+    apiClient.put(`/equipment/${id}`, data),
 
   delete: (id: string) => 
-    apiClient.delete<{ success: boolean; message: string }>(`/equipment/${id}`),
+    apiClient.delete(`/equipment/${id}`),
 
   markAsDown: (id: string) => 
-    apiClient.patch<SingleEquipmentResponse>(`/equipment/${id}/mark-down`),
+    apiClient.post(`/equipment/${id}/down`),
 
   markAsOperational: (id: string) => 
-    apiClient.patch<SingleEquipmentResponse>(`/equipment/${id}/mark-operational`),
+    apiClient.post(`/equipment/${id}/operational`),
+
+  getTypes: () => 
+    apiClient.get<{ success: boolean; data: string[] }>('/equipment/types'),
 };
 
+// EXPORTACIÓN POR DEFECTO (Esto es lo que arregla el error de la pantalla roja)
 export default equipmentApi;

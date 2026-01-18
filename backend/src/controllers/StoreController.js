@@ -1,3 +1,4 @@
+// src/controllers/StoreController.js
 const StoreMapper = require('../mappers/StoreMapper');
 
 class StoreController {
@@ -7,11 +8,9 @@ class StoreController {
 
   async getAll(req, res) {
     try {
-      const { active } = req.query;
-      
-      const stores = active === 'true' 
-        ? await this.storeService.getActiveStores()
-        : await this.storeService.getAllStores();
+      // MEJORA: Pasamos todo el objeto query al service.
+      // Esto permite filtrar por ?active=true o cualquier otro filtro futuro.
+      const stores = await this.storeService.getAllStores(req.query);
 
       res.json({
         success: true,
@@ -46,6 +45,7 @@ class StoreController {
 
   async create(req, res) {
     try {
+      // El Service se encarga de validar duplicados y campos obligatorios
       const store = await this.storeService.createStore(req.body);
 
       res.status(201).json({
@@ -54,6 +54,7 @@ class StoreController {
         message: 'Store created successfully'
       });
     } catch (error) {
+      // Manejamos errores de validación (400) o de servidor (500)
       const statusCode = error.message.includes('required') || error.message.includes('exists') ? 400 : 500;
       res.status(statusCode).json({
         success: false,
@@ -73,7 +74,7 @@ class StoreController {
         message: 'Store updated successfully'
       });
     } catch (error) {
-      const statusCode = error.message === 'Store not found' ? 404 : 
+      const statusCode = error.message.includes('not found') ? 404 : 
                         error.message.includes('exists') ? 400 : 500;
       res.status(statusCode).json({
         success: false,
@@ -92,7 +93,7 @@ class StoreController {
         message: 'Store deleted successfully'
       });
     } catch (error) {
-      const statusCode = error.message === 'Store not found' ? 404 : 500;
+      const statusCode = error.message.includes('not found') ? 404 : 500;
       res.status(statusCode).json({
         success: false,
         error: error.message

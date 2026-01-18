@@ -1,14 +1,17 @@
+// src/services/StoreService.js
+
 class StoreService {
   constructor(storeRepository) {
     this.storeRepository = storeRepository;
   }
 
-  async getAllStores() {
+  // MEJORA: Unificamos los filtros para que sea escalable
+  async getAllStores(filters = {}) {
+    // Si el frontend envía ?active=true, usamos findActive, si no, traemos todas.
+    if (filters.active === true || filters.active === 'true') {
+      return await this.storeRepository.findActive();
+    }
     return await this.storeRepository.findAll();
-  }
-
-  async getActiveStores() {
-    return await this.storeRepository.findActive();
   }
 
   async getStoreById(id) {
@@ -20,32 +23,41 @@ class StoreService {
   }
 
   async createStore(storeData) {
-    // Validate required fields
+    // 1. Validaciones básicas
     if (!storeData.code || !storeData.name) {
       throw new Error('Code and name are required');
     }
 
-    // Check if code already exists
-    const existingStore = await this.storeRepository.findByCode(storeData.code);
+    // 2. MEJORA: Normalizamos el código (Mayúsculas y sin espacios)
+    const normalizedCode = storeData.code.trim().toUpperCase();
+
+    // 3. Verificar si el código ya existe
+    const existingStore = await this.storeRepository.findByCode(normalizedCode);
     if (existingStore) {
-      throw new Error('Store code already exists');
+      throw new Error(`The store code "${normalizedCode}" already exists`);
     }
 
-    return await this.storeRepository.create(storeData);
+    // 4. Guardamos con el código limpio
+    return await this.storeRepository.create({
+      ...storeData,
+      code: normalizedCode
+    });
   }
 
   async updateStore(id, storeData) {
-    // Check if store exists
-    const existingStore = await this.storeRepository.findById(id);
-    if (!existingStore) {
-      throw new Error('Store not found');
-    }
+    // 1. Verificar existencia
+    const existingStore = await this.getStoreById(id);
 
-    // Check if new code conflicts with another store
-    if (storeData.code && storeData.code !== existingStore.code) {
-      const storeWithCode = await this.storeRepository.findByCode(storeData.code);
-      if (storeWithCode && storeWithCode.id !== id) {
-        throw new Error('Store code already exists');
+    // 2. Si se intenta cambiar el código, normalizar y verificar disponibilidad
+    if (storeData.code) {
+      const normalizedCode = storeData.code.trim().toUpperCase();
+      
+      if (normalizedCode !== existingStore.code) {
+        const storeWithCode = await this.storeRepository.findByCode(normalizedCode);
+        if (storeWithCode) {
+          throw new Error('The new store code already exists');
+        }
+        storeData.code = normalizedCode;
       }
     }
 
@@ -53,11 +65,8 @@ class StoreService {
   }
 
   async deleteStore(id) {
-    const store = await this.storeRepository.findById(id);
-    if (!store) {
-      throw new Error('Store not found');
-    }
-
+    // Usamos el método interno para validar existencia antes de borrar
+    await this.getStoreById(id);
     return await this.storeRepository.delete(id);
   }
 }

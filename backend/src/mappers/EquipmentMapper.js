@@ -15,6 +15,7 @@ class EquipmentMapper {
       seq: row.seq,
       isDown: row.is_down,
       createdAt: row.created_at,
+      qrCodeText: row.qr_code_text,
       store: storeData ? StoreMapper.toDomain(storeData) : null
     });
   }

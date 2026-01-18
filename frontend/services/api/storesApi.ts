@@ -6,6 +6,7 @@ export interface Store {
   name: string;
   timezone: string;
   isActive: boolean;
+  emails: string[];
   createdAt: string;
   displayName: string;
 }
@@ -15,6 +16,7 @@ export interface StoreCreateData {
   name: string;
   timezone?: string;
   isActive?: boolean;
+  emails?: string;
 }
 
 export interface StoreUpdateData {

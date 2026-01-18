@@ -37,18 +37,20 @@ const initDB = async () => {
 
     // Tabla equipment
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS equipment (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        store_id UUID REFERENCES stores(id) ON DELETE CASCADE,
-        equipment_code TEXT UNIQUE NOT NULL,
-        type TEXT NOT NULL,
-        name TEXT NOT NULL,
-        year_code TEXT,
-        seq INTEGER,
-        is_down BOOLEAN DEFAULT false,
-        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+  CREATE TABLE IF NOT EXISTS equipment (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    store_id UUID REFERENCES stores(id) ON DELETE CASCADE,
+    equipment_code TEXT UNIQUE NOT NULL,
+    type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    year_code TEXT,
+    seq INTEGER,
+    is_down BOOLEAN DEFAULT false,
+    qr_code_text TEXT, -- Campo para el QR
+    deleted_at TIMESTAMPTZ DEFAULT NULL, -- <--- ESTA LÍNEA ES VITAL PARA EL SOFT DELETE
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+  )
+`);
     console.log('✅ Tabla equipment creada');
 
     // Crear tipo ENUM para urgency

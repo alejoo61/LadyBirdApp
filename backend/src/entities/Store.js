@@ -1,28 +1,22 @@
 class Store {
-  constructor({
-    id,
-    code,
-    name,
-    timezone,
-    isActive,
-    createdAt
-  }) {
+  constructor({ id, code, name, timezone, isActive, emails, createdAt }) {
     this.id = id;
     this.code = code;
     this.name = name;
-    this.timezone = timezone;
+    this.timezone = timezone || 'UTC';
     this.isActive = isActive;
+    this.emails = emails || ''; // Guardamos el string original
     this.createdAt = createdAt;
   }
 
-  // Business logic methods
-  isOperational() {
-    return this.isActive === true;
+  // Método útil para obtener los emails como una lista limpia
+  getEmailList() {
+    if (!this.emails) return [];
+    return this.emails.split(',').map(email => email.trim()).filter(e => e !== '');
   }
 
-  getDisplayName() {
-    return `${this.code} - ${this.name}`;
-  }
+  getStatus() { return this.isActive ? 'ACTIVE' : 'INACTIVE'; }
+  getDisplayName() { return `${this.code} - ${this.name}`; }
 }
 
 module.exports = Store;
