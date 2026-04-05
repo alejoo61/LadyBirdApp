@@ -7,7 +7,6 @@ frontend:
         - npm install
     build:
       commands:
-        - cd frontend
         - npm run build
         - ls -la out/
   artifacts:
