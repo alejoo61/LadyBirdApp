@@ -151,31 +151,30 @@ class FulfillmentSheetGenerator {
     `;
   }
 
-  _renderSection(title, items, color = '#2d3748') {
-    if (!items || items.length === 0) return '';
-    return `
-    <div class="section">
-      <div class="section-header" style="background:${color}">
-        <span>${title}</span>
-        <span class="section-cols">AMT | UTENSIL | PACKAGING | PACKED? | LOADED?</span>
-      </div>
-      <table>
-        <thead><tr><th>ITEM</th><th>AMOUNT</th><th>UTENSIL</th><th>PACKAGING</th><th>PACKED?</th><th>LOADED?</th></tr></thead>
-        <tbody>
-          ${items.map(item => `
-            <tr>
-              <td>${item.name}</td>
-              <td>${item.totalAmount || item.total || '—'} ${item.unit || ''}</td>
-              <td>${item.utensil || '—'}</td>
-              <td>${item.packagingQty ? `${item.packagingQty}x ${item.packaging}` : (item.packaging || '—')}</td>
-              <td class="checkbox-cell"><span class="checkbox"></span></td>
-              <td class="checkbox-cell"><span class="checkbox"></span></td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>`;
-  }
+ _renderSection(title, items, color = '#2d3748') {
+  if (!items || items.length === 0) return '';
+  return `
+  <div class="section">
+    <div class="section-header" style="background:${color}">
+      <span>${title}</span>
+    </div>
+    <table>
+      <thead><tr><th>ITEM</th><th>AMOUNT</th><th>UTENSIL</th><th>PACKAGING</th><th>PACKED?</th><th>LOADED?</th></tr></thead>
+      <tbody>
+        ${items.map(item => `
+          <tr>
+            <td>${item.name}</td>
+            <td>${item.totalAmount || item.total || '—'} ${item.unit || ''}</td>
+            <td>${item.utensil || '—'}</td>
+            <td>${item.packagingQty ? `${item.packagingQty}x ${item.packaging}` : (item.packaging || '—')}</td>
+            <td class="checkbox-cell"><span class="checkbox"></span></td>
+            <td class="checkbox-cell"><span class="checkbox"></span></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
 
   _renderPaperGoods(paperGoods) {
     if (!paperGoods.included) return `
