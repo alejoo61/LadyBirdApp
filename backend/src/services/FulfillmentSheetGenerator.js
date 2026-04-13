@@ -81,8 +81,6 @@ class FulfillmentSheetGenerator {
       border-bottom: 4px solid #922b21;
     }
     .doc-header h1 { font-size: 15px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
-
-    /* FIX: header-right con catering type + method + badge */
     .header-right { display: flex; align-items: center; gap: 6px; }
     .method-pill {
       padding: 3px 8px;
@@ -94,7 +92,7 @@ class FulfillmentSheetGenerator {
       border: 2px solid rgba(255,255,255,0.6);
       color: white;
     }
-    .method-pill.pickup  { background: #1565c0; border-color: #1565c0; }
+    .method-pill.pickup   { background: #1565c0; border-color: #1565c0; }
     .method-pill.delivery { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.5); }
     .event-badge {
       padding: 3px 10px;
@@ -143,7 +141,6 @@ class FulfillmentSheetGenerator {
     .paper-goods th { background: #fde68a; border-color: #f0c040; color: #7a6a00; }
     .paper-goods td { border-color: #f0c040; font-size: 9px; }
 
-    /* Drinks checklist box */
     .drinks-checklist { background: #e8f0fe; border: 1px solid #90caf9; margin-top: 6px; }
     .drinks-checklist-header { background: #1565c0; color: white; padding: 4px 8px; font-size: 9px; font-weight: 900; text-transform: uppercase; }
     .drinks-checklist table { background: #e8f0fe; }
@@ -172,7 +169,6 @@ class FulfillmentSheetGenerator {
     `;
   }
 
-  // FIX: method pill en el header junto al badge, sin banner separado
   _headerHTML(header, badge) {
     const method   = (header.deliveryMethod || '').toUpperCase();
     const isPickup = method === 'PICKUP';
@@ -190,7 +186,9 @@ class FulfillmentSheetGenerator {
     </div>
     <div class="order-info">
       <div class="info-left">
+        <!-- ORDER # comentado hasta confirmar el número correcto con el equipo
         <div class="info-row"><span class="info-label">Order #</span><span class="info-value highlight">#${header.displayNumber || header.orderNumber}</span></div>
+        -->
         <div class="info-row"><span class="info-label">Client</span><span class="info-value">${header.clientName || '—'}</span></div>
         <div class="info-row"><span class="info-label">Store</span><span class="info-value">${header.storeName} (${header.storeCode})</span></div>
         <div class="info-row"><span class="info-label">Guest Count</span><span class="info-value highlight">${header.guestCount}</span></div>
@@ -230,7 +228,6 @@ class FulfillmentSheetGenerator {
     </div>`;
   }
 
-  // Paper Goods — sin drinks (drinks van en su propia caja)
   _renderPaperGoods(paperGoods) {
     if (!paperGoods.included) return `
     <div class="paper-goods">
@@ -256,18 +253,17 @@ class FulfillmentSheetGenerator {
     </div>`;
   }
 
-  // FIX: Drinks como caja separada con checkboxes por item
   _renderDrinksChecklist(drinks = []) {
     if (!drinks || drinks.length === 0) return '';
     const rows = [];
     for (const drink of drinks) {
-      rows.push({ label: `${drink.name} (x${drink.quantity})`, check: true });
+      rows.push({ label: `${drink.name} (x${drink.quantity})` });
       if (drink.wantsCups) {
-        rows.push({ label: `↳ Cups & Lids`, check: true });
+        rows.push({ label: `↳ Cups & Lids` });
       }
       if (drink.extras && drink.extras.length > 0) {
         for (const extra of drink.extras) {
-          rows.push({ label: `↳ ${extra}`, check: true });
+          rows.push({ label: `↳ ${extra}` });
         }
       }
     }
@@ -363,16 +359,17 @@ class FulfillmentSheetGenerator {
       </table>
     </div>`;
 
-    const chipsSection = chipsAndSalsa && chipsAndSalsa[0]?.included !== undefined ? `
+    // FIX: solo mostrar Chips & Salsa si el cliente dijo YES
+    const wantsChips = boxes.some(b => b.wantsChips);
+    const chipsSection = wantsChips ? `
     <div class="section">
       <div class="section-header" style="background:#784212"><span>Chips & Salsa</span></div>
       <table>
-        <thead><tr><th>Item</th><th>Included</th><th>Amount</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th></tr></thead>
+        <thead><tr><th>Item</th><th>Amount</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th></tr></thead>
         <tbody>
-          ${chipsAndSalsa.map(item => `
+          ${chipsAndSalsa.filter(i => i.included === 'Yes').map(item => `
             <tr>
               <td>${item.name}</td>
-              <td><span class="yes-no ${item.included === 'Yes' ? 'yes' : 'no'}">${item.included || '—'}</span></td>
               <td>${item.total ? `${item.total} ${item.unit || ''}` : '—'}</td>
               <td>${item.packagingQty ? `${item.packagingQty}x ${item.packaging}` : '—'}</td>
               <td class="checkbox-cell"><span class="checkbox"></span></td>
