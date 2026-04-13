@@ -1,7 +1,6 @@
 // src/services/FulfillmentSheetCalculator.js
 
 const INGREDIENT_NAME_MAP = {
-  // Proteins
   'salsa verde braised chicken (taco bar)': 'Salsa Verde Braised Chicken',
   'house-smoked brisket (taco bar)':        'House-smoked Brisket',
   'house-smoked brisket (+premium)':        'House-smoked Brisket',
@@ -11,54 +10,29 @@ const INGREDIENT_NAME_MAP = {
   'egg (taco bar)':                         'Egg',
   'eggs (taco bar)':                        'Egg',
   'potato (taco bar)':                      'Crispy Potato',
-
-  // Toppings
-  'black beans (taco bar)':          'Black Beans',
-  'rajas (taco bar)':                'Rajas',
-  'sliced avocado (taco bar)':       'Sliced Avocado',
-  'pico de gallo (taco bar)':        'Pico De Gallo',
-  'monterrey jack cheese (taco bar)':'Shredded Cheese',
-  'cotija (taco bar)':               'Cotija',
-  'shredded cabbage (taco bar)':     'Cabbage',
-  'pickled red onion (taco bar)':    'Pickled Onions',
-  'crispy potato (taco bar)':        'Crispy Potato',
-
-  // Salsas
-  'salsa roja (mild)':           'Salsa Roja',
-  'salsa verde (mild-med)':      'Salsa Verde',
-  'verde (mild-med)':            'Salsa Verde',
-  'patron (spicy)':              'Patron',
-  'roja (mild) 0.75 oz cup':     'Salsa Roja',
-
-  // Tortillas
-  'flour tortillas (catering)':  'Flour Tortillas',
-  'housemade flour tortilla':    'Flour Tortillas',
-  'housemade flour tortillas':   'Flour Tortillas',
-  '50/50 flour/corn (catering)': '50/50',
-  '50/50 flour & corn':          '50/50',
-  'corn tortillas (catering)':   'Corn Tortillas',
-  'housemade corn tortillas':    'Corn Tortillas',
-
-  // Snacks
-  'queso (taco bar)':    'Queso',
-  'guacamole (taco bar)':'Guac',
-};
-
-const COMBO_INGREDIENT_MAP = {
-  '#1 bacon, egg, & cheese*':                    ['Tenderbelly Bacon', 'Egg', 'Shredded Cheese'],
-  '#2 potato, egg, & cheese*':                   ['Crispy Potato', 'Egg', 'Shredded Cheese'],
-  '#3 bacon, egg, & potato*':                    ['Tenderbelly Bacon', 'Egg', 'Crispy Potato'],
-  '#4 chorizo, egg, & cheese*':                  ['Chorizo', 'Egg', 'Shredded Cheese'],
-  '#5 flour':                                    ['Flour Tortillas'],
-  '#6 flour':                                    ['Flour Tortillas'],
-  '#7 brisket, potato, rajas, queso*':           ['House-smoked Brisket', 'Crispy Potato', 'Rajas', 'Queso'],
-  '#8 brisket, avocado, pico*':                  ['House-smoked Brisket', 'Sliced Avocado', 'Pico De Gallo'],
-  '#9 salsa verde braised chicken, cotija, pickled onion*': ['Salsa Verde Braised Chicken', 'Cotija', 'Pickled Onions'],
-  '#10 adobo chicken, spicy pickled onion, avocado, crema *': ['Adobo Chicken', 'Pickled Onions', 'Sliced Avocado'],
-  '#11 flour':                                   ['Flour Tortillas'],
-  '#12 adobo chicken, spicy pickled onion, avocado, crema *': ['Adobo Chicken', 'Pickled Onions', 'Sliced Avocado'],
-  '#2 corn':                                     ['Corn Tortillas'],
-  '#11 corn':                                    ['Corn Tortillas'],
+  'black beans (taco bar)':                 'Black Beans',
+  'rajas (taco bar)':                       'Rajas',
+  'sliced avocado (taco bar)':              'Sliced Avocado',
+  'pico de gallo (taco bar)':               'Pico De Gallo',
+  'monterrey jack cheese (taco bar)':       'Shredded Cheese',
+  'cotija (taco bar)':                      'Cotija',
+  'shredded cabbage (taco bar)':            'Cabbage',
+  'pickled red onion (taco bar)':           'Pickled Onions',
+  'crispy potato (taco bar)':               'Crispy Potato',
+  'salsa roja (mild)':                      'Salsa Roja',
+  'salsa verde (mild-med)':                 'Salsa Verde',
+  'verde (mild-med)':                       'Salsa Verde',
+  'patron (spicy)':                         'Patron',
+  'roja (mild) 0.75 oz cup':               'Salsa Roja',
+  'flour tortillas (catering)':             'Flour Tortillas',
+  'housemade flour tortilla':               'Flour Tortillas',
+  'housemade flour tortillas':              'Flour Tortillas',
+  '50/50 flour/corn (catering)':            '50/50',
+  '50/50 flour & corn':                     '50/50',
+  'corn tortillas (catering)':              'Corn Tortillas',
+  'housemade corn tortillas':               'Corn Tortillas',
+  'queso (taco bar)':                       'Queso',
+  'guacamole (taco bar)':                   'Guac',
 };
 
 class FulfillmentSheetCalculator {
@@ -92,10 +66,8 @@ class FulfillmentSheetCalculator {
       if (!normalizedName) continue;
       const formula = formulaMap.get(normalizedName.toLowerCase());
       if (!formula) continue;
-
       const totalAmount = formula.calculateAmount(guestCount);
       const packaging   = formula.getPackaging(guestCount);
-
       calculated.push({
         name:         normalizedName,
         category:     formula.category,
@@ -116,7 +88,6 @@ class FulfillmentSheetCalculator {
     const paperGoods = this._calculatePaperGoods(items, guestCount);
     const snacks     = this._extractSnacks(items, guestCount, formulas);
 
-    // FIX 1: tortillas cuentan como HOT items separados
     return {
       header:    this._buildHeader(cateringOrder, delivery),
       proteins:  grouped.protein || [],
@@ -137,17 +108,43 @@ class FulfillmentSheetCalculator {
     const delivery = parsedData?.delivery || {};
 
     const boxes = [];
-    let totalTacos = 0;
+    const drinks = []; // FIX: detectar bebidas
 
     for (const item of items) {
-      const modifiers = item.modifiers || [];
+      const modifiers  = item.modifiers || [];
+      const itemNameLc = (item.displayName || '').toLowerCase();
+
+      // FIX: separar bebidas de los bird boxes
+      if (
+        itemNameLc.includes('coffee') ||
+        itemNameLc.includes('agua') ||
+        itemNameLc.includes('limeade') ||
+        itemNameLc.includes('drink') ||
+        itemNameLc.includes('beverage') ||
+        itemNameLc.includes('side pack')
+      ) {
+        const wantsCups = modifiers.some(m =>
+          m.displayName.toLowerCase().includes('yes, i want cups')
+        );
+        const extras = modifiers
+          .filter(m => !m.displayName.toLowerCase().includes('yes, i want cups'))
+          .map(m => m.displayName)
+          .filter(Boolean);
+
+        drinks.push({
+          name:      item.displayName,
+          quantity:  item.quantity || 1,
+          wantsCups,
+          extras,
+          tempType:  itemNameLc.includes('coffee') ? 'hot' : 'cold',
+        });
+        continue; // no procesar como bird box
+      }
 
       const sizeMod = modifiers.find(m => /\d+\s*tacos?/i.test(m.displayName));
       const tacoCount = sizeMod
         ? parseInt(sizeMod.displayName.match(/(\d+)\s*tacos?/i)?.[1] || 0)
         : guestCount * 2;
-
-      totalTacos += tacoCount * (item.quantity || 1);
 
       const combos = modifiers.filter(m => /^#\d+/i.test(m.displayName.trim()));
 
@@ -156,11 +153,19 @@ class FulfillmentSheetCalculator {
         return n.includes('flour') || n.includes('corn') || n.includes('50/50');
       });
 
-      const wantsChips = modifiers.some(m =>
-        m.displayName.toLowerCase().includes('yes! i would like the included chips')
+      // FIX: detectar chips correctamente incluyendo "Nope"
+      const chipsModifier = modifiers.find(m =>
+        m.displayName.toLowerCase().includes('chip') ||
+        m.displayName.toLowerCase().includes('yes! i would like') ||
+        m.displayName.toLowerCase().includes('nope! i do not want')
       );
+      const wantsChips = chipsModifier
+        ? chipsModifier.displayName.toLowerCase().includes('yes')
+        : false;
+
       const wantsPaper = modifiers.some(m =>
-        m.displayName.toLowerCase().includes('yes, i want paper')
+        m.displayName.toLowerCase().includes('yes, i want paper') ||
+        m.displayName.toLowerCase().includes('yes, i want taco boats')
       );
 
       boxes.push({
@@ -174,8 +179,11 @@ class FulfillmentSheetCalculator {
       });
     }
 
+    // Calcular tacos por combo
     const comboTotals = {};
+    let totalTacos = 0;
     for (const box of boxes) {
+      totalTacos += box.tacoCount * box.quantity;
       const tacosPerCombo = box.combos.length > 0
         ? Math.ceil(box.tacoCount / box.combos.length)
         : box.tacoCount;
@@ -194,64 +202,64 @@ class FulfillmentSheetCalculator {
       tempType:     'hot',
     }));
 
-    let flourTotal = 0;
-    let cornTotal  = 0;
-    for (const box of boxes) {
-      const t = box.tortilla.toLowerCase();
-      if (t.includes('50/50')) {
-        flourTotal += Math.ceil(box.tacoCount / 2) * box.quantity;
-        cornTotal  += Math.ceil(box.tacoCount / 2) * box.quantity;
-      } else if (t.includes('corn')) {
-        cornTotal += box.tacoCount * box.quantity;
-      } else {
-        flourTotal += box.tacoCount * box.quantity;
-      }
-    }
-
-    const tortillas = [];
-    if (flourTotal > 0) tortillas.push({ name: 'Flour Tortillas', total: flourTotal, unit: 'each', packaging: flourTotal > 60 ? 'Full Pan' : 'Half Pan', packagingQty: Math.ceil(flourTotal / (flourTotal > 60 ? 160 : 60)), utensil: 'Tongs Small', tempType: 'hot' });
-    if (cornTotal > 0)  tortillas.push({ name: 'Corn Tortillas',  total: cornTotal,  unit: 'each', packaging: cornTotal  > 30 ? 'Full Pan' : 'Half Pan', packagingQty: Math.ceil(cornTotal  / (cornTotal  > 30 ? 80  : 30)),  utensil: 'Tongs Small', tempType: 'hot' });
-
+    // Chips & Salsa
     const wantsChips = boxes.some(b => b.wantsChips);
-    const snacks = wantsChips ? [{
-      name: 'Chips', total: 1, unit: 'Full Pan',
-      packaging: 'Full Pan', packagingQty: 1,
-      utensil: 'Tongs Large', tempType: 'dry',
+    const chipsAndSalsa = wantsChips ? [{
+      name:         'Chips',
+      total:        1,
+      unit:         'Full Pan',
+      packaging:    'Full Pan',
+      packagingQty: 1,
+      utensil:      'Tongs Large',
+      tempType:     'dry',
+      included:     'Yes',
     }, {
-      // FIX 2: salsa — usar cups de 6oz correctamente
-      name: 'Salsa Roja',
-      total: Math.ceil(guestCount / 12),
-      unit: '6 oz cups',
-      packaging: '6 oz cup',
+      name:         'Salsa Roja',
+      total:        Math.ceil(guestCount / 12),
+      unit:         '6 oz cups',
+      packaging:    '6 oz cup',
       packagingQty: Math.ceil(guestCount / 12),
-      utensil: 'Ladle', tempType: 'cold',
-    }] : [];
+      utensil:      'Ladle',
+      tempType:     'cold',
+      included:     'Yes',
+    }] : [{
+      name:     'Chips & Salsa',
+      included: 'No',
+      tempType: 'dry',
+    }];
 
+    // Paper goods
     const wantsPaper = boxes.some(b => b.wantsPaper);
     const paperGoods = wantsPaper ? {
       included: true,
       items: [
-        { name: 'Plates',     qty: guestCount,     package: 'Stack'  },
-        { name: 'Napkins',    qty: guestCount * 2, package: 'Bundle' },
-        { name: 'Fork Small', qty: guestCount,     package: 'Bundle' },
+        { name: 'Plates',        qty: guestCount,     package: 'Stack'  },
+        { name: 'Napkins',       qty: guestCount * 2, package: 'Bundle' },
+        { name: 'Fork Small',    qty: guestCount,     package: 'Bundle' },
+        { name: 'Taco Boats',    qty: guestCount * 2, package: 'Bundle' },
       ]
     } : { included: false, items: [] };
 
+    const allHot  = [...tacoRows, ...drinks.filter(d => d.tempType === 'hot')];
+    const allCold = [...chipsAndSalsa.filter(i => i.tempType === 'cold'), ...drinks.filter(d => d.tempType === 'cold')];
+    const allDry  = chipsAndSalsa.filter(i => i.tempType === 'dry');
+
     return {
-      header:    this._buildHeader(cateringOrder, delivery),
+      header:       this._buildHeader(cateringOrder, delivery),
       boxes,
       tacoRows,
-      tortillas,
-      snacks,
+      chipsAndSalsa,
+      drinks,       // FIX: incluir bebidas
       paperGoods,
       totalTacos,
-      // FIX 1: tortillas como HOT items separados
-      hotItems:  [...tacoRows, ...tortillas],
-      coldItems: snacks.filter(i => i.tempType === 'cold'),
-      dryItems:  snacks.filter(i => i.tempType === 'dry'),
-      proteins:  [],
-      toppings:  [],
-      salsas:    [],
+      hotItems:     allHot,
+      coldItems:    allCold,
+      dryItems:     allDry,
+      proteins:     [],
+      toppings:     [],
+      salsas:       [],
+      tortillas:    [],
+      snacks:       [],
     };
   }
 
@@ -309,7 +317,6 @@ class FulfillmentSheetCalculator {
   async _calculateFooda(cateringOrder) {
     const { items, parsedData } = cateringOrder;
     const delivery = parsedData?.delivery || {};
-
     const snacks   = [];
     const tacoRows = [];
 
@@ -317,43 +324,35 @@ class FulfillmentSheetCalculator {
       const name = (item.displayName || '').toLowerCase();
       if (name.includes('chip') || name.includes('fooda')) {
         snacks.push({
-          name:         item.displayName,
-          total:        item.quantity,
-          unit:         'each',
-          packaging:    'black box bin',
-          packagingQty: item.quantity,
-          utensil:      '-',
-          tempType:     'dry',
+          name: item.displayName, total: item.quantity, unit: 'each',
+          packaging: 'black box bin', packagingQty: item.quantity,
+          utensil: '-', tempType: 'dry',
         });
       } else if (name.includes('taco') || /^#\d+/.test(item.displayName.trim())) {
         tacoRows.push({
-          name:         item.displayName,
-          total:        item.quantity * 50,
-          unit:         'tacos',
-          packaging:    'Half Pan',
-          packagingQty: item.quantity,
-          utensil:      'Tongs',
-          tempType:     'hot',
+          name: item.displayName, total: item.quantity * 50, unit: 'tacos',
+          packaging: 'Half Pan', packagingQty: item.quantity,
+          utensil: 'Tongs', tempType: 'hot',
         });
       }
     }
 
     return {
       header:     this._buildHeader(cateringOrder, delivery),
-      snacks,
-      tacoRows,
+      snacks, tacoRows,
       paperGoods: { included: false, items: [] },
-      proteins:   [], toppings: [], salsas: [], tortillas: [],
-      hotItems:   tacoRows,
-      coldItems:  [],
-      dryItems:   snacks,
+      proteins: [], toppings: [], salsas: [], tortillas: [],
+      hotItems: tacoRows, coldItems: [], dryItems: snacks,
     };
   }
 
   // ─── HELPERS ──────────────────────────────────────────────────────────────
   _buildHeader(order, delivery) {
     return {
-      orderNumber:              order.displayNumber,
+      orderNumber:              order.toastOrderGuid
+                                  ? order.toastOrderGuid.split('-')[0].toUpperCase()
+                                  : order.displayNumber,
+      displayNumber:            order.displayNumber,
       eventType:                order.eventType,
       clientName:               order.clientName,
       clientContact:            order.clientEmail,
@@ -367,6 +366,18 @@ class FulfillmentSheetCalculator {
       storeName:                order.storeName,
       storeCode:                order.storeCode,
     };
+  }
+
+  _formatPhone(phone) {
+    if (!phone) return null;
+    const cleaned = String(phone).replace(/\D/g, '');
+    if (cleaned.length === 10) {
+      return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
+    }
+    if (cleaned.length === 11 && cleaned[0] === '1') {
+      return `(${cleaned.slice(1,4)}) ${cleaned.slice(4,7)}-${cleaned.slice(7)}`;
+    }
+    return phone;
   }
 
   _extractIngredients(items) {
@@ -390,7 +401,6 @@ class FulfillmentSheetCalculator {
     const calculatedNames = new Set(alreadyCalculated.map(i => i.name.toLowerCase()));
     const salsaFormulas   = formulas.filter(f => f.category === 'salsa');
     const result          = [];
-
     for (const salsa of salsaFormulas) {
       if (calculatedNames.has(salsa.name.toLowerCase())) continue;
       const wasChosen = items.some(item =>
@@ -400,7 +410,6 @@ class FulfillmentSheetCalculator {
         })
       );
       if (wasChosen) {
-        // FIX 2: mostrar cups correctamente en vez de oz totales
         const cups = Math.ceil(guestCount / 12);
         result.push({
           name:         salsa.name,
@@ -419,10 +428,7 @@ class FulfillmentSheetCalculator {
 
   _calculateTortillas(items, guestCount, formulas) {
     const result = [];
-    let flourCount = 0;
-    let cornCount  = 0;
-    let is5050     = false;
-
+    let flourCount = 0, cornCount = 0, is5050 = false;
     for (const item of items) {
       for (const mod of item.modifiers || []) {
         const name = (mod.displayName || '').toLowerCase();
@@ -437,10 +443,8 @@ class FulfillmentSheetCalculator {
         }
       }
     }
-
     const flourFormula = formulas.find(f => f.name === 'Flour Tortillas');
     const cornFormula  = formulas.find(f => f.name === 'Corn Tortillas');
-
     if (flourCount > 0 && flourFormula) {
       result.push({
         name:         is5050 ? 'Flour Tortillas (50/50)' : 'Flour Tortillas',
