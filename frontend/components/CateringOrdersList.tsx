@@ -11,7 +11,8 @@ import type { Store } from '@/services/api/storesApi';
 import {
   Search, ChevronDown, ChevronUp, Clock, User,
   Phone, Mail, Package, CheckCircle, AlertTriangle, X,
-  Calendar, Truck, ShoppingBag, Filter, FileText, LockKeyhole, Receipt,
+  Calendar, Truck, ShoppingBag, Filter, FileText, LockKeyhole,
+  Receipt, CalendarDays, EyeOff,
 } from 'lucide-react';
 
 interface ApiError {
@@ -55,6 +56,15 @@ function formatPhone(phone: string) {
   return phone;
 }
 
+function isToday(dateStr: string) {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+}
+
 export default function CateringOrdersList() {
   const [orders, setOrders]               = useState<CateringOrder[]>([]);
   const [loading, setLoading]             = useState<boolean>(true);
@@ -70,6 +80,8 @@ export default function CateringOrdersList() {
   const [filterMethod, setFilterMethod]       = useState<string>('');
   const [filterUpcoming, setFilterUpcoming]   = useState<boolean>(false);
   const [filterPayment, setFilterPayment]     = useState<string>('');
+  const [filterToday, setFilterToday]         = useState<boolean>(false);
+  const [hideUnpaid, setHideUnpaid]           = useState<boolean>(false);
   const [stores, setStores]                   = useState<Store[]>([]);
   const [filterStoreId, setFilterStoreId]     = useState<string>('');
   const [dateRange, setDateRange]             = useState<DateRange | undefined>(undefined);
@@ -163,7 +175,10 @@ export default function CateringOrdersList() {
     }
   };
 
-  const hasFilters = !!(filterStoreId || filterEventType || filterStatus || filterMethod || dateRange || filterUpcoming || filterPayment);
+  const hasFilters = !!(
+    filterStoreId || filterEventType || filterStatus || filterMethod ||
+    dateRange || filterUpcoming || filterPayment || filterToday || hideUnpaid
+  );
 
   const filteredOrders = orders.filter((o) => {
     const matchSearch =
@@ -171,12 +186,15 @@ export default function CateringOrdersList() {
       o.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       o.displayNumber?.includes(searchTerm) ||
       o.deliveryAddress?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchUpcoming = !filterUpcoming || o.isUpcoming;
-    return matchSearch && matchUpcoming;
+    const matchUpcoming    = !filterUpcoming || o.isUpcoming;
+    const matchToday       = !filterToday || isToday(o.estimatedFulfillmentDate);
+    const matchHideUnpaid  = !hideUnpaid || o.paymentStatus !== 'OPEN';
+    return matchSearch && matchUpcoming && matchToday && matchHideUnpaid;
   });
 
   const unpaidCount       = orders.filter(o => o.paymentStatus === 'OPEN').length;
   const houseAccountCount = orders.filter(o => o.isHouseAccount && o.paymentStatus === 'OPEN').length;
+  const todayCount        = orders.filter(o => isToday(o.estimatedFulfillmentDate)).length;
 
   return (
     <div className="space-y-6 relative">
@@ -195,6 +213,9 @@ export default function CateringOrdersList() {
           <h2 className="text-2xl font-black text-night tracking-tight uppercase italic">Catering Orders</h2>
           <p className="text-sm text-night/50 font-medium flex items-center gap-2 flex-wrap">
             <span>{filteredOrders.length} orders · {filteredOrders.filter(o => o.isUpcoming).length} upcoming</span>
+            {todayCount > 0 && (
+              <span className="text-sky font-black">· {todayCount} today</span>
+            )}
             {unpaidCount > 0 && (
               <span className="text-orange-500 font-black">
                 · {unpaidCount} awaiting payment
@@ -268,6 +289,42 @@ export default function CateringOrdersList() {
 
           <DateRangePicker value={dateRange} onChange={setDateRange} placeholder="Date Range" />
 
+          {/* Today filter */}
+          <button
+            onClick={() => { setFilterToday(!filterToday); setDateRange(undefined); }}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
+              filterToday ? 'bg-sky text-white shadow-sm' : 'bg-bone text-night/40 hover:text-night'
+            }`}
+          >
+            <CalendarDays size={12} />
+            Today
+            {todayCount > 0 && (
+              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
+                filterToday ? 'bg-white/20' : 'bg-sky/20 text-sky'
+              }`}>
+                {todayCount}
+              </span>
+            )}
+          </button>
+
+          {/* Hide unpaid filter */}
+          <button
+            onClick={() => setHideUnpaid(!hideUnpaid)}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
+              hideUnpaid ? 'bg-night text-bone shadow-sm' : 'bg-bone text-night/40 hover:text-night'
+            }`}
+          >
+            <EyeOff size={12} />
+            Hide Unpaid
+            {unpaidCount > 0 && (
+              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
+                hideUnpaid ? 'bg-white/20' : 'bg-orange-100 text-orange-500'
+              }`}>
+                {unpaidCount}
+              </span>
+            )}
+          </button>
+
           <button
             onClick={() => setFilterUpcoming(!filterUpcoming)}
             className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
@@ -287,6 +344,8 @@ export default function CateringOrdersList() {
                 setFilterPayment('');
                 setDateRange(undefined);
                 setFilterUpcoming(false);
+                setFilterToday(false);
+                setHideUnpaid(false);
               }}
               className="px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest bg-rose/10 text-rose hover:bg-rose hover:text-night transition-all"
             >
@@ -311,6 +370,7 @@ export default function CateringOrdersList() {
           {filteredOrders.map((order) => {
             const isUnpaid       = order.paymentStatus === 'OPEN';
             const isHouseAccount = order.isHouseAccount;
+            const isTodayOrder   = isToday(order.estimatedFulfillmentDate);
 
             return (
               <div
@@ -318,12 +378,24 @@ export default function CateringOrdersList() {
                 className={`bg-white rounded-[2rem] border shadow-sm transition-all duration-300 overflow-hidden ${
                   isUnpaid
                     ? 'border-orange-200 opacity-75'
+                    : isTodayOrder
+                    ? 'border-sky ring-1 ring-sky/30'
                     : order.isUpcoming
                     ? 'border-tumbleweed'
                     : 'border-tumbleweed/30 opacity-80'
                 }`}
               >
-                {/* Banner — Awaiting Payment */}
+                {/* Today banner */}
+                {isTodayOrder && !isUnpaid && (
+                  <div className="bg-sky/10 border-b border-sky/20 px-6 py-1.5 flex items-center gap-2">
+                    <CalendarDays size={11} className="text-sky shrink-0" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-sky">
+                      Today&apos;s Order
+                    </span>
+                  </div>
+                )}
+
+                {/* Awaiting Payment Banner */}
                 {isUnpaid && (
                   <div className={`border-b px-6 py-2 flex items-center gap-2 ${
                     isHouseAccount
@@ -362,6 +434,11 @@ export default function CateringOrdersList() {
                           House Acct
                         </span>
                       )}
+                      {isTodayOrder && !isUnpaid && (
+                        <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-sky/20 text-sky shrink-0">
+                          Today
+                        </span>
+                      )}
                     </div>
                     <p className="text-[11px] text-night/40 font-medium truncate mt-0.5">
                       {order.storeName} · {order.guestCount} guests
@@ -375,7 +452,6 @@ export default function CateringOrdersList() {
                     </p>
                   </div>
 
-                  {/* Payment status badge */}
                   <span className={`text-[9px] font-black tracking-[0.15em] px-3 py-1.5 rounded-full uppercase shrink-0 ${
                     isUnpaid && isHouseAccount
                       ? 'bg-purple-100 text-purple-600 border border-purple-200'
@@ -384,7 +460,6 @@ export default function CateringOrdersList() {
                     {isHouseAccount && isUnpaid ? 'House Account' : order.paymentStatusLabel}
                   </span>
 
-                  {/* Order status badge — solo si está pagado */}
                   {!isUnpaid && (
                     <span className={`text-[9px] font-black tracking-[0.15em] px-3 py-1.5 rounded-full uppercase shrink-0 ${STATUS_COLORS[order.status] || STATUS_COLORS.pending}`}>
                       {order.statusLabel}
@@ -401,7 +476,6 @@ export default function CateringOrdersList() {
                   <div className="border-t border-tumbleweed/20 bg-bone/30 p-6 space-y-6">
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
                       {/* Client */}
                       <div className="bg-white rounded-2xl p-4 space-y-2 border border-tumbleweed/20">
                         <p className="text-[9px] font-black text-night/30 uppercase tracking-widest">Client</p>
@@ -510,9 +584,7 @@ export default function CateringOrdersList() {
                       {isUnpaid ? (
                         <div className="flex items-center gap-3 flex-wrap">
                           <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border ${
-                            isHouseAccount
-                              ? 'bg-purple-50 border-purple-200'
-                              : 'bg-orange-50 border-orange-200'
+                            isHouseAccount ? 'bg-purple-50 border-purple-200' : 'bg-orange-50 border-orange-200'
                           }`}>
                             {isHouseAccount
                               ? <Receipt size={13} className="text-purple-500" />
@@ -528,9 +600,7 @@ export default function CateringOrdersList() {
                             onClick={() => handleOverridePayment(order.id)}
                             disabled={isUpdating}
                             className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-white transition-all active:scale-95 disabled:opacity-50 ${
-                              isHouseAccount
-                                ? 'bg-purple-500 hover:bg-purple-600'
-                                : 'bg-orange-500 hover:bg-orange-600'
+                              isHouseAccount ? 'bg-purple-500 hover:bg-purple-600' : 'bg-orange-500 hover:bg-orange-600'
                             }`}
                           >
                             {isHouseAccount ? 'Confirm Invoice Paid' : 'Override — Mark as Paid'}
@@ -552,7 +622,6 @@ export default function CateringOrdersList() {
                               {status}
                             </button>
                           ))}
-
                           <button
                             onClick={() => handleGeneratePdf(order.id, order.displayNumber)}
                             disabled={generatingPdf === order.id}

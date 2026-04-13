@@ -57,13 +57,13 @@ class FulfillmentSheetGenerator {
 
   _eventTypeBadge(eventType) {
     const map = {
-      TACO_BAR:     { color: '#c0392b', label: 'TACO BAR'     },
-      BIRD_BOX:     { color: '#457b9d', label: "'BIRD BOX"    },
-      PERSONAL_BOX: { color: '#b7791f', label: 'PERSONAL BOX' },
-      FOODA:        { color: '#2d3748', label: 'FOODA'         },
-      NEEDS_REVIEW: { color: '#f4a261', label: 'NEEDS REVIEW'  },
+      TACO_BAR:     { color: '#c0392b', label: 'TACO BAR',     cateringType: 'Taco Bar'     },
+      BIRD_BOX:     { color: '#457b9d', label: "'BIRD BOX",    cateringType: "'Bird Box"    },
+      PERSONAL_BOX: { color: '#b7791f', label: 'PERSONAL BOX', cateringType: 'Personal Box' },
+      FOODA:        { color: '#2d3748', label: 'FOODA',         cateringType: 'Fooda'        },
+      NEEDS_REVIEW: { color: '#f4a261', label: 'NEEDS REVIEW',  cateringType: 'Needs Review' },
     };
-    return map[eventType] || { color: '#2d3748', label: eventType };
+    return map[eventType] || { color: '#2d3748', label: eventType, cateringType: eventType };
   }
 
   _baseCSS(badgeColor) {
@@ -71,13 +71,37 @@ class FulfillmentSheetGenerator {
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: Arial, sans-serif; font-size: 10px; color: #1a1a1a; background: white; }
 
-    .doc-header { background: #c0392b; color: white; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; border-bottom: 4px solid #922b21; }
+    .doc-header {
+      background: #c0392b;
+      color: white;
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 4px solid #922b21;
+    }
     .doc-header h1 { font-size: 15px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
-    .event-badge { padding: 3px 10px; border-radius: 3px; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.12em; background: white; color: ${badgeColor}; border: 2px solid white; }
+    .header-right { display: flex; align-items: center; gap: 8px; }
+    .catering-type-label {
+      font-size: 9px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: rgba(255,255,255,0.8);
+    }
+    .event-badge {
+      padding: 3px 10px;
+      border-radius: 3px;
+      font-size: 9px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      background: white;
+      color: ${badgeColor};
+      border: 2px solid white;
+    }
 
-    /* FIX: Method destacado arriba */
     .method-banner {
-      background: #1a1a1a;
       color: white;
       text-align: center;
       padding: 4px;
@@ -146,16 +170,19 @@ class FulfillmentSheetGenerator {
     `;
   }
 
-  // FIX: Method banner + teléfono formateado
+  // FIX 2: Catering Type a la izquierda del badge
   _headerHTML(header, badge) {
-    const method    = (header.deliveryMethod || '').toUpperCase();
-    const isPickup  = method === 'PICKUP';
-    const phone     = this._formatPhone(header.clientPhone);
+    const method   = (header.deliveryMethod || '').toUpperCase();
+    const isPickup = method === 'PICKUP';
+    const phone    = this._formatPhone(header.clientPhone);
 
     return `
     <div class="doc-header">
       <h1>Ladybird Taco &mdash; Fulfillment Sheet</h1>
-      <span class="event-badge">${badge.label}</span>
+      <div class="header-right">
+        <span class="catering-type-label">${badge.cateringType}</span>
+        <span class="event-badge">${badge.label}</span>
+      </div>
     </div>
     <div class="method-banner ${isPickup ? 'pickup' : 'delivery'}">
       ${isPickup ? '🏪 CUSTOMER PICKUP' : '🚗 DELIVERY'}
@@ -202,19 +229,27 @@ class FulfillmentSheetGenerator {
     </div>`;
   }
 
-  _renderPaperGoods(paperGoods) {
-    if (!paperGoods.included) return `
+  // FIX 3: Paper Goods con cups & lids de drinks
+  _renderPaperGoods(paperGoods, drinks = []) {
+    const cupsItems = drinks
+      .filter(d => d.wantsCups)
+      .map(d => ({ name: `${d.name} — Cups & Lids`, qty: d.quantity, package: 'set' }));
+
+    const allItems = [...(paperGoods.items || []), ...cupsItems];
+
+    if (!paperGoods.included && cupsItems.length === 0) return `
     <div class="paper-goods">
       <div class="paper-goods-header">Paper Goods</div>
       <p style="padding:8px; font-size:9px; color:#999; font-style:italic;">Client opted out.</p>
     </div>`;
+
     return `
     <div class="paper-goods">
       <div class="paper-goods-header">Paper Goods</div>
       <table>
         <thead><tr><th>Item</th><th>Amt</th><th>Packed?</th><th>Loaded?</th></tr></thead>
         <tbody>
-          ${paperGoods.items.map(item => `
+          ${allItems.map(item => `
             <tr>
               <td>${item.name}</td>
               <td>${item.qty} ${item.package}</td>
@@ -222,6 +257,7 @@ class FulfillmentSheetGenerator {
               <td class="checkbox-cell"><span class="checkbox"></span></td>
             </tr>
           `).join('')}
+          ${!paperGoods.included && cupsItems.length > 0 ? '' : ''}
         </tbody>
       </table>
     </div>`;
@@ -280,10 +316,10 @@ class FulfillmentSheetGenerator {
     const { header, boxes, tacoRows, chipsAndSalsa, drinks, paperGoods, hotItems, coldItems, dryItems } = data;
     const badge = this._eventTypeBadge(header.eventType);
 
-    // FIX: Summary sin total tacos, con Yes/No en chips+salsa+paper
+    // FIX 1: Título solo "Summary"
     const boxSummary = `
     <div class="section" style="margin-top:8px">
-      <div class="section-header" style="background:#457b9d"><span>'Bird Box Summary</span></div>
+      <div class="section-header" style="background:#457b9d"><span>Summary</span></div>
       <table>
         <thead><tr><th>Box Type</th><th>Qty</th><th>Tacos</th><th>Combos</th><th>Tortilla</th><th>Chips+Salsa</th><th>Paper</th></tr></thead>
         <tbody>
@@ -302,30 +338,26 @@ class FulfillmentSheetGenerator {
       </table>
     </div>`;
 
-    // FIX: Sección Chips & Salsa con Yes/No
-    const chipsSection = chipsAndSalsa && chipsAndSalsa[0]?.included !== undefined
-      ? `
-      <div class="section">
-        <div class="section-header" style="background:#784212"><span>Chips & Salsa</span></div>
-        <table>
-          <thead><tr><th>Item</th><th>Included</th><th>Amount</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th></tr></thead>
-          <tbody>
-            ${chipsAndSalsa.map(item => `
-              <tr>
-                <td>${item.name}</td>
-                <td><span class="yes-no ${item.included === 'Yes' ? 'yes' : 'no'}">${item.included || '—'}</span></td>
-                <td>${item.total ? `${item.total} ${item.unit || ''}` : '—'}</td>
-                <td>${item.packagingQty ? `${item.packagingQty}x ${item.packaging}` : '—'}</td>
-                <td class="checkbox-cell"><span class="checkbox"></span></td>
-                <td class="checkbox-cell"><span class="checkbox"></span></td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>`
-      : '';
+    const chipsSection = chipsAndSalsa && chipsAndSalsa[0]?.included !== undefined ? `
+    <div class="section">
+      <div class="section-header" style="background:#784212"><span>Chips & Salsa</span></div>
+      <table>
+        <thead><tr><th>Item</th><th>Included</th><th>Amount</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th></tr></thead>
+        <tbody>
+          ${chipsAndSalsa.map(item => `
+            <tr>
+              <td>${item.name}</td>
+              <td><span class="yes-no ${item.included === 'Yes' ? 'yes' : 'no'}">${item.included || '—'}</span></td>
+              <td>${item.total ? `${item.total} ${item.unit || ''}` : '—'}</td>
+              <td>${item.packagingQty ? `${item.packagingQty}x ${item.packaging}` : '—'}</td>
+              <td class="checkbox-cell"><span class="checkbox"></span></td>
+              <td class="checkbox-cell"><span class="checkbox"></span></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>` : '';
 
-    // FIX: Sección de bebidas
     const drinksSection = drinks && drinks.length > 0 ? `
     <div class="section">
       <div class="section-header" style="background:#2c5f8a"><span>Drinks & Add-ons</span></div>
@@ -355,7 +387,7 @@ class FulfillmentSheetGenerator {
         ${chipsSection}
         ${drinksSection}
       </div>
-      <div class="right-col">${this._renderPaperGoods(paperGoods)}</div>
+      <div class="right-col">${this._renderPaperGoods(paperGoods, drinks)}</div>
     </div>
     ${this._renderFoodSummary(hotItems, coldItems, dryItems)}
     ${this._renderQC([
