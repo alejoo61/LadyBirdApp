@@ -21,6 +21,7 @@ class IngredientResolverService {
       /^large without/i,
       /city slicker salad/i,
       /cowboy salad/i,
+      /cups and lids/i,
     ];
     return ignoredPatterns.some(p => p.test(displayName.trim()));
   }
@@ -55,12 +56,27 @@ class IngredientResolverService {
     return /\d+\s*tacos?/i.test(displayName);
   }
 
+  isDrink(displayName) {
+    if (!displayName) return false;
+    const n = displayName.toLowerCase();
+    return (
+      n.includes('coffee') ||
+      n.includes('agua') ||
+      n.includes('limeade') ||
+      n.includes('milk') ||
+      n.includes('water') ||
+      n.includes('beverage') ||
+      n.includes('drink') ||
+      n.includes('juice')
+    );
+  }
+
   // ─── NORMALIZACIÓN DE NOMBRES ─────────────────────────────────────────────
 
   normalizeDisplayName(displayName) {
     return displayName
-      .replace(/\s*\(.*?\)\s*/g, '')   // quita todo entre paréntesis
-      .replace(/\s*\*\s*$/g, '')        // quita asterisco final
+      .replace(/\s*\(.*?\)\s*/g, '')
+      .replace(/\s*\*\s*$/g, '')
       .replace(/\s+/g, ' ')
       .trim();
   }
@@ -70,7 +86,6 @@ class IngredientResolverService {
   async resolveCanonicalName(displayName) {
     if (!displayName) return null;
 
-    // 1. Buscar alias exacto en DB (case-insensitive)
     const aliasResult = await this.pool.query(
       `SELECT canonical_name FROM ingredient_aliases WHERE LOWER(alias) = LOWER($1)`,
       [displayName.trim()]
@@ -79,7 +94,6 @@ class IngredientResolverService {
       return aliasResult.rows[0].canonical_name;
     }
 
-    // 2. Normalizar (quitar sufijos) y buscar canonical_name directo en formulas
     const normalized = this.normalizeDisplayName(displayName);
     if (!normalized) return null;
 
@@ -136,42 +150,28 @@ class IngredientResolverService {
 
   // ─── RESOLUCIÓN COMPLETA DE UNA ORDEN ─────────────────────────────────────
 
-  /**
-   * Extrae todos los displayNames relevantes de una orden (Toast o manual)
-   * y los resuelve a { canonicalName, formula, displayName }
-   *
-   * Para Toast: items[].modifiers[].displayName
-   * Para manual: items[].name (estructura plana)
-   */
   async resolveOrderIngredients(parsedData, eventType) {
-    if (!parsedData?.items) return [];
+    if (!parsedData?.items) return { ingredients: [], wantsPaper: false, wantsChips: false };
 
-    const displayNames   = new Set();
-    let   wantsPaper     = false;
-    let   wantsChips     = false;
+    const displayNames = new Set();
+    let wantsPaper     = false;
+    let wantsChips     = false;
 
     for (const item of parsedData.items) {
-      const isManual = !item.modifiers && item.name;
+      const hasModifiers = item.modifiers && item.modifiers.length > 0;
 
-      if (isManual) {
-        // Orden manual — items planos
-        if (!this.isIgnoredItem(item.name)) {
-          displayNames.add(item.name);
-        }
-        continue;
-      }
+      if (!hasModifiers) {
+        // ── Orden manual (modifiers vacío o ausente) ──
+        const dn = item.displayName || item.name || '';
+        if (!dn) continue;
 
-      // Orden Toast — extraer de modifiers
-      for (const mod of item.modifiers || []) {
-        const dn = mod.displayName || '';
-
-        if (this.isPaperYes(dn))  { wantsPaper = true;  continue; }
-        if (this.isPaperNo(dn))   { wantsPaper = false; continue; }
-        if (this.isChipsYes(dn))  { wantsChips = true;  continue; }
-        if (this.isIgnoredItem(dn)) continue;
+        if (this.isPaperYes(dn))     { wantsPaper = true;  continue; }
+        if (this.isPaperNo(dn))      { wantsPaper = false; continue; }
+        if (this.isChipsYes(dn))     { wantsChips = true;  continue; }
+        if (this.isIgnoredItem(dn))  continue;
         if (this.isSizeModifier(dn)) continue;
+        if (this.isDrink(dn))        continue;
 
-        // Caso especial 50/50
         if (/50\/50/i.test(dn)) {
           displayNames.add('Corn Tortillas');
           displayNames.add('Flour Tortillas');
@@ -179,6 +179,27 @@ class IngredientResolverService {
         }
 
         displayNames.add(dn);
+
+      } else {
+        // ── Orden Toast (modifiers con contenido) ──
+        for (const mod of item.modifiers) {
+          const dn = mod.displayName || '';
+          if (!dn) continue;
+
+          if (this.isPaperYes(dn))     { wantsPaper = true;  continue; }
+          if (this.isPaperNo(dn))      { wantsPaper = false; continue; }
+          if (this.isChipsYes(dn))     { wantsChips = true;  continue; }
+          if (this.isIgnoredItem(dn))  continue;
+          if (this.isSizeModifier(dn)) continue;
+
+          if (/50\/50/i.test(dn)) {
+            displayNames.add('Corn Tortillas');
+            displayNames.add('Flour Tortillas');
+            continue;
+          }
+
+          displayNames.add(dn);
+        }
       }
     }
 
