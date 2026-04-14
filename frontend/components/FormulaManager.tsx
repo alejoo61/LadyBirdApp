@@ -282,11 +282,6 @@ export default function FormulaManager() {
                         className="p-2 text-night/30 hover:text-night hover:bg-bone rounded-lg transition-all">
                         <Pencil size={14} />
                       </button>
-                      <button onClick={() => handleDelete(formula.id, formula.name)}
-                        disabled={deleting === formula.id}
-                        className="p-2 text-night/30 hover:text-rose hover:bg-rose/10 rounded-lg transition-all disabled:opacity-30">
-                        <Trash2 size={14} />
-                      </button>
                     </div>
                   </td>
                 </tr>
