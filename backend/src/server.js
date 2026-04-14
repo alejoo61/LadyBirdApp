@@ -296,6 +296,9 @@ app.patch("/api/catering/orders/:id/override", (req, res) =>
 app.patch('/api/catering/orders/:id/payment-status', 
   (req, res) => cateringOrderController.overridePaymentStatus(req, res)
 );
+app.patch('/api/catering/orders/:id/manual', (req, res) =>
+  cateringOrderController.updateManual(req, res)
+);
 
 // ============= INGREDIENT FORMULA ROUTES =============
 app.get("/api/formulas", (req, res) =>
@@ -315,37 +318,37 @@ app.delete("/api/formulas/:id", (req, res) =>
 );
 
 // ============= FULFILLMENT SHEET =============
-app.post("/api/catering/orders/:id/fulfillment-sheet", async (req, res) => {
+app.post('/api/catering/orders/:id/fulfillment-sheet', async (req, res) => {
   try {
     const order = await cateringOrderService.getOrderById(req.params.id);
 
-    // Enriquecer con storeName/storeCode
     const storeResult = await pool.query(
-      "SELECT name, code FROM stores WHERE id = $1",
-      [order.storeId],
+      'SELECT name, code FROM stores WHERE id = $1',
+      [order.storeId]
     );
-    order.storeName = storeResult.rows[0]?.name || "";
-    order.storeCode = storeResult.rows[0]?.code || "";
+    order.storeName = storeResult.rows[0]?.name || '';
+    order.storeCode = storeResult.rows[0]?.code || '';
 
-    // Asegurarnos que items esté disponible desde parsedData
     if (!order.items || order.items.length === 0) {
       order.items = order.parsedData?.items || [];
     }
 
-    // Calcular cantidades
     const calculatedData = await fulfillmentCalculator.calculate(order);
 
-    // Generar PDF
-    const pdf = await fulfillmentGenerator.generate(calculatedData);
+    // Pasar isManuallyEdited al header del PDF
+    calculatedData.header.isManuallyEdited = order.isManuallyEdited || false;
+
+    const pdf     = await fulfillmentGenerator.generate(calculatedData);
+    const pdfName = fulfillmentGenerator.buildFilename(order, order.storeCode);
 
     res.set({
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="fulfillment-${order.displayNumber}.pdf"`,
-      "Content-Length": pdf.length,
+      'Content-Type':        'application/pdf',
+      'Content-Disposition': `inline; filename="${pdfName}"`,
+      'Content-Length':      pdf.length,
     });
     res.send(pdf);
   } catch (error) {
-    console.error("❌ Fulfillment sheet error:", error.message);
+    console.error('❌ Fulfillment sheet error:', error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });

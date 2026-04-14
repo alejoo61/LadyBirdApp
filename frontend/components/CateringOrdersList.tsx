@@ -12,7 +12,7 @@ import {
   Search, ChevronDown, ChevronUp, Clock, User,
   Phone, Mail, Package, CheckCircle, AlertTriangle, X,
   Calendar, Truck, ShoppingBag, Filter, FileText, LockKeyhole,
-  Receipt, CalendarDays, EyeOff,
+  Receipt, CalendarDays, EyeOff, Pencil, Plus, RefreshCw,
 } from 'lucide-react';
 
 interface ApiError {
@@ -40,6 +40,28 @@ const PAYMENT_STATUS_STYLES: Record<string, string> = {
   CLOSED: 'bg-emerald-50 text-emerald-600 border border-emerald-200',
 };
 
+const EVENT_TYPES = ['TACO_BAR', 'BIRD_BOX', 'PERSONAL_BOX', 'FOODA', 'NEEDS_REVIEW'];
+const DELIVERY_METHODS = ['PICKUP', 'DELIVERY'];
+const STATUSES = ['pending', 'confirmed', 'completed', 'cancelled'];
+const PAYMENT_STATUSES = ['OPEN', 'PAID', 'CLOSED'];
+
+const EMPTY_ORDER_FORM = {
+  storeId:                  '',
+  eventType:                'TACO_BAR',
+  status:                   'pending',
+  paymentStatus:            'CLOSED',
+  clientName:               '',
+  clientEmail:              '',
+  clientPhone:              '',
+  estimatedFulfillmentDate: '',
+  deliveryMethod:           'PICKUP',
+  deliveryAddress:          '',
+  deliveryNotes:            '',
+  guestCount:               0,
+  totalAmount:              0,
+  overrideNotes:            '',
+};
+
 function formatDate(dateStr: string) {
   if (!dateStr) return '—';
   return new Date(dateStr).toLocaleDateString('en-US', {
@@ -65,6 +87,244 @@ function isToday(dateStr: string) {
     d.getDate() === now.getDate();
 }
 
+function formatDatetimeLocal(dateStr: string) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// ─── ORDER FORM MODAL ──────────────────────────────────────────────────────
+function OrderFormModal({
+  mode,
+  order,
+  stores,
+  onClose,
+  onSave,
+}: {
+  mode: 'create' | 'edit';
+  order?: CateringOrder;
+  stores: Store[];
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const [form, setForm] = useState(() => {
+    if (mode === 'edit' && order) {
+      return {
+        storeId:                  order.storeId || '',
+        eventType:                order.eventType || 'TACO_BAR',
+        status:                   order.status || 'pending',
+        paymentStatus:            order.paymentStatus || 'OPEN',
+        clientName:               order.clientName || '',
+        clientEmail:              order.clientEmail || '',
+        clientPhone:              order.clientPhone || '',
+        estimatedFulfillmentDate: formatDatetimeLocal(order.estimatedFulfillmentDate),
+        deliveryMethod:           order.deliveryMethod || 'PICKUP',
+        deliveryAddress:          order.deliveryAddress || '',
+        deliveryNotes:            order.deliveryNotes || '',
+        guestCount:               order.guestCount || 0,
+        totalAmount: parseFloat(String(order.totalAmount)) || 0,
+        overrideNotes:            order.overrideNotes || '',
+      };
+    }
+    return { ...EMPTY_ORDER_FORM };
+  });
+
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
+
+  const set = (key: string, value: unknown) =>
+    setForm(f => ({ ...f, [key]: value }));
+
+  const handleSave = async () => {
+    if (!form.clientName || !form.eventType || !form.estimatedFulfillmentDate) {
+      setError('Client name, event type and event date are required.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      const payload = {
+        ...form,
+        estimatedFulfillmentDate: new Date(form.estimatedFulfillmentDate).toISOString(),
+        guestCount:   Number(form.guestCount),
+        totalAmount:  Number(form.totalAmount),
+      };
+
+      if (mode === 'edit' && order) {
+        await cateringApi.updateManual(order.id, payload);
+      } else {
+        await cateringApi.createManual(payload);
+      }
+      onSave();
+    } catch (err: unknown) {
+      const e = err as ApiError;
+      setError(e.response?.data?.error || 'Error saving order');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputCls = 'w-full px-4 py-3 bg-bone rounded-2xl text-sm font-bold text-night outline-none focus:ring-2 focus:ring-night';
+  const selectCls = inputCls + ' cursor-pointer';
+  const labelCls  = 'text-[10px] font-black uppercase tracking-widest text-night/40 mb-1 block';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-night/60 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-center justify-between p-8 pb-4 shrink-0">
+          <h3 className="text-xl font-black text-night uppercase italic tracking-tight">
+            {mode === 'edit' ? 'Edit Order' : 'New Manual Order'}
+          </h3>
+          <button onClick={onClose}
+            className="p-2 text-night/30 hover:text-rose transition-colors rounded-xl hover:bg-rose/10">
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto px-8 pb-4 space-y-5 flex-1">
+
+          {/* Store + Event Type */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Store *</label>
+              <select value={form.storeId} onChange={e => set('storeId', e.target.value)} className={selectCls}>
+                <option value="">Select store...</option>
+                {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Event Type *</label>
+              <select value={form.eventType} onChange={e => set('eventType', e.target.value)} className={selectCls}>
+                {EVENT_TYPES.map(et => <option key={et} value={et}>{et.replace('_', ' ')}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Client */}
+          <div>
+            <label className={labelCls}>Client Name *</label>
+            <input type="text" value={form.clientName}
+              onChange={e => set('clientName', e.target.value)}
+              className={inputCls} placeholder="Full name" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Email</label>
+              <input type="email" value={form.clientEmail}
+                onChange={e => set('clientEmail', e.target.value)}
+                className={inputCls} placeholder="email@example.com" />
+            </div>
+            <div>
+              <label className={labelCls}>Phone</label>
+              <input type="tel" value={form.clientPhone}
+                onChange={e => set('clientPhone', e.target.value)}
+                className={inputCls} placeholder="(000) 000-0000" />
+            </div>
+          </div>
+
+          {/* Event Date + Guest Count */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Event Date & Time *</label>
+              <input type="datetime-local" value={form.estimatedFulfillmentDate}
+                onChange={e => set('estimatedFulfillmentDate', e.target.value)}
+                className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Guest Count</label>
+              <input type="number" value={form.guestCount}
+                onChange={e => set('guestCount', e.target.value)}
+                className={inputCls} min={0} />
+            </div>
+          </div>
+
+          {/* Delivery */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Delivery Method</label>
+              <select value={form.deliveryMethod} onChange={e => set('deliveryMethod', e.target.value)} className={selectCls}>
+                {DELIVERY_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Total Amount ($)</label>
+              <input type="number" step="0.01" value={form.totalAmount}
+                onChange={e => set('totalAmount', e.target.value)}
+                className={inputCls} min={0} />
+            </div>
+          </div>
+
+          {form.deliveryMethod === 'DELIVERY' && (
+            <div>
+              <label className={labelCls}>Delivery Address</label>
+              <input type="text" value={form.deliveryAddress}
+                onChange={e => set('deliveryAddress', e.target.value)}
+                className={inputCls} placeholder="Full address" />
+            </div>
+          )}
+
+          <div>
+            <label className={labelCls}>Delivery Notes</label>
+            <textarea value={form.deliveryNotes}
+              onChange={e => set('deliveryNotes', e.target.value)}
+              className={inputCls + ' resize-none'} rows={2}
+              placeholder="Special instructions..." />
+          </div>
+
+          {/* Status + Payment */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Status</label>
+              <select value={form.status} onChange={e => set('status', e.target.value)} className={selectCls}>
+                {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Payment Status</label>
+              <select value={form.paymentStatus} onChange={e => set('paymentStatus', e.target.value)} className={selectCls}>
+                {PAYMENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className={labelCls}>Internal Notes</label>
+            <textarea value={form.overrideNotes}
+              onChange={e => set('overrideNotes', e.target.value)}
+              className={inputCls + ' resize-none'} rows={2}
+              placeholder="Notes for the team..." />
+          </div>
+
+          {error && (
+            <p className="p-3 bg-red-50 text-red-500 text-[10px] font-black uppercase tracking-widest rounded-2xl border border-red-100">
+              {error}
+            </p>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-8 pt-4 flex gap-3 justify-end shrink-0 border-t border-tumbleweed/20">
+          <button onClick={onClose}
+            className="px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest bg-bone text-night/40 hover:text-night transition-all">
+            Cancel
+          </button>
+          <button onClick={handleSave} disabled={saving}
+            className="px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest bg-night text-bone hover:bg-rose hover:text-white transition-all disabled:opacity-40">
+            {saving ? 'Saving...' : mode === 'edit' ? 'Save Changes' : 'Create Order'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── MAIN COMPONENT ────────────────────────────────────────────────────────
 export default function CateringOrdersList() {
   const [orders, setOrders]               = useState<CateringOrder[]>([]);
   const [loading, setLoading]             = useState<boolean>(true);
@@ -72,25 +332,26 @@ export default function CateringOrdersList() {
   const [showToast, setShowToast]         = useState<string | null>(null);
   const [isUpdating, setIsUpdating]       = useState<boolean>(false);
   const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
+  const [stores, setStores]               = useState<Store[]>([]);
+
+  // Modals
+  const [editingOrder, setEditingOrder]   = useState<CateringOrder | null>(null);
+  const [showCreate, setShowCreate]       = useState(false);
 
   // Filters
-  const [searchTerm, setSearchTerm]           = useState<string>('');
-  const [filterEventType, setFilterEventType] = useState<string>('');
-  const [filterStatus, setFilterStatus]       = useState<string>('');
-  const [filterMethod, setFilterMethod]       = useState<string>('');
-  const [filterUpcoming, setFilterUpcoming]   = useState<boolean>(false);
-  const [filterPayment, setFilterPayment]     = useState<string>('');
-  const [filterToday, setFilterToday]         = useState<boolean>(false);
-  const [hideUnpaid, setHideUnpaid]           = useState<boolean>(false);
-  const [stores, setStores]                   = useState<Store[]>([]);
-  const [filterStoreId, setFilterStoreId]     = useState<string>('');
+  const [searchTerm, setSearchTerm]           = useState('');
+  const [filterEventType, setFilterEventType] = useState('');
+  const [filterStatus, setFilterStatus]       = useState('');
+  const [filterMethod, setFilterMethod]       = useState('');
+  const [filterUpcoming, setFilterUpcoming]   = useState(false);
+  const [filterPayment, setFilterPayment]     = useState('');
+  const [filterToday, setFilterToday]         = useState(false);
+  const [hideUnpaid, setHideUnpaid]           = useState(false);
+  const [filterStoreId, setFilterStoreId]     = useState('');
   const [dateRange, setDateRange]             = useState<DateRange | undefined>(undefined);
 
   useEffect(() => { loadStores(); }, []);
-
-  useEffect(() => {
-    loadOrders();
-  }, [filterEventType, filterStatus, filterMethod, filterStoreId, dateRange, filterPayment]);
+  useEffect(() => { loadOrders(); }, [filterEventType, filterStatus, filterMethod, filterStoreId, dateRange, filterPayment]);
 
   const loadStores = async () => {
     try {
@@ -152,7 +413,7 @@ export default function CateringOrdersList() {
     }
   };
 
-  const handleGeneratePdf = async (id: string, displayNumber: string) => {
+  const handleGeneratePdf = async (id: string, order: CateringOrder) => {
     setGeneratingPdf(id);
     try {
       const response = await fetch(
@@ -160,11 +421,14 @@ export default function CateringOrdersList() {
         { method: 'POST' }
       );
       if (!response.ok) throw new Error('Failed to generate PDF');
-      const blob = await response.blob();
-      const url  = window.URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url;
-      a.download = `fulfillment-${displayNumber}.pdf`;
+      const blob        = await response.blob();
+      const url         = window.URL.createObjectURL(blob);
+      const a           = document.createElement('a');
+      a.href            = url;
+      const eventCode   = { TACO_BAR: 'TB', BIRD_BOX: 'BB', PERSONAL_BOX: 'PB', FOODA: 'FD', NEEDS_REVIEW: 'NR' }[order.eventType] || 'XX';
+      const clientSlug  = (order.clientName || 'unknown').replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 20);
+      const storeCode   = (order.storeCode || 'LB').replace(/\s/g, '');
+      a.download        = `LB-${storeCode}-${clientSlug}-${eventCode}-v1.pdf`;
       a.click();
       window.URL.revokeObjectURL(url);
       triggerToast('PDF downloaded successfully');
@@ -175,20 +439,17 @@ export default function CateringOrdersList() {
     }
   };
 
-  const hasFilters = !!(
-    filterStoreId || filterEventType || filterStatus || filterMethod ||
-    dateRange || filterUpcoming || filterPayment || filterToday || hideUnpaid
-  );
+  const hasFilters = !!(filterStoreId || filterEventType || filterStatus || filterMethod ||
+    dateRange || filterUpcoming || filterPayment || filterToday || hideUnpaid);
 
-  const filteredOrders = orders.filter((o) => {
-    const matchSearch =
-      !searchTerm ||
+  const filteredOrders = orders.filter(o => {
+    const matchSearch   = !searchTerm ||
       o.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       o.displayNumber?.includes(searchTerm) ||
       o.deliveryAddress?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchUpcoming    = !filterUpcoming || o.isUpcoming;
-    const matchToday       = !filterToday || isToday(o.estimatedFulfillmentDate);
-    const matchHideUnpaid  = !hideUnpaid || o.paymentStatus !== 'OPEN';
+    const matchUpcoming   = !filterUpcoming || o.isUpcoming;
+    const matchToday      = !filterToday || isToday(o.estimatedFulfillmentDate);
+    const matchHideUnpaid = !hideUnpaid || o.paymentStatus !== 'OPEN';
     return matchSearch && matchUpcoming && matchToday && matchHideUnpaid;
   });
 
@@ -199,12 +460,41 @@ export default function CateringOrdersList() {
   return (
     <div className="space-y-6 relative">
 
-      {/* Toast notification */}
+      {/* Toast */}
       {showToast && (
         <div className="fixed top-10 right-10 z-[100] bg-night text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center space-x-3 animate-in slide-in-from-right">
           <CheckCircle className="text-rose" size={20} />
           <span className="font-black text-xs uppercase tracking-widest">{showToast}</span>
         </div>
+      )}
+
+      {/* Edit Modal */}
+      {editingOrder && (
+        <OrderFormModal
+          mode="edit"
+          order={editingOrder}
+          stores={stores}
+          onClose={() => setEditingOrder(null)}
+          onSave={async () => {
+            setEditingOrder(null);
+            triggerToast('Order updated successfully');
+            await loadOrders();
+          }}
+        />
+      )}
+
+      {/* Create Modal */}
+      {showCreate && (
+        <OrderFormModal
+          mode="create"
+          stores={stores}
+          onClose={() => setShowCreate(false)}
+          onSave={async () => {
+            setShowCreate(false);
+            triggerToast('Order created successfully');
+            await loadOrders();
+          }}
+        />
       )}
 
       {/* Header */}
@@ -213,9 +503,7 @@ export default function CateringOrdersList() {
           <h2 className="text-2xl font-black text-night tracking-tight uppercase italic">Catering Orders</h2>
           <p className="text-sm text-night/50 font-medium flex items-center gap-2 flex-wrap">
             <span>{filteredOrders.length} orders · {filteredOrders.filter(o => o.isUpcoming).length} upcoming</span>
-            {todayCount > 0 && (
-              <span className="text-sky font-black">· {todayCount} today</span>
-            )}
+            {todayCount > 0 && <span className="text-sky font-black">· {todayCount} today</span>}
             {unpaidCount > 0 && (
               <span className="text-orange-500 font-black">
                 · {unpaidCount} awaiting payment
@@ -224,31 +512,34 @@ export default function CateringOrdersList() {
             )}
           </p>
         </div>
+        <button
+          onClick={() => setShowCreate(true)}
+          className="flex items-center gap-2 px-5 py-3 bg-night text-bone rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-rose hover:text-white transition-all"
+        >
+          <Plus size={16} />
+          New Order
+        </button>
       </div>
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-[2rem] shadow-sm border border-tumbleweed space-y-3">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-night/30" size={18} />
-          <input
-            type="text"
-            placeholder="Search by client, order #, address..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-bone border-none rounded-2xl focus:ring-2 focus:ring-night transition-all text-sm font-bold text-night"
-          />
+          <input type="text" placeholder="Search by client, order #, address..."
+            value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+            className="w-full pl-12 pr-4 py-3 bg-bone border-none rounded-2xl focus:ring-2 focus:ring-night transition-all text-sm font-bold text-night" />
         </div>
 
         <div className="flex flex-wrap gap-2 items-center">
           <Filter size={14} className="text-night/30 ml-1" />
 
-          <select value={filterStoreId} onChange={(e) => setFilterStoreId(e.target.value)}
+          <select value={filterStoreId} onChange={e => setFilterStoreId(e.target.value)}
             className="px-4 py-2 bg-bone rounded-xl text-[11px] font-black uppercase tracking-widest text-night/60 border-none outline-none cursor-pointer">
             <option value="">All Stores</option>
             {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
 
-          <select value={filterEventType} onChange={(e) => setFilterEventType(e.target.value)}
+          <select value={filterEventType} onChange={e => setFilterEventType(e.target.value)}
             className="px-4 py-2 bg-bone rounded-xl text-[11px] font-black uppercase tracking-widest text-night/60 border-none outline-none cursor-pointer">
             <option value="">All Types</option>
             <option value="TACO_BAR">Taco Bar</option>
@@ -258,7 +549,7 @@ export default function CateringOrdersList() {
             <option value="NEEDS_REVIEW">Needs Review</option>
           </select>
 
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
             className="px-4 py-2 bg-bone rounded-xl text-[11px] font-black uppercase tracking-widest text-night/60 border-none outline-none cursor-pointer">
             <option value="">All Statuses</option>
             <option value="pending">Pending</option>
@@ -267,20 +558,17 @@ export default function CateringOrdersList() {
             <option value="cancelled">Cancelled</option>
           </select>
 
-          <select value={filterMethod} onChange={(e) => setFilterMethod(e.target.value)}
+          <select value={filterMethod} onChange={e => setFilterMethod(e.target.value)}
             className="px-4 py-2 bg-bone rounded-xl text-[11px] font-black uppercase tracking-widest text-night/60 border-none outline-none cursor-pointer">
             <option value="">All Methods</option>
             <option value="DELIVERY">Delivery</option>
             <option value="PICKUP">Pickup</option>
           </select>
 
-          <select
-            value={filterPayment}
-            onChange={(e) => setFilterPayment(e.target.value)}
+          <select value={filterPayment} onChange={e => setFilterPayment(e.target.value)}
             className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest border-none outline-none cursor-pointer ${
               filterPayment === 'OPEN' ? 'bg-orange-100 text-orange-600' : 'bg-bone text-night/60'
-            }`}
-          >
+            }`}>
             <option value="">All Payments</option>
             <option value="OPEN">Awaiting Payment</option>
             <option value="PAID">Paid</option>
@@ -289,66 +577,45 @@ export default function CateringOrdersList() {
 
           <DateRangePicker value={dateRange} onChange={setDateRange} placeholder="Date Range" />
 
-          {/* Today filter */}
-          <button
-            onClick={() => { setFilterToday(!filterToday); setDateRange(undefined); }}
+          <button onClick={() => { setFilterToday(!filterToday); setDateRange(undefined); }}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
               filterToday ? 'bg-sky text-white shadow-sm' : 'bg-bone text-night/40 hover:text-night'
-            }`}
-          >
+            }`}>
             <CalendarDays size={12} />
             Today
             {todayCount > 0 && (
-              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
-                filterToday ? 'bg-white/20' : 'bg-sky/20 text-sky'
-              }`}>
+              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${filterToday ? 'bg-white/20' : 'bg-sky/20 text-sky'}`}>
                 {todayCount}
               </span>
             )}
           </button>
 
-          {/* Hide unpaid filter */}
-          <button
-            onClick={() => setHideUnpaid(!hideUnpaid)}
+          <button onClick={() => setHideUnpaid(!hideUnpaid)}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
               hideUnpaid ? 'bg-night text-bone shadow-sm' : 'bg-bone text-night/40 hover:text-night'
-            }`}
-          >
+            }`}>
             <EyeOff size={12} />
             Hide Unpaid
             {unpaidCount > 0 && (
-              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
-                hideUnpaid ? 'bg-white/20' : 'bg-orange-100 text-orange-500'
-              }`}>
+              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${hideUnpaid ? 'bg-white/20' : 'bg-orange-100 text-orange-500'}`}>
                 {unpaidCount}
               </span>
             )}
           </button>
 
-          <button
-            onClick={() => setFilterUpcoming(!filterUpcoming)}
+          <button onClick={() => setFilterUpcoming(!filterUpcoming)}
             className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
               filterUpcoming ? 'bg-night text-bone shadow-sm' : 'bg-bone text-night/40 hover:text-night'
-            }`}
-          >
+            }`}>
             Upcoming Only
           </button>
 
           {hasFilters && (
-            <button
-              onClick={() => {
-                setFilterStoreId('');
-                setFilterEventType('');
-                setFilterStatus('');
-                setFilterMethod('');
-                setFilterPayment('');
-                setDateRange(undefined);
-                setFilterUpcoming(false);
-                setFilterToday(false);
-                setHideUnpaid(false);
-              }}
-              className="px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest bg-rose/10 text-rose hover:bg-rose hover:text-night transition-all"
-            >
+            <button onClick={() => {
+              setFilterStoreId(''); setFilterEventType(''); setFilterStatus('');
+              setFilterMethod(''); setFilterPayment(''); setDateRange(undefined);
+              setFilterUpcoming(false); setFilterToday(false); setHideUnpaid(false);
+            }} className="px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest bg-rose/10 text-rose hover:bg-rose hover:text-night transition-all">
               Clear All
             </button>
           )}
@@ -357,9 +624,7 @@ export default function CateringOrdersList() {
 
       {/* Orders List */}
       {loading ? (
-        <div className="flex justify-center py-20 text-night animate-pulse font-black uppercase tracking-widest">
-          Loading...
-        </div>
+        <div className="flex justify-center py-20 text-night animate-pulse font-black uppercase tracking-widest">Loading...</div>
       ) : filteredOrders.length === 0 ? (
         <div className="flex flex-col items-center py-20 text-night/30">
           <Package size={48} className="mb-4" />
@@ -367,30 +632,35 @@ export default function CateringOrdersList() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredOrders.map((order) => {
+          {filteredOrders.map(order => {
             const isUnpaid       = order.paymentStatus === 'OPEN';
             const isHouseAccount = order.isHouseAccount;
             const isTodayOrder   = isToday(order.estimatedFulfillmentDate);
+            const isEdited       = order.isManuallyEdited;
 
             return (
-              <div
-                key={order.id}
+              <div key={order.id}
                 className={`bg-white rounded-[2rem] border shadow-sm transition-all duration-300 overflow-hidden ${
-                  isUnpaid
-                    ? 'border-orange-200 opacity-75'
-                    : isTodayOrder
-                    ? 'border-sky ring-1 ring-sky/30'
-                    : order.isUpcoming
-                    ? 'border-tumbleweed'
-                    : 'border-tumbleweed/30 opacity-80'
-                }`}
-              >
+                  isUnpaid ? 'border-orange-200 opacity-75'
+                  : isTodayOrder ? 'border-sky ring-1 ring-sky/30'
+                  : order.isUpcoming ? 'border-tumbleweed'
+                  : 'border-tumbleweed/30 opacity-80'
+                }`}>
+
                 {/* Today banner */}
                 {isTodayOrder && !isUnpaid && (
                   <div className="bg-sky/10 border-b border-sky/20 px-6 py-1.5 flex items-center gap-2">
                     <CalendarDays size={11} className="text-sky shrink-0" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-sky">
-                      Today&apos;s Order
+                    <span className="text-[10px] font-black uppercase tracking-widest text-sky">Today&apos;s Order</span>
+                  </div>
+                )}
+
+                {/* Edited banner */}
+                {isEdited && (
+                  <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-1.5 flex items-center gap-2">
+                    <RefreshCw size={11} className="text-yellow-600 shrink-0" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-yellow-600">
+                      Manually Edited — Not synced with Toast
                     </span>
                   </div>
                 )}
@@ -398,17 +668,12 @@ export default function CateringOrdersList() {
                 {/* Awaiting Payment Banner */}
                 {isUnpaid && (
                   <div className={`border-b px-6 py-2 flex items-center gap-2 ${
-                    isHouseAccount
-                      ? 'bg-purple-50 border-purple-200'
-                      : 'bg-orange-50 border-orange-200'
+                    isHouseAccount ? 'bg-purple-50 border-purple-200' : 'bg-orange-50 border-orange-200'
                   }`}>
                     {isHouseAccount
                       ? <Receipt size={12} className="text-purple-500 shrink-0" />
-                      : <LockKeyhole size={12} className="text-orange-500 shrink-0" />
-                    }
-                    <span className={`text-[10px] font-black uppercase tracking-widest ${
-                      isHouseAccount ? 'text-purple-500' : 'text-orange-500'
-                    }`}>
+                      : <LockKeyhole size={12} className="text-orange-500 shrink-0" />}
+                    <span className={`text-[10px] font-black uppercase tracking-widest ${isHouseAccount ? 'text-purple-500' : 'text-orange-500'}`}>
                       {isHouseAccount
                         ? 'House Account — Invoice pending. Override when client payment is confirmed.'
                         : 'Awaiting Payment — PDF and Calendar locked until payment is confirmed'}
@@ -417,10 +682,9 @@ export default function CateringOrdersList() {
                 )}
 
                 {/* Row header */}
-                <div
-                  className="p-6 flex items-center gap-4 cursor-pointer hover:bg-bone/40 transition-colors"
-                  onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}
-                >
+                <div className="p-6 flex items-center gap-4 cursor-pointer hover:bg-bone/40 transition-colors"
+                  onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}>
+
                   <span className={`text-[9px] font-black tracking-[0.15em] px-3 py-1.5 rounded-full uppercase border shrink-0 ${EVENT_TYPE_COLORS[order.eventType] || EVENT_TYPE_COLORS.NEEDS_REVIEW}`}>
                     {order.eventTypeLabel}
                   </span>
@@ -437,6 +701,11 @@ export default function CateringOrdersList() {
                       {isTodayOrder && !isUnpaid && (
                         <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-sky/20 text-sky shrink-0">
                           Today
+                        </span>
+                      )}
+                      {isEdited && (
+                        <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-600 shrink-0">
+                          Edited
                         </span>
                       )}
                     </div>
@@ -524,8 +793,7 @@ export default function CateringOrdersList() {
                         <div className="flex items-start gap-2">
                           {order.deliveryMethod === 'DELIVERY'
                             ? <Truck size={14} className="text-rose shrink-0 mt-0.5" />
-                            : <ShoppingBag size={14} className="text-rose shrink-0 mt-0.5" />
-                          }
+                            : <ShoppingBag size={14} className="text-rose shrink-0 mt-0.5" />}
                           <p className="text-[11px] text-night/70 font-medium leading-relaxed">
                             {order.deliveryAddress || 'Customer Pickup'}
                           </p>
@@ -542,42 +810,51 @@ export default function CateringOrdersList() {
                     </div>
 
                     {/* Items */}
-                    <div className="bg-white rounded-2xl p-4 border border-tumbleweed/20">
-                      <p className="text-[9px] font-black text-night/30 uppercase tracking-widest mb-3">Order Items</p>
-                      <div className="space-y-3">
-                        {order.items.map((item, idx) => (
-                          <div key={idx} className="border-b border-tumbleweed/10 last:border-0 pb-3 last:pb-0">
-                            <div className="flex justify-between items-start">
-                              <div className="flex items-start gap-2">
-                                <span className="text-[10px] font-black text-night/30 bg-bone px-2 py-0.5 rounded-lg shrink-0">
-                                  ×{item.quantity}
+                    {order.items.length > 0 && (
+                      <div className="bg-white rounded-2xl p-4 border border-tumbleweed/20">
+                        <p className="text-[9px] font-black text-night/30 uppercase tracking-widest mb-3">Order Items</p>
+                        <div className="space-y-3">
+                          {order.items.map((item, idx) => (
+                            <div key={idx} className="border-b border-tumbleweed/10 last:border-0 pb-3 last:pb-0">
+                              <div className="flex justify-between items-start">
+                                <div className="flex items-start gap-2">
+                                  <span className="text-[10px] font-black text-night/30 bg-bone px-2 py-0.5 rounded-lg shrink-0">
+                                    ×{item.quantity}
+                                  </span>
+                                  <span className="font-black text-night text-sm">{item.displayName}</span>
+                                </div>
+                                <span className="text-[11px] font-bold text-night/40 shrink-0 ml-2">
+                                  ${item.price.toFixed(2)}
                                 </span>
-                                <span className="font-black text-night text-sm">{item.displayName}</span>
                               </div>
-                              <span className="text-[11px] font-bold text-night/40 shrink-0 ml-2">
-                                ${item.price.toFixed(2)}
-                              </span>
+                              {item.modifiers.length > 0 && (
+                                <div className="ml-8 mt-1.5 flex flex-wrap gap-1.5">
+                                  {item.modifiers
+                                    .filter(m => m.displayName && !m.displayName.startsWith('NO,'))
+                                    .map((mod, mIdx) => (
+                                      <span key={mIdx} className="text-[9px] font-bold bg-bone text-night/50 px-2 py-0.5 rounded-lg">
+                                        {mod.displayName}
+                                      </span>
+                                    ))}
+                                </div>
+                              )}
                             </div>
-                            {item.modifiers.length > 0 && (
-                              <div className="ml-8 mt-1.5 flex flex-wrap gap-1.5">
-                                {item.modifiers
-                                  .filter(m => m.displayName && !m.displayName.startsWith('NO,') && !m.displayName.startsWith('No,'))
-                                  .map((mod, mIdx) => (
-                                    <span key={mIdx} className="text-[9px] font-bold bg-bone text-night/50 px-2 py-0.5 rounded-lg">
-                                      {mod.displayName}
-                                    </span>
-                                  ))}
-                              </div>
-                            )}
-                          </div>
-                        ))}
+                          ))}
+                        </div>
+                        <div className="mt-4 pt-3 border-t border-tumbleweed/20 flex justify-between items-center">
+                          <span className="text-[10px] font-black text-night/30 uppercase tracking-widest">Total</span>
+                          <span className="font-black text-night text-lg">${parseFloat(String(order.totalAmount)).toFixed(2)}</span>
+                        </div>
                       </div>
+                    )}
 
-                      <div className="mt-4 pt-3 border-t border-tumbleweed/20 flex justify-between items-center">
-                        <span className="text-[10px] font-black text-night/30 uppercase tracking-widest">Total</span>
-                        <span className="font-black text-night text-lg">${parseFloat(order.totalAmount).toFixed(2)}</span>
+                    {/* Override notes */}
+                    {order.overrideNotes && (
+                      <div className="bg-yellow-50 rounded-2xl p-4 border border-yellow-200">
+                        <p className="text-[9px] font-black text-yellow-600 uppercase tracking-widest mb-1">Internal Notes</p>
+                        <p className="text-[11px] text-night/70 font-medium">{order.overrideNotes}</p>
                       </div>
-                    </div>
+                    )}
 
                     {/* Actions */}
                     <div className="flex flex-wrap gap-3 justify-between items-center">
@@ -588,57 +865,55 @@ export default function CateringOrdersList() {
                           }`}>
                             {isHouseAccount
                               ? <Receipt size={13} className="text-purple-500" />
-                              : <LockKeyhole size={13} className="text-orange-500" />
-                            }
-                            <span className={`text-[10px] font-black uppercase tracking-widest ${
-                              isHouseAccount ? 'text-purple-500' : 'text-orange-500'
-                            }`}>
+                              : <LockKeyhole size={13} className="text-orange-500" />}
+                            <span className={`text-[10px] font-black uppercase tracking-widest ${isHouseAccount ? 'text-purple-500' : 'text-orange-500'}`}>
                               {isHouseAccount ? 'House Account — Invoice Pending' : 'Locked — Awaiting Payment'}
                             </span>
                           </div>
-                          <button
-                            onClick={() => handleOverridePayment(order.id)}
-                            disabled={isUpdating}
+                          <button onClick={() => handleOverridePayment(order.id)} disabled={isUpdating}
                             className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-white transition-all active:scale-95 disabled:opacity-50 ${
                               isHouseAccount ? 'bg-purple-500 hover:bg-purple-600' : 'bg-orange-500 hover:bg-orange-600'
-                            }`}
-                          >
+                            }`}>
                             {isHouseAccount ? 'Confirm Invoice Paid' : 'Override — Mark as Paid'}
                           </button>
                         </div>
                       ) : (
                         <div className="flex gap-2 flex-wrap items-center">
-                          {['pending', 'confirmed', 'completed', 'cancelled'].map((status) => (
-                            <button
-                              key={status}
+                          {['pending', 'confirmed', 'completed', 'cancelled'].map(status => (
+                            <button key={status}
                               onClick={() => handleStatusUpdate(order.id, status)}
                               disabled={isUpdating || order.status === status}
                               className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-30 ${
                                 order.status === status
                                   ? 'bg-night text-bone cursor-default'
                                   : 'bg-bone text-night/40 hover:bg-night hover:text-bone'
-                              }`}
-                            >
+                              }`}>
                               {status}
                             </button>
                           ))}
                           <button
-                            onClick={() => handleGeneratePdf(order.id, order.displayNumber)}
+                            onClick={() => handleGeneratePdf(order.id, order)}
                             disabled={generatingPdf === order.id}
-                            className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-rose/10 text-rose hover:bg-rose hover:text-white transition-all active:scale-95 disabled:opacity-50"
-                          >
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-rose/10 text-rose hover:bg-rose hover:text-white transition-all active:scale-95 disabled:opacity-50">
                             <FileText size={13} />
                             {generatingPdf === order.id ? 'Generating...' : 'Fulfillment PDF'}
                           </button>
                         </div>
                       )}
 
-                      <button
-                        onClick={() => setExpandedId(null)}
-                        className="p-2 text-night/30 hover:text-rose transition-colors"
-                      >
-                        <X size={18} />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {/* Edit button — siempre visible */}
+                        <button
+                          onClick={e => { e.stopPropagation(); setEditingOrder(order); }}
+                          className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-bone text-night/40 hover:bg-night hover:text-bone transition-all">
+                          <Pencil size={13} />
+                          Edit
+                        </button>
+                        <button onClick={() => setExpandedId(null)}
+                          className="p-2 text-night/30 hover:text-rose transition-colors">
+                          <X size={18} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}

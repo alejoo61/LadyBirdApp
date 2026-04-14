@@ -10,13 +10,7 @@ class CateringOrderController {
     try {
       const { storeId, eventType, status, deliveryMethod, dateFrom, dateTo, paymentStatus } = req.query;
       const orders = await this.cateringOrderService.getAll({
-        storeId,
-        eventType,
-        status,
-        paymentStatus,
-        deliveryMethod,
-        dateFrom,
-        dateTo,
+        storeId, eventType, status, paymentStatus, deliveryMethod, dateFrom, dateTo,
       });
       res.json({
         success: true,
@@ -38,14 +32,7 @@ class CateringOrderController {
     try {
       const order = await this.cateringOrderService.getOrderById(req.params.id);
       const dto   = CateringOrderMapper.toDTO(order);
-      res.json({
-        success: true,
-        data: {
-          ...dto,
-          storeName: order.storeName,
-          storeCode: order.storeCode,
-        }
-      });
+      res.json({ success: true, data: { ...dto, storeName: order.storeName, storeCode: order.storeCode } });
     } catch (error) {
       const status = error.message === 'Order not found' ? 404 : 500;
       res.status(status).json({ success: false, error: error.message });
@@ -56,14 +43,9 @@ class CateringOrderController {
     try {
       const { status } = req.body;
       const order = await this.cateringOrderService.updateStatus(req.params.id, status);
-      res.json({
-        success: true,
-        data: CateringOrderMapper.toDTO(order),
-        message: 'Status updated successfully'
-      });
+      res.json({ success: true, data: CateringOrderMapper.toDTO(order), message: 'Status updated' });
     } catch (error) {
-      const code = error.message.includes('not found') ? 404 :
-                   error.message.includes('Invalid') ? 400 : 500;
+      const code = error.message.includes('not found') ? 404 : error.message.includes('Invalid') ? 400 : 500;
       res.status(code).json({ success: false, error: error.message });
     }
   }
@@ -71,14 +53,20 @@ class CateringOrderController {
   async updateOverride(req, res) {
     try {
       const { overrideData, overrideNotes } = req.body;
-      const order = await this.cateringOrderService.updateOverride(
-        req.params.id, overrideData, overrideNotes
-      );
-      res.json({
-        success: true,
-        data: CateringOrderMapper.toDTO(order),
-        message: 'Order updated successfully'
-      });
+      const order = await this.cateringOrderService.updateOverride(req.params.id, overrideData, overrideNotes);
+      res.json({ success: true, data: CateringOrderMapper.toDTO(order), message: 'Order updated' });
+    } catch (error) {
+      const code = error.message.includes('not found') ? 404 : 500;
+      res.status(code).json({ success: false, error: error.message });
+    }
+  }
+
+  // NUEVO: editar todos los campos de una orden
+  async updateManual(req, res) {
+    try {
+      const order = await this.cateringOrderService.updateManual(req.params.id, req.body);
+      const dto   = CateringOrderMapper.toDTO(order);
+      res.json({ success: true, data: dto, message: 'Order updated manually' });
     } catch (error) {
       const code = error.message.includes('not found') ? 404 : 500;
       res.status(code).json({ success: false, error: error.message });
@@ -103,11 +91,7 @@ class CateringOrderController {
     try {
       const { paymentStatus } = req.body;
       const order = await this.cateringOrderService.overridePaymentStatus(req.params.id, paymentStatus);
-      res.json({
-        success: true,
-        data: CateringOrderMapper.toDTO(order),
-        message: `Payment status updated to ${paymentStatus}`
-      });
+      res.json({ success: true, data: CateringOrderMapper.toDTO(order), message: `Payment updated to ${paymentStatus}` });
     } catch (error) {
       const code = error.message.includes('not found') ? 404 : 400;
       res.status(code).json({ success: false, error: error.message });

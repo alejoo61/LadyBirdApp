@@ -36,7 +36,7 @@ export interface CateringOrder {
   driverName: string | null;
   items: CateringOrderItem[];
   guestCount: number;
-  totalAmount: string;
+  totalAmount: string | number;
   overrideData: Record<string, unknown>;
   overrideNotes: string | null;
   isUpcoming: boolean;
@@ -45,6 +45,7 @@ export interface CateringOrder {
   paymentStatusLabel: string;
   isPaid: boolean;
   isHouseAccount: boolean;
+  isManuallyEdited: boolean;
 }
 
 export interface CateringOrdersParams {
@@ -92,6 +93,9 @@ export const cateringApi = {
 
   createManual: (data: Partial<CateringOrder>) =>
     apiClient.post<CateringOrderResponse>("/catering/orders", data),
+
+  updateManual: (id: string, data: Partial<CateringOrder>) =>
+  apiClient.patch<CateringOrderResponse>(`/catering/orders/${id}/manual`, data),
 
   overridePaymentStatus: (id: string, paymentStatus: string) =>
     apiClient.patch<CateringOrderResponse>(

@@ -9,10 +9,6 @@ class CateringOrderService {
     return this.cateringOrderRepository.findAll(filters);
   }
 
-  async getAllOrders(filters = {}) {
-    return this.cateringOrderRepository.findAll(filters);
-  }
-
   async getOrderById(id) {
     const order = await this.cateringOrderRepository.findById(id);
     if (!order) throw new Error('Order not found');
@@ -21,9 +17,8 @@ class CateringOrderService {
 
   async updateStatus(id, status) {
     const validStatuses = ['pending', 'confirmed', 'cancelled', 'completed'];
-    if (!validStatuses.includes(status)) {
+    if (!validStatuses.includes(status))
       throw new Error(`Invalid status. Must be one of: ${validStatuses.join(', ')}`);
-    }
     await this.getOrderById(id);
     return this.cateringOrderRepository.updateStatus(id, status);
   }
@@ -33,18 +28,21 @@ class CateringOrderService {
     return this.cateringOrderRepository.updateOverride(id, overrideData, overrideNotes);
   }
 
+  async updateManual(id, data) {
+    await this.getOrderById(id);
+    return this.cateringOrderRepository.updateManual(id, data);
+  }
+
   async createManualOrder(data) {
-    if (!data.clientName || !data.eventType || !data.estimatedFulfillmentDate) {
+    if (!data.clientName || !data.eventType || !data.estimatedFulfillmentDate)
       throw new Error('clientName, eventType and estimatedFulfillmentDate are required');
-    }
-    return this.cateringOrderRepository.create(data);
+    return this.cateringOrderRepository.create({ ...data, isManuallyEdited: true });
   }
 
   async overridePaymentStatus(id, paymentStatus) {
     const validStatuses = ['OPEN', 'PAID', 'CLOSED'];
-    if (!validStatuses.includes(paymentStatus)) {
+    if (!validStatuses.includes(paymentStatus))
       throw new Error(`Invalid payment status: ${paymentStatus}`);
-    }
     await this.getOrderById(id);
     return this.cateringOrderRepository.updatePaymentStatus(id, paymentStatus);
   }

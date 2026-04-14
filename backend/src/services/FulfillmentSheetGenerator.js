@@ -6,7 +6,7 @@ const os        = require('os');
 
 class FulfillmentSheetGenerator {
 
-  async generate(calculatedData) {
+  async generate(calculatedData, orderMeta = {}) {
     const { header } = calculatedData;
     let html;
     switch (header.eventType) {
@@ -36,6 +36,25 @@ class FulfillmentSheetGenerator {
       await browser.close();
       if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
     }
+  }
+
+  // ─── PDF FILENAME ──────────────────────────────────────────────────────────
+  buildFilename(order, storeCode) {
+    const eventTypeCode = {
+      TACO_BAR:     'TB',
+      BIRD_BOX:     'BB',
+      PERSONAL_BOX: 'PB',
+      FOODA:        'FD',
+      NEEDS_REVIEW: 'NR',
+    }[order.eventType] || 'XX';
+
+    const store      = (storeCode || 'LB').replace(/\s/g, '');
+    const clientSlug = (order.clientName || 'unknown')
+      .replace(/\s+/g, '-')
+      .replace(/[^a-zA-Z0-9-]/g, '')
+      .slice(0, 20);
+
+    return `LB-${store}-${clientSlug}-${eventTypeCode}-v1.pdf`;
   }
 
   _formatDate(dateStr) {
@@ -105,6 +124,18 @@ class FulfillmentSheetGenerator {
       color: ${badgeColor};
       border: 2px solid white;
     }
+    /* Badge para ordenes editadas manualmente */
+    .edited-badge {
+      padding: 3px 8px;
+      border-radius: 3px;
+      font-size: 8px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      background: #fbbf24;
+      color: #1a1a1a;
+      border: 2px solid #f59e0b;
+    }
 
     .order-info { display: grid; grid-template-columns: 1fr 1fr; background: #fef9c3; border: 1px solid #f0c040; border-top: none; }
     .info-left, .info-right { padding: 8px 12px; }
@@ -117,6 +148,18 @@ class FulfillmentSheetGenerator {
     .notes-box { background: #fff3cd; border: 1px solid #f0c040; border-top: none; padding: 6px 12px; }
     .notes-box h4 { font-size: 8px; font-weight: 900; text-transform: uppercase; color: #7a6a00; margin-bottom: 2px; }
     .notes-text { font-size: 9px; color: #1a1a1a; }
+
+    .edited-banner {
+      background: #fef3c7;
+      border: 1px solid #f59e0b;
+      border-top: none;
+      padding: 4px 12px;
+      font-size: 8px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #92400e;
+    }
 
     .main-grid { display: grid; grid-template-columns: 1fr 260px; gap: 8px; margin-top: 8px; }
 
@@ -178,12 +221,14 @@ class FulfillmentSheetGenerator {
     <div class="doc-header">
       <h1>Ladybird Taco &mdash; Fulfillment Sheet</h1>
       <div class="header-right">
+        ${header.isManuallyEdited ? '<span class="edited-badge">⚠ Edited</span>' : ''}
         <span class="method-pill ${isPickup ? 'pickup' : 'delivery'}">
           ${isPickup ? '🏪 Pickup' : '🚗 Delivery'}
         </span>
         <span class="event-badge">${badge.label}</span>
       </div>
     </div>
+    ${header.isManuallyEdited ? '<div class="edited-banner">⚠ This order was manually edited — not synced with Toast</div>' : ''}
     <div class="order-info">
       <div class="info-left">
         <!-- ORDER # comentado hasta confirmar el número correcto con el equipo
@@ -258,13 +303,9 @@ class FulfillmentSheetGenerator {
     const rows = [];
     for (const drink of drinks) {
       rows.push({ label: `${drink.name} (x${drink.quantity})` });
-      if (drink.wantsCups) {
-        rows.push({ label: `↳ Cups & Lids` });
-      }
-      if (drink.extras && drink.extras.length > 0) {
-        for (const extra of drink.extras) {
-          rows.push({ label: `↳ ${extra}` });
-        }
+      if (drink.wantsCups) rows.push({ label: `↳ Cups & Lids` });
+      if (drink.extras?.length > 0) {
+        for (const extra of drink.extras) rows.push({ label: `↳ ${extra}` });
       }
     }
     return `
@@ -359,7 +400,6 @@ class FulfillmentSheetGenerator {
       </table>
     </div>`;
 
-    // FIX: solo mostrar Chips & Salsa si el cliente dijo YES
     const wantsChips = boxes.some(b => b.wantsChips);
     const chipsSection = wantsChips ? `
     <div class="section">
