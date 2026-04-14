@@ -40,6 +40,12 @@ const IngredientFormulaController = require("./controllers/IngredientFormulaCont
 const FulfillmentSheetCalculator = require("./services/FulfillmentSheetCalculator");
 const FulfillmentSheetGenerator = require("./services/FulfillmentSheetGenerator");
 
+// Menu Items
+const MenuItemRepository  = require('./repositories/MenuItemRepository');
+const MenuItemController  = require('./controllers/MenuItemController');
+const menuItemRepository  = new MenuItemRepository(pool);
+const menuItemController  = new MenuItemController(menuItemRepository);
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 const cron = require("node-cron");
@@ -352,6 +358,13 @@ app.post('/api/catering/orders/:id/fulfillment-sheet', async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
+// ============ MENU ITEM ROUTES =============
+app.get('/api/menu-items',                    (req, res) => menuItemController.getAll(req, res));
+app.get('/api/menu-items/event/:eventType',   (req, res) => menuItemController.getByEventType(req, res));
+app.post('/api/menu-items',                   (req, res) => menuItemController.create(req, res));
+app.put('/api/menu-items/:id',                (req, res) => menuItemController.update(req, res));
+app.delete('/api/menu-items/:id',             (req, res) => menuItemController.delete(req, res));
 
 // TEMP — test PDF en browser
 app.get(
