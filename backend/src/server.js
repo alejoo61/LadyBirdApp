@@ -24,6 +24,8 @@ const EquipmentController = require("./controllers/EquipmentController");
 const toastAuthService = new ToastAuthService();
 const toastApiClient = new ToastApiClient(toastAuthService);
 const toastSyncService = new ToastSyncService(toastApiClient, pool);
+const ToastMenuSyncService = require('./services/ToastMenuSyncService');
+const toastMenuSyncService = new ToastMenuSyncService(toastApiClient, pool);
 
 // Caterings Orders
 const CateringOrderRepository = require("./repositories/CateringOrderRepository");
@@ -278,6 +280,14 @@ app.get("/api/toast/orders", async (req, res) => {
 
     const result = await pool.query(query, params);
     res.json({ success: true, data: result.rows, count: result.rows.length });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+app.post('/api/toast/sync/menu', async (req, res) => {
+  try {
+    const results = await toastMenuSyncService.syncMenusForAllStores();
+    res.json({ success: true, data: results });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
