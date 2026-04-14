@@ -8,6 +8,7 @@ import { cateringApi } from '@/services/api/cateringApi';
 import type { CateringOrder, CateringOrdersParams } from '@/services/api/cateringApi';
 import { storesApi } from '@/services/api/storesApi';
 import type { Store } from '@/services/api/storesApi';
+import CreateOrderModal from '@/components/CreateOrderModal';
 import {
   Search, ChevronDown, ChevronUp, Clock, User,
   Phone, Mail, Package, CheckCircle, AlertTriangle, X,
@@ -40,9 +41,9 @@ const PAYMENT_STATUS_STYLES: Record<string, string> = {
   CLOSED: 'bg-emerald-50 text-emerald-600 border border-emerald-200',
 };
 
-const EVENT_TYPES = ['TACO_BAR', 'BIRD_BOX', 'PERSONAL_BOX', 'FOODA', 'NEEDS_REVIEW'];
+const EVENT_TYPES     = ['TACO_BAR', 'BIRD_BOX', 'PERSONAL_BOX', 'FOODA', 'NEEDS_REVIEW'];
 const DELIVERY_METHODS = ['PICKUP', 'DELIVERY'];
-const STATUSES = ['pending', 'confirmed', 'completed', 'cancelled'];
+const STATUSES        = ['pending', 'confirmed', 'completed', 'cancelled'];
 const PAYMENT_STATUSES = ['OPEN', 'PAID', 'CLOSED'];
 
 const EMPTY_ORDER_FORM = {
@@ -94,47 +95,39 @@ function formatDatetimeLocal(dateStr: string) {
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// ─── ORDER FORM MODAL ──────────────────────────────────────────────────────
-function OrderFormModal({
-  mode,
+// ─── EDIT ORDER MODAL ──────────────────────────────────────────────────────
+function EditOrderModal({
   order,
   stores,
   onClose,
   onSave,
 }: {
-  mode: 'create' | 'edit';
-  order?: CateringOrder;
+  order: CateringOrder;
   stores: Store[];
   onClose: () => void;
   onSave: () => void;
 }) {
-  const [form, setForm] = useState(() => {
-    if (mode === 'edit' && order) {
-      return {
-        storeId:                  order.storeId || '',
-        eventType:                order.eventType || 'TACO_BAR',
-        status:                   order.status || 'pending',
-        paymentStatus:            order.paymentStatus || 'OPEN',
-        clientName:               order.clientName || '',
-        clientEmail:              order.clientEmail || '',
-        clientPhone:              order.clientPhone || '',
-        estimatedFulfillmentDate: formatDatetimeLocal(order.estimatedFulfillmentDate),
-        deliveryMethod:           order.deliveryMethod || 'PICKUP',
-        deliveryAddress:          order.deliveryAddress || '',
-        deliveryNotes:            order.deliveryNotes || '',
-        guestCount:               order.guestCount || 0,
-        totalAmount: parseFloat(String(order.totalAmount)) || 0,
-        overrideNotes:            order.overrideNotes || '',
-      };
-    }
-    return { ...EMPTY_ORDER_FORM };
+  const [form, setForm] = useState({
+    storeId:                  order.storeId || '',
+    eventType:                order.eventType || 'TACO_BAR',
+    status:                   order.status || 'pending',
+    paymentStatus:            order.paymentStatus || 'OPEN',
+    clientName:               order.clientName || '',
+    clientEmail:              order.clientEmail || '',
+    clientPhone:              order.clientPhone || '',
+    estimatedFulfillmentDate: formatDatetimeLocal(order.estimatedFulfillmentDate),
+    deliveryMethod:           order.deliveryMethod || 'PICKUP',
+    deliveryAddress:          order.deliveryAddress || '',
+    deliveryNotes:            order.deliveryNotes || '',
+    guestCount:               order.guestCount || 0,
+    totalAmount:              parseFloat(String(order.totalAmount)) || 0,
+    overrideNotes:            order.overrideNotes || '',
   });
 
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
 
-  const set = (key: string, value: unknown) =>
-    setForm(f => ({ ...f, [key]: value }));
+  const set = (key: string, value: unknown) => setForm(f => ({ ...f, [key]: value }));
 
   const handleSave = async () => {
     if (!form.clientName || !form.eventType || !form.estimatedFulfillmentDate) {
@@ -144,18 +137,12 @@ function OrderFormModal({
     setSaving(true);
     setError('');
     try {
-      const payload = {
+      await cateringApi.updateManual(order.id, {
         ...form,
         estimatedFulfillmentDate: new Date(form.estimatedFulfillmentDate).toISOString(),
-        guestCount:   Number(form.guestCount),
-        totalAmount:  Number(form.totalAmount),
-      };
-
-      if (mode === 'edit' && order) {
-        await cateringApi.updateManual(order.id, payload);
-      } else {
-        await cateringApi.createManual(payload);
-      }
+        guestCount:  Number(form.guestCount),
+        totalAmount: String(form.totalAmount),
+      } as never);
       onSave();
     } catch (err: unknown) {
       const e = err as ApiError;
@@ -165,29 +152,21 @@ function OrderFormModal({
     }
   };
 
-  const inputCls = 'w-full px-4 py-3 bg-bone rounded-2xl text-sm font-bold text-night outline-none focus:ring-2 focus:ring-night';
+  const inputCls  = 'w-full px-4 py-3 bg-bone rounded-2xl text-sm font-bold text-night outline-none focus:ring-2 focus:ring-night';
   const selectCls = inputCls + ' cursor-pointer';
   const labelCls  = 'text-[10px] font-black uppercase tracking-widest text-night/40 mb-1 block';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-night/60 backdrop-blur-sm p-4">
       <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-
-        {/* Header */}
         <div className="flex items-center justify-between p-8 pb-4 shrink-0">
-          <h3 className="text-xl font-black text-night uppercase italic tracking-tight">
-            {mode === 'edit' ? 'Edit Order' : 'New Manual Order'}
-          </h3>
-          <button onClick={onClose}
-            className="p-2 text-night/30 hover:text-rose transition-colors rounded-xl hover:bg-rose/10">
+          <h3 className="text-xl font-black text-night uppercase italic tracking-tight">Edit Order</h3>
+          <button onClick={onClose} className="p-2 text-night/30 hover:text-rose transition-colors rounded-xl hover:bg-rose/10">
             <X size={20} />
           </button>
         </div>
 
-        {/* Body */}
         <div className="overflow-y-auto px-8 pb-4 space-y-5 flex-1">
-
-          {/* Store + Event Type */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Store *</label>
@@ -199,51 +178,43 @@ function OrderFormModal({
             <div>
               <label className={labelCls}>Event Type *</label>
               <select value={form.eventType} onChange={e => set('eventType', e.target.value)} className={selectCls}>
-                {EVENT_TYPES.map(et => <option key={et} value={et}>{et.replace('_', ' ')}</option>)}
+                {EVENT_TYPES.map(et => <option key={et} value={et}>{et.replace(/_/g, ' ')}</option>)}
               </select>
             </div>
           </div>
 
-          {/* Client */}
           <div>
             <label className={labelCls}>Client Name *</label>
-            <input type="text" value={form.clientName}
-              onChange={e => set('clientName', e.target.value)}
+            <input type="text" value={form.clientName} onChange={e => set('clientName', e.target.value)}
               className={inputCls} placeholder="Full name" />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Email</label>
-              <input type="email" value={form.clientEmail}
-                onChange={e => set('clientEmail', e.target.value)}
+              <input type="email" value={form.clientEmail} onChange={e => set('clientEmail', e.target.value)}
                 className={inputCls} placeholder="email@example.com" />
             </div>
             <div>
               <label className={labelCls}>Phone</label>
-              <input type="tel" value={form.clientPhone}
-                onChange={e => set('clientPhone', e.target.value)}
+              <input type="tel" value={form.clientPhone} onChange={e => set('clientPhone', e.target.value)}
                 className={inputCls} placeholder="(000) 000-0000" />
             </div>
           </div>
 
-          {/* Event Date + Guest Count */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Event Date & Time *</label>
               <input type="datetime-local" value={form.estimatedFulfillmentDate}
-                onChange={e => set('estimatedFulfillmentDate', e.target.value)}
-                className={inputCls} />
+                onChange={e => set('estimatedFulfillmentDate', e.target.value)} className={inputCls} />
             </div>
             <div>
               <label className={labelCls}>Guest Count</label>
-              <input type="number" value={form.guestCount}
-                onChange={e => set('guestCount', e.target.value)}
+              <input type="number" value={form.guestCount} onChange={e => set('guestCount', e.target.value)}
                 className={inputCls} min={0} />
             </div>
           </div>
 
-          {/* Delivery */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Delivery Method</label>
@@ -254,29 +225,24 @@ function OrderFormModal({
             <div>
               <label className={labelCls}>Total Amount ($)</label>
               <input type="number" step="0.01" value={form.totalAmount}
-                onChange={e => set('totalAmount', e.target.value)}
-                className={inputCls} min={0} />
+                onChange={e => set('totalAmount', e.target.value)} className={inputCls} min={0} />
             </div>
           </div>
 
           {form.deliveryMethod === 'DELIVERY' && (
             <div>
               <label className={labelCls}>Delivery Address</label>
-              <input type="text" value={form.deliveryAddress}
-                onChange={e => set('deliveryAddress', e.target.value)}
+              <input type="text" value={form.deliveryAddress} onChange={e => set('deliveryAddress', e.target.value)}
                 className={inputCls} placeholder="Full address" />
             </div>
           )}
 
           <div>
             <label className={labelCls}>Delivery Notes</label>
-            <textarea value={form.deliveryNotes}
-              onChange={e => set('deliveryNotes', e.target.value)}
-              className={inputCls + ' resize-none'} rows={2}
-              placeholder="Special instructions..." />
+            <textarea value={form.deliveryNotes} onChange={e => set('deliveryNotes', e.target.value)}
+              className={inputCls + ' resize-none'} rows={2} placeholder="Special instructions..." />
           </div>
 
-          {/* Status + Payment */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Status</label>
@@ -292,13 +258,10 @@ function OrderFormModal({
             </div>
           </div>
 
-          {/* Notes */}
           <div>
             <label className={labelCls}>Internal Notes</label>
-            <textarea value={form.overrideNotes}
-              onChange={e => set('overrideNotes', e.target.value)}
-              className={inputCls + ' resize-none'} rows={2}
-              placeholder="Notes for the team..." />
+            <textarea value={form.overrideNotes} onChange={e => set('overrideNotes', e.target.value)}
+              className={inputCls + ' resize-none'} rows={2} placeholder="Notes for the team..." />
           </div>
 
           {error && (
@@ -308,7 +271,6 @@ function OrderFormModal({
           )}
         </div>
 
-        {/* Footer */}
         <div className="p-8 pt-4 flex gap-3 justify-end shrink-0 border-t border-tumbleweed/20">
           <button onClick={onClose}
             className="px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest bg-bone text-night/40 hover:text-night transition-all">
@@ -316,7 +278,7 @@ function OrderFormModal({
           </button>
           <button onClick={handleSave} disabled={saving}
             className="px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest bg-night text-bone hover:bg-rose hover:text-white transition-all disabled:opacity-40">
-            {saving ? 'Saving...' : mode === 'edit' ? 'Save Changes' : 'Create Order'}
+            {saving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       </div>
@@ -326,19 +288,16 @@ function OrderFormModal({
 
 // ─── MAIN COMPONENT ────────────────────────────────────────────────────────
 export default function CateringOrdersList() {
-  const [orders, setOrders]               = useState<CateringOrder[]>([]);
-  const [loading, setLoading]             = useState<boolean>(true);
-  const [expandedId, setExpandedId]       = useState<string | null>(null);
-  const [showToast, setShowToast]         = useState<string | null>(null);
-  const [isUpdating, setIsUpdating]       = useState<boolean>(false);
+  const [orders, setOrders]             = useState<CateringOrder[]>([]);
+  const [loading, setLoading]           = useState<boolean>(true);
+  const [expandedId, setExpandedId]     = useState<string | null>(null);
+  const [showToast, setShowToast]       = useState<string | null>(null);
+  const [isUpdating, setIsUpdating]     = useState<boolean>(false);
   const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
-  const [stores, setStores]               = useState<Store[]>([]);
+  const [stores, setStores]             = useState<Store[]>([]);
+  const [editingOrder, setEditingOrder] = useState<CateringOrder | null>(null);
+  const [showCreate, setShowCreate]     = useState(false);
 
-  // Modals
-  const [editingOrder, setEditingOrder]   = useState<CateringOrder | null>(null);
-  const [showCreate, setShowCreate]       = useState(false);
-
-  // Filters
   const [searchTerm, setSearchTerm]           = useState('');
   const [filterEventType, setFilterEventType] = useState('');
   const [filterStatus, setFilterStatus]       = useState('');
@@ -421,14 +380,14 @@ export default function CateringOrdersList() {
         { method: 'POST' }
       );
       if (!response.ok) throw new Error('Failed to generate PDF');
-      const blob        = await response.blob();
-      const url         = window.URL.createObjectURL(blob);
-      const a           = document.createElement('a');
-      a.href            = url;
-      const eventCode   = { TACO_BAR: 'TB', BIRD_BOX: 'BB', PERSONAL_BOX: 'PB', FOODA: 'FD', NEEDS_REVIEW: 'NR' }[order.eventType] || 'XX';
-      const clientSlug  = (order.clientName || 'unknown').replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 20);
-      const storeCode   = (order.storeCode || 'LB').replace(/\s/g, '');
-      a.download        = `LB-${storeCode}-${clientSlug}-${eventCode}-v1.pdf`;
+      const blob       = await response.blob();
+      const url        = window.URL.createObjectURL(blob);
+      const a          = document.createElement('a');
+      a.href           = url;
+      const eventCode  = ({ TACO_BAR: 'TB', BIRD_BOX: 'BB', PERSONAL_BOX: 'PB', FOODA: 'FD', NEEDS_REVIEW: 'NR' } as Record<string,string>)[order.eventType] || 'XX';
+      const clientSlug = (order.clientName || 'unknown').replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 20);
+      const storeCode  = (order.storeCode || 'LB').replace(/\s/g, '');
+      a.download       = `LB-${storeCode}-${clientSlug}-${eventCode}-v1.pdf`;
       a.click();
       window.URL.revokeObjectURL(url);
       triggerToast('PDF downloaded successfully');
@@ -443,7 +402,7 @@ export default function CateringOrdersList() {
     dateRange || filterUpcoming || filterPayment || filterToday || hideUnpaid);
 
   const filteredOrders = orders.filter(o => {
-    const matchSearch   = !searchTerm ||
+    const matchSearch     = !searchTerm ||
       o.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       o.displayNumber?.includes(searchTerm) ||
       o.deliveryAddress?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -470,8 +429,7 @@ export default function CateringOrdersList() {
 
       {/* Edit Modal */}
       {editingOrder && (
-        <OrderFormModal
-          mode="edit"
+        <EditOrderModal
           order={editingOrder}
           stores={stores}
           onClose={() => setEditingOrder(null)}
@@ -485,8 +443,7 @@ export default function CateringOrdersList() {
 
       {/* Create Modal */}
       {showCreate && (
-        <OrderFormModal
-          mode="create"
+        <CreateOrderModal
           stores={stores}
           onClose={() => setShowCreate(false)}
           onSave={async () => {
@@ -512,10 +469,8 @@ export default function CateringOrdersList() {
             )}
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 px-5 py-3 bg-night text-bone rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-rose hover:text-white transition-all"
-        >
+        <button onClick={() => setShowCreate(true)}
+          className="flex items-center gap-2 px-5 py-3 bg-night text-bone rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-rose hover:text-white transition-all">
           <Plus size={16} />
           New Order
         </button>
@@ -647,7 +602,6 @@ export default function CateringOrdersList() {
                   : 'border-tumbleweed/30 opacity-80'
                 }`}>
 
-                {/* Today banner */}
                 {isTodayOrder && !isUnpaid && (
                   <div className="bg-sky/10 border-b border-sky/20 px-6 py-1.5 flex items-center gap-2">
                     <CalendarDays size={11} className="text-sky shrink-0" />
@@ -655,7 +609,6 @@ export default function CateringOrdersList() {
                   </div>
                 )}
 
-                {/* Edited banner */}
                 {isEdited && (
                   <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-1.5 flex items-center gap-2">
                     <RefreshCw size={11} className="text-yellow-600 shrink-0" />
@@ -665,7 +618,6 @@ export default function CateringOrdersList() {
                   </div>
                 )}
 
-                {/* Awaiting Payment Banner */}
                 {isUnpaid && (
                   <div className={`border-b px-6 py-2 flex items-center gap-2 ${
                     isHouseAccount ? 'bg-purple-50 border-purple-200' : 'bg-orange-50 border-orange-200'
@@ -681,7 +633,6 @@ export default function CateringOrdersList() {
                   </div>
                 )}
 
-                {/* Row header */}
                 <div className="p-6 flex items-center gap-4 cursor-pointer hover:bg-bone/40 transition-colors"
                   onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}>
 
@@ -740,12 +691,9 @@ export default function CateringOrdersList() {
                   </div>
                 </div>
 
-                {/* Expanded detail */}
                 {expandedId === order.id && (
                   <div className="border-t border-tumbleweed/20 bg-bone/30 p-6 space-y-6">
-
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {/* Client */}
                       <div className="bg-white rounded-2xl p-4 space-y-2 border border-tumbleweed/20">
                         <p className="text-[9px] font-black text-night/30 uppercase tracking-widest">Client</p>
                         <div className="flex items-center gap-2">
@@ -766,7 +714,6 @@ export default function CateringOrdersList() {
                         )}
                       </div>
 
-                      {/* Timing */}
                       <div className="bg-white rounded-2xl p-4 space-y-2 border border-tumbleweed/20">
                         <p className="text-[9px] font-black text-night/30 uppercase tracking-widest">Timing</p>
                         <div className="flex items-start gap-2">
@@ -785,7 +732,6 @@ export default function CateringOrdersList() {
                         </div>
                       </div>
 
-                      {/* Delivery */}
                       <div className="bg-white rounded-2xl p-4 space-y-2 border border-tumbleweed/20">
                         <p className="text-[9px] font-black text-night/30 uppercase tracking-widest">
                           {order.deliveryMethod === 'DELIVERY' ? 'Delivery' : 'Pickup'}
@@ -809,7 +755,6 @@ export default function CateringOrdersList() {
                       </div>
                     </div>
 
-                    {/* Items */}
                     {order.items.length > 0 && (
                       <div className="bg-white rounded-2xl p-4 border border-tumbleweed/20">
                         <p className="text-[9px] font-black text-night/30 uppercase tracking-widest mb-3">Order Items</p>
@@ -848,7 +793,6 @@ export default function CateringOrdersList() {
                       </div>
                     )}
 
-                    {/* Override notes */}
                     {order.overrideNotes && (
                       <div className="bg-yellow-50 rounded-2xl p-4 border border-yellow-200">
                         <p className="text-[9px] font-black text-yellow-600 uppercase tracking-widest mb-1">Internal Notes</p>
@@ -856,7 +800,6 @@ export default function CateringOrdersList() {
                       </div>
                     )}
 
-                    {/* Actions */}
                     <div className="flex flex-wrap gap-3 justify-between items-center">
                       {isUnpaid ? (
                         <div className="flex items-center gap-3 flex-wrap">
@@ -891,8 +834,7 @@ export default function CateringOrdersList() {
                               {status}
                             </button>
                           ))}
-                          <button
-                            onClick={() => handleGeneratePdf(order.id, order)}
+                          <button onClick={() => handleGeneratePdf(order.id, order)}
                             disabled={generatingPdf === order.id}
                             className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-rose/10 text-rose hover:bg-rose hover:text-white transition-all active:scale-95 disabled:opacity-50">
                             <FileText size={13} />
@@ -902,9 +844,7 @@ export default function CateringOrdersList() {
                       )}
 
                       <div className="flex items-center gap-2">
-                        {/* Edit button — siempre visible */}
-                        <button
-                          onClick={e => { e.stopPropagation(); setEditingOrder(order); }}
+                        <button onClick={e => { e.stopPropagation(); setEditingOrder(order); }}
                           className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-bone text-night/40 hover:bg-night hover:text-bone transition-all">
                           <Pencil size={13} />
                           Edit
