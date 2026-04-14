@@ -1,9 +1,11 @@
 // src/services/ToastMenuSyncService.js
+const fs = require('fs');
 
 class ToastMenuSyncService {
   constructor(toastApiClient, pool) {
     this.toastApiClient = toastApiClient;
     this.pool           = pool;
+    this._debugDumped   = false; // solo dumpeamos la primera store
   }
 
   async syncMenusForAllStores() {
@@ -34,6 +36,14 @@ class ToastMenuSyncService {
     );
 
     if (!menuData?.menus) return { synced: 0 };
+
+    // ── DEBUG: dump raw de la primera store para inspección ──
+    if (!this._debugDumped) {
+      const dumpPath = '/tmp/toast_menu_sample.json';
+      fs.writeFileSync(dumpPath, JSON.stringify(menuData, null, 2));
+      console.log(`📄 Menu raw dump saved → ${dumpPath}`);
+      this._debugDumped = true;
+    }
 
     const items     = this._extractMenuItems(menuData);
     const modifiers = this._extractModifiers(menuData);
@@ -73,7 +83,6 @@ class ToastMenuSyncService {
         source:    'toast',
       });
     }
-    // Subgroups
     for (const subgroup of group.menuGroups || []) {
       this._extractFromGroup(subgroup, items);
     }
@@ -98,7 +107,6 @@ class ToastMenuSyncService {
   }
 
   async _upsertMenuItem(item) {
-    // Actualizar precio si ya existe por nombre, sino insertar
     await this.pool.query(`
       INSERT INTO menu_items (name, category, event_types, price, is_active)
       VALUES ($1, $2, $3, $4, true)
