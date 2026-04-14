@@ -6,7 +6,7 @@ const os        = require('os');
 
 class FulfillmentSheetGenerator {
 
-  async generate(calculatedData, orderMeta = {}) {
+  async generate(calculatedData) {
     const { header } = calculatedData;
     let html;
     switch (header.eventType) {
@@ -19,7 +19,7 @@ class FulfillmentSheetGenerator {
     const tmpPath = path.join(os.tmpdir(), `fulfillment-${Date.now()}.pdf`);
     const browser = await puppeteer.launch({
       headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
 
     try {
@@ -38,7 +38,6 @@ class FulfillmentSheetGenerator {
     }
   }
 
-  // ─── PDF FILENAME ──────────────────────────────────────────────────────────
   buildFilename(order, storeCode) {
     const eventTypeCode = {
       TACO_BAR:     'TB',
@@ -57,20 +56,24 @@ class FulfillmentSheetGenerator {
     return `LB-${store}-${clientSlug}-${eventTypeCode}-v1.pdf`;
   }
 
+  // ─── HELPERS ──────────────────────────────────────────────────────────────
+
   _formatDate(dateStr) {
     if (!dateStr) return '—';
     return new Date(dateStr).toLocaleString('en-US', {
       weekday: 'short', month: 'short', day: 'numeric',
       year: 'numeric', hour: '2-digit', minute: '2-digit',
-      timeZone: 'America/Chicago'
+      timeZone: 'America/Chicago',
     });
   }
 
   _formatPhone(phone) {
     if (!phone) return null;
     const cleaned = String(phone).replace(/\D/g, '');
-    if (cleaned.length === 10) return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
-    if (cleaned.length === 11 && cleaned[0] === '1') return `(${cleaned.slice(1,4)}) ${cleaned.slice(4,7)}-${cleaned.slice(7)}`;
+    if (cleaned.length === 10)
+      return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
+    if (cleaned.length === 11 && cleaned[0] === '1')
+      return `(${cleaned.slice(1,4)}) ${cleaned.slice(4,7)}-${cleaned.slice(7)}`;
     return phone;
   }
 
@@ -91,53 +94,41 @@ class FulfillmentSheetGenerator {
     body { font-family: Arial, sans-serif; font-size: 10px; color: #1a1a1a; background: white; }
 
     .doc-header {
-      background: #c0392b;
-      color: white;
-      padding: 10px 14px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      background: #c0392b; color: white; padding: 10px 14px;
+      display: flex; justify-content: space-between; align-items: center;
       border-bottom: 4px solid #922b21;
     }
     .doc-header h1 { font-size: 15px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
     .header-right { display: flex; align-items: center; gap: 6px; }
+
     .method-pill {
-      padding: 3px 8px;
-      border-radius: 3px;
-      font-size: 9px;
-      font-weight: 900;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      border: 2px solid rgba(255,255,255,0.6);
-      color: white;
+      padding: 3px 8px; border-radius: 3px; font-size: 9px; font-weight: 900;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      border: 2px solid rgba(255,255,255,0.6); color: white;
     }
     .method-pill.pickup   { background: #1565c0; border-color: #1565c0; }
-    .method-pill.delivery { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.5); }
+    .method-pill.delivery { background: rgba(255,255,255,0.15); }
+
     .event-badge {
-      padding: 3px 10px;
-      border-radius: 3px;
-      font-size: 9px;
-      font-weight: 900;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      background: white;
-      color: ${badgeColor};
-      border: 2px solid white;
+      padding: 3px 10px; border-radius: 3px; font-size: 9px; font-weight: 900;
+      text-transform: uppercase; letter-spacing: 0.12em;
+      background: white; color: ${badgeColor}; border: 2px solid white;
     }
-    /* Badge para ordenes editadas manualmente */
     .edited-badge {
-      padding: 3px 8px;
-      border-radius: 3px;
-      font-size: 8px;
-      font-weight: 900;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      background: #fbbf24;
-      color: #1a1a1a;
-      border: 2px solid #f59e0b;
+      padding: 3px 8px; border-radius: 3px; font-size: 8px; font-weight: 900;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      background: #fbbf24; color: #1a1a1a; border: 2px solid #f59e0b;
+    }
+    .test-badge {
+      padding: 3px 8px; border-radius: 3px; font-size: 8px; font-weight: 900;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      background: #d946ef; color: white; border: 2px solid #a21caf;
     }
 
-    .order-info { display: grid; grid-template-columns: 1fr 1fr; background: #fef9c3; border: 1px solid #f0c040; border-top: none; }
+    .order-info {
+      display: grid; grid-template-columns: 1fr 1fr;
+      background: #fef9c3; border: 1px solid #f0c040; border-top: none;
+    }
     .info-left, .info-right { padding: 8px 12px; }
     .info-right { border-left: 1px solid #f0c040; }
     .info-row { display: flex; gap: 6px; margin-bottom: 4px; align-items: baseline; }
@@ -145,20 +136,16 @@ class FulfillmentSheetGenerator {
     .info-value { font-size: 10px; font-weight: 700; color: #1a1a1a; }
     .info-value.highlight { font-size: 12px; font-weight: 900; color: #c0392b; }
 
-    .notes-box { background: #fff3cd; border: 1px solid #f0c040; border-top: none; padding: 6px 12px; }
+    .notes-box {
+      background: #fff3cd; border: 1px solid #f0c040; border-top: none; padding: 6px 12px;
+    }
     .notes-box h4 { font-size: 8px; font-weight: 900; text-transform: uppercase; color: #7a6a00; margin-bottom: 2px; }
     .notes-text { font-size: 9px; color: #1a1a1a; }
 
     .edited-banner {
-      background: #fef3c7;
-      border: 1px solid #f59e0b;
-      border-top: none;
-      padding: 4px 12px;
-      font-size: 8px;
-      font-weight: 900;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: #92400e;
+      background: #fef3c7; border: 1px solid #f59e0b; border-top: none;
+      padding: 4px 12px; font-size: 8px; font-weight: 900;
+      text-transform: uppercase; letter-spacing: 0.1em; color: #92400e;
     }
 
     .main-grid { display: grid; grid-template-columns: 1fr 260px; gap: 8px; margin-top: 8px; }
@@ -178,15 +165,16 @@ class FulfillmentSheetGenerator {
     .yes-no.no  { color: #c0392b; }
 
     .right-col { display: flex; flex-direction: column; gap: 6px; }
+
     .paper-goods { background: #fef9c3; border: 1px solid #f0c040; }
     .paper-goods-header { background: #f0c040; padding: 4px 8px; font-size: 9px; font-weight: 900; text-transform: uppercase; color: #1a1a1a; }
     .paper-goods table { background: #fef9c3; }
     .paper-goods th { background: #fde68a; border-color: #f0c040; color: #7a6a00; }
     .paper-goods td { border-color: #f0c040; font-size: 9px; }
+    .paper-opted-out { padding: 8px; font-size: 9px; color: #999; font-style: italic; }
 
-    .drinks-checklist { background: #e8f0fe; border: 1px solid #90caf9; margin-top: 6px; }
+    .drinks-checklist { background: #e8f0fe; border: 1px solid #90caf9; }
     .drinks-checklist-header { background: #1565c0; color: white; padding: 4px 8px; font-size: 9px; font-weight: 900; text-transform: uppercase; }
-    .drinks-checklist table { background: #e8f0fe; }
     .drinks-checklist th { background: #bbdefb; border-color: #90caf9; color: #0d47a1; }
     .drinks-checklist td { border-color: #90caf9; font-size: 9px; }
 
@@ -216,11 +204,13 @@ class FulfillmentSheetGenerator {
     const method   = (header.deliveryMethod || '').toUpperCase();
     const isPickup = method === 'PICKUP';
     const phone    = this._formatPhone(header.clientPhone);
+    const isTest   = (header.toastOrderGuid || '').startsWith('MANUAL-');
 
     return `
     <div class="doc-header">
       <h1>Ladybird Taco &mdash; Fulfillment Sheet</h1>
       <div class="header-right">
+        ${isTest ? '<span class="test-badge">TEST</span>' : ''}
         ${header.isManuallyEdited ? '<span class="edited-badge">⚠ Edited</span>' : ''}
         <span class="method-pill ${isPickup ? 'pickup' : 'delivery'}">
           ${isPickup ? '🏪 Pickup' : '🚗 Delivery'}
@@ -231,11 +221,8 @@ class FulfillmentSheetGenerator {
     ${header.isManuallyEdited ? '<div class="edited-banner">⚠ This order was manually edited — not synced with Toast</div>' : ''}
     <div class="order-info">
       <div class="info-left">
-        <!-- ORDER # comentado hasta confirmar el número correcto con el equipo
-        <div class="info-row"><span class="info-label">Order #</span><span class="info-value highlight">#${header.displayNumber || header.orderNumber}</span></div>
-        -->
         <div class="info-row"><span class="info-label">Client</span><span class="info-value">${header.clientName || '—'}</span></div>
-        <div class="info-row"><span class="info-label">Store</span><span class="info-value">${header.storeName} (${header.storeCode})</span></div>
+        <div class="info-row"><span class="info-label">Store</span><span class="info-value">${header.storeName || '—'} (${header.storeCode || '—'})</span></div>
         <div class="info-row"><span class="info-label">Guest Count</span><span class="info-value highlight">${header.guestCount}</span></div>
         ${!isPickup && header.deliveryAddress ? `<div class="info-row"><span class="info-label">Address</span><span class="info-value">${header.deliveryAddress}</span></div>` : ''}
       </div>
@@ -250,45 +237,53 @@ class FulfillmentSheetGenerator {
     `;
   }
 
+  // Renderiza sección genérica de items con checkboxes
   _renderSection(title, items, color = '#2d3748') {
     if (!items || items.length === 0) return '';
     return `
     <div class="section">
-      <div class="section-header" style="background:${color}"><span>${title}</span></div>
+      <div class="section-header" style="background:${color}">${title}</div>
       <table>
-        <thead><tr><th>ITEM</th><th>AMOUNT</th><th>UTENSIL</th><th>PACKAGING</th><th>PACKED?</th><th>LOADED?</th></tr></thead>
+        <thead><tr><th>Item</th><th>Amount</th><th>Utensil</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th></tr></thead>
         <tbody>
-          ${items.map(item => `
+          ${items.map(item => {
+            const amount = item.totalAmount ?? item.total ?? '—';
+            const unit   = item.unit || '';
+            const pkgQty = item.packagingQty;
+            const pkg    = item.packaging || '—';
+            return `
             <tr>
               <td>${item.name}</td>
-              <td>${item.totalAmount || item.total || '—'} ${item.unit || ''}</td>
+              <td>${amount} ${unit}</td>
               <td>${item.utensil || '—'}</td>
-              <td>${item.packagingQty ? `${item.packagingQty}x ${item.packaging}` : (item.packaging || '—')}</td>
+              <td>${pkgQty ? `${pkgQty}x ${pkg}` : pkg}</td>
               <td class="checkbox-cell"><span class="checkbox"></span></td>
               <td class="checkbox-cell"><span class="checkbox"></span></td>
-            </tr>
-          `).join('')}
+            </tr>`;
+          }).join('')}
         </tbody>
       </table>
     </div>`;
   }
 
   _renderPaperGoods(paperGoods) {
-    if (!paperGoods.included) return `
-    <div class="paper-goods">
-      <div class="paper-goods-header">Paper Goods</div>
-      <p style="padding:8px; font-size:9px; color:#999; font-style:italic;">Client opted out.</p>
-    </div>`;
+    if (!paperGoods || !paperGoods.included) {
+      return `
+      <div class="paper-goods">
+        <div class="paper-goods-header">Paper Goods</div>
+        <p class="paper-opted-out">Client opted out.</p>
+      </div>`;
+    }
     return `
     <div class="paper-goods">
       <div class="paper-goods-header">Paper Goods</div>
       <table>
-        <thead><tr><th>Item</th><th>Amt</th><th>Packed?</th><th>Loaded?</th></tr></thead>
+        <thead><tr><th>Item</th><th>Qty</th><th>Packed?</th><th>Loaded?</th></tr></thead>
         <tbody>
           ${paperGoods.items.map(item => `
             <tr>
               <td>${item.name}</td>
-              <td>${item.qty} ${item.package}</td>
+              <td>${item.qty} ${item.unit || item.package || 'each'}</td>
               <td class="checkbox-cell"><span class="checkbox"></span></td>
               <td class="checkbox-cell"><span class="checkbox"></span></td>
             </tr>
@@ -302,11 +297,8 @@ class FulfillmentSheetGenerator {
     if (!drinks || drinks.length === 0) return '';
     const rows = [];
     for (const drink of drinks) {
-      rows.push({ label: `${drink.name} (x${drink.quantity})` });
-      if (drink.wantsCups) rows.push({ label: `↳ Cups & Lids` });
-      if (drink.extras?.length > 0) {
-        for (const extra of drink.extras) rows.push({ label: `↳ ${extra}` });
-      }
+      rows.push(`${drink.name} (x${drink.quantity})`);
+      if (drink.wantsCups) rows.push(`↳ Cups & Lids`);
     }
     return `
     <div class="drinks-checklist">
@@ -314,9 +306,9 @@ class FulfillmentSheetGenerator {
       <table>
         <thead><tr><th>Item</th><th>Packed?</th><th>Loaded?</th></tr></thead>
         <tbody>
-          ${rows.map(row => `
+          ${rows.map(label => `
             <tr>
-              <td>${row.label}</td>
+              <td>${label}</td>
               <td class="checkbox-cell"><span class="checkbox"></span></td>
               <td class="checkbox-cell"><span class="checkbox"></span></td>
             </tr>
@@ -335,20 +327,26 @@ class FulfillmentSheetGenerator {
     </div>`;
   }
 
-  _renderQC(items = [
-    'All HOT items temped and packed in correct packaging',
-    'All COLD items / condiments included',
-    'Serving utensils included (Tongs / Spoons / Ladles)',
-    'Paper goods / Cutlery matched to guest count',
-    'Delivery notes reviewed — special instructions followed',
-    'Order label applied to all boxes',
-    'Driver assigned and notified',
-  ]) {
+  _renderQC(items) {
+    const defaults = [
+      'All HOT items temped and packed in correct packaging',
+      'All COLD items / condiments included',
+      'Serving utensils included (Tongs / Spoons / Ladles)',
+      'Paper goods / Cutlery matched to guest count',
+      'Delivery notes reviewed — special instructions followed',
+      'Order label applied to all boxes',
+      'Driver assigned and notified',
+    ];
     return `
     <div class="qc-section">
       <div class="qc-header">Final QC Checklist</div>
       <div class="qc-body">
-        ${items.map(item => `<div class="qc-item"><div class="qc-checkbox"></div><span>${item}</span></div>`).join('')}
+        ${(items || defaults).map(item => `
+          <div class="qc-item">
+            <div class="qc-checkbox"></div>
+            <span>${item}</span>
+          </div>
+        `).join('')}
       </div>
     </div>`;
   }
@@ -357,19 +355,30 @@ class FulfillmentSheetGenerator {
   _buildTacoBarHTML(data) {
     const { header, proteins, toppings, salsas, tortillas, snacks, paperGoods, hotItems, coldItems, dryItems } = data;
     const badge = this._eventTypeBadge(header.eventType);
-    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${this._baseCSS(badge.color)}</style></head><body>
+
+    // Normalizar tortillas al formato de _renderSection
+    const tortillaItems = (tortillas || []).map(t => ({
+      ...t,
+      totalAmount: t.totalAmount ?? t.total,
+      unit:        t.unit || 'each',
+    }));
+
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <style>${this._baseCSS(badge.color)}</style></head><body>
     ${this._headerHTML(header, badge)}
     <div class="main-grid">
       <div class="left-col">
-        ${this._renderSection('Proteins',  proteins,  '#c0392b')}
-        ${this._renderSection('Toppings',  toppings,  '#1e6b3a')}
-        ${this._renderSection('Salsas',    salsas,    '#7d5a00')}
-        ${this._renderSection('Tortillas', tortillas.map(t => ({ ...t, totalAmount: t.total, unit: 'each' })), '#4a235a')}
-        ${this._renderSection('Snacks',    snacks,    '#784212')}
+        ${this._renderSection('Proteins',  proteins  || [], '#c0392b')}
+        ${this._renderSection('Toppings',  toppings  || [], '#1e6b3a')}
+        ${this._renderSection('Salsas',    salsas    || [], '#7d5a00')}
+        ${this._renderSection('Tortillas', tortillaItems,   '#4a235a')}
+        ${this._renderSection('Snacks',    snacks    || [], '#784212')}
       </div>
-      <div class="right-col">${this._renderPaperGoods(paperGoods)}</div>
+      <div class="right-col">
+        ${this._renderPaperGoods(paperGoods)}
+      </div>
     </div>
-    ${this._renderFoodSummary(hotItems, coldItems, dryItems)}
+    ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
     ${this._renderQC()}
     </body></html>`;
   }
@@ -381,17 +390,17 @@ class FulfillmentSheetGenerator {
 
     const boxSummary = `
     <div class="section" style="margin-top:8px">
-      <div class="section-header" style="background:#457b9d"><span>Summary</span></div>
+      <div class="section-header" style="background:#457b9d">Summary</div>
       <table>
         <thead><tr><th>Box Type</th><th>Qty</th><th>Tacos</th><th>Combos</th><th>Tortilla</th><th>Chips+Salsa</th><th>Paper</th></tr></thead>
         <tbody>
-          ${boxes.map(box => `
+          ${(boxes || []).map(box => `
             <tr>
               <td>${box.name}</td>
               <td>${box.quantity}</td>
               <td>${box.tacoCount}</td>
-              <td style="font-size:8px">${box.combos.join(' / ') || '—'}</td>
-              <td>${box.tortilla}</td>
+              <td style="font-size:8px">${(box.combos || []).join(' / ') || '—'}</td>
+              <td>${box.tortilla || '—'}</td>
               <td class="checkbox-cell"><span class="yes-no ${box.wantsChips ? 'yes' : 'no'}">${box.wantsChips ? 'Yes' : 'No'}</span></td>
               <td class="checkbox-cell"><span class="yes-no ${box.wantsPaper ? 'yes' : 'no'}">${box.wantsPaper ? 'Yes' : 'No'}</span></td>
             </tr>
@@ -400,14 +409,16 @@ class FulfillmentSheetGenerator {
       </table>
     </div>`;
 
-    const wantsChips = boxes.some(b => b.wantsChips);
-    const chipsSection = wantsChips ? `
+    const wantsChips    = (boxes || []).some(b => b.wantsChips);
+    const chipsFiltered = (chipsAndSalsa || []).filter(i => i.included === 'Yes');
+
+    const chipsSection = wantsChips && chipsFiltered.length > 0 ? `
     <div class="section">
-      <div class="section-header" style="background:#784212"><span>Chips & Salsa</span></div>
+      <div class="section-header" style="background:#784212">Chips & Salsa</div>
       <table>
         <thead><tr><th>Item</th><th>Amount</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th></tr></thead>
         <tbody>
-          ${chipsAndSalsa.filter(i => i.included === 'Yes').map(item => `
+          ${chipsFiltered.map(item => `
             <tr>
               <td>${item.name}</td>
               <td>${item.total ? `${item.total} ${item.unit || ''}` : '—'}</td>
@@ -420,12 +431,13 @@ class FulfillmentSheetGenerator {
       </table>
     </div>` : '';
 
-    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${this._baseCSS(badge.color)}</style></head><body>
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <style>${this._baseCSS(badge.color)}</style></head><body>
     ${this._headerHTML(header, badge)}
     ${boxSummary}
     <div class="main-grid">
       <div class="left-col">
-        ${this._renderSection('Tacos by Combo', tacoRows, '#457b9d')}
+        ${this._renderSection('Tacos by Combo', tacoRows || [], '#457b9d')}
         ${chipsSection}
       </div>
       <div class="right-col">
@@ -433,12 +445,12 @@ class FulfillmentSheetGenerator {
         ${this._renderDrinksChecklist(drinks)}
       </div>
     </div>
-    ${this._renderFoodSummary(hotItems, coldItems, dryItems)}
+    ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
     ${this._renderQC([
       'All taco combos counted and packed correctly',
       'Chips & Salsa included if requested',
       'Drinks packed with cups & lids if requested',
-      'Paper goods / taco boats matched to order',
+      'Paper goods / taco boats matched to guest count',
       'Delivery notes reviewed',
       'Order label applied to all boxes',
       'Driver assigned and notified',
@@ -454,17 +466,16 @@ class FulfillmentSheetGenerator {
     const boxList = `
     <div class="section" style="margin-top:8px">
       <div class="section-header" style="background:#b7791f">
-        <span>Individual Boxes — ${personalBoxes.length} Total</span>
+        Individual Boxes — ${(personalBoxes || []).length} Total
       </div>
       <table>
-        <thead><tr><th>#</th><th>Combo</th><th>Tortilla</th><th>Extras</th><th>Packed?</th><th>Loaded?</th></tr></thead>
+        <thead><tr><th>#</th><th>Combo</th><th>Tortilla</th><th>Packed?</th><th>Loaded?</th></tr></thead>
         <tbody>
-          ${personalBoxes.map((box, idx) => `
+          ${(personalBoxes || []).map((box, idx) => `
             <tr>
               <td>${idx + 1}</td>
               <td>${box.combo}</td>
               <td>${box.tortilla}</td>
-              <td style="font-size:8px">${box.extras || '—'}</td>
               <td class="checkbox-cell"><span class="checkbox"></span></td>
               <td class="checkbox-cell"><span class="checkbox"></span></td>
             </tr>
@@ -473,13 +484,14 @@ class FulfillmentSheetGenerator {
       </table>
     </div>`;
 
-    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${this._baseCSS(badge.color)}</style></head><body>
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <style>${this._baseCSS(badge.color)}</style></head><body>
     ${this._headerHTML(header, badge)}
     <div class="main-grid">
       <div class="left-col">${boxList}</div>
       <div class="right-col">${this._renderPaperGoods(paperGoods)}</div>
     </div>
-    ${this._renderFoodSummary(hotItems, coldItems, dryItems)}
+    ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
     ${this._renderQC([
       'Each box labeled with combo and mods',
       'Total box count matches order',
@@ -497,16 +509,17 @@ class FulfillmentSheetGenerator {
     const { header, snacks, tacoRows, paperGoods, hotItems, coldItems, dryItems } = data;
     const badge = this._eventTypeBadge(header.eventType);
 
-    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${this._baseCSS(badge.color)}</style></head><body>
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <style>${this._baseCSS(badge.color)}</style></head><body>
     ${this._headerHTML(header, badge)}
     <div class="main-grid">
       <div class="left-col">
-        ${this._renderSection('Tacos',          tacoRows, '#2d3748')}
-        ${this._renderSection('Snacks & Sides', snacks,   '#744210')}
+        ${this._renderSection('Tacos',          tacoRows || [], '#2d3748')}
+        ${this._renderSection('Snacks & Sides', snacks   || [], '#744210')}
       </div>
       <div class="right-col">${this._renderPaperGoods(paperGoods)}</div>
     </div>
-    ${this._renderFoodSummary(hotItems, coldItems, dryItems)}
+    ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
     ${this._renderQC()}
     </body></html>`;
   }

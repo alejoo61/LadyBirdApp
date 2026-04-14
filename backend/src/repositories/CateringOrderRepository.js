@@ -40,7 +40,7 @@ class CateringOrderRepository {
     }
 
     const result = await this.pool.query(`
-      SELECT 
+      SELECT
         co.*,
         s.name as store_name,
         s.code as store_code
@@ -49,8 +49,8 @@ class CateringOrderRepository {
       WHERE ${conditions.join(' AND ')}
       ORDER BY
         CASE co.payment_status
-          WHEN 'OPEN' THEN 1
-          WHEN 'PAID' THEN 2
+          WHEN 'OPEN'   THEN 1
+          WHEN 'PAID'   THEN 2
           WHEN 'CLOSED' THEN 2
           ELSE 3
         END ASC,
@@ -67,7 +67,7 @@ class CateringOrderRepository {
 
   async findById(id) {
     const result = await this.pool.query(`
-      SELECT 
+      SELECT
         co.*,
         s.name as store_name,
         s.code as store_code
@@ -102,31 +102,31 @@ class CateringOrderRepository {
       RETURNING *
     `, [
       data.storeId,
-      data.toastOrderGuid || `MANUAL-${Date.now()}`,
-      data.displayNumber  || `M-${Date.now()}`,
+      data.toastOrderGuid          || `MANUAL-${Date.now()}`,
+      data.displayNumber           || `M-${Date.now()}`,
       data.eventType,
-      data.status         || 'pending',
-      data.paymentStatus  || 'CLOSED',
+      data.status                  || 'pending',
+      data.paymentStatus           || 'CLOSED',
       data.clientName,
       data.clientEmail,
       data.clientPhone,
-      data.orderDate      || new Date().toISOString(),
+      data.orderDate               || new Date().toISOString(),
       data.estimatedFulfillmentDate,
-      data.businessDate   || null,
-      data.deliveryMethod || 'PICKUP',
-      data.deliveryAddress,
-      data.deliveryNotes,
-      data.guestCount     || 0,
-      data.totalAmount    || 0,
+      data.businessDate            || null,
+      data.deliveryMethod          || 'PICKUP',
+      data.deliveryAddress         || null,
+      data.deliveryNotes           || null,
+      data.guestCount              || 0,
+      data.totalAmount             || 0,
       JSON.stringify(data.parsedData || {}),
-      data.isManuallyEdited ?? true,
+      data.isManuallyEdited        ?? true,
     ]);
     return CateringOrderMapper.toDomain(result.rows[0]);
   }
 
   async updateStatus(id, status) {
     const result = await this.pool.query(`
-      UPDATE catering_orders 
+      UPDATE catering_orders
       SET status = $1, updated_at = CURRENT_TIMESTAMP
       WHERE id = $2
       RETURNING *
@@ -136,7 +136,7 @@ class CateringOrderRepository {
 
   async updatePaymentStatus(id, paymentStatus) {
     const result = await this.pool.query(`
-      UPDATE catering_orders 
+      UPDATE catering_orders
       SET payment_status = $1, updated_at = CURRENT_TIMESTAMP
       WHERE id = $2
       RETURNING *
@@ -154,8 +154,23 @@ class CateringOrderRepository {
     return result.rows[0] ? CateringOrderMapper.toDomain(result.rows[0]) : null;
   }
 
-  // FIX: updateManual — edita todos los campos + marca is_manually_edited
+  // Edita todos los campos de una orden + persiste parsed_data si viene
   async updateManual(id, data) {
+    // Si vienen items nuevos, reconstruir parsed_data completo
+    let parsedDataClause = '';
+    const extraParams    = [];
+
+    if (data.parsedData !== undefined) {
+      extraParams.push(JSON.stringify(data.parsedData));
+      parsedDataClause = `, parsed_data = $${16 + extraParams.length - 1}`;
+    } else if (data.items !== undefined) {
+      // Compatibilidad: si mandan items directamente, envolver en parsedData
+      const currentOrder = await this.findById(id);
+      const currentParsed = currentOrder?.parsedData || {};
+      extraParams.push(JSON.stringify({ ...currentParsed, items: data.items }));
+      parsedDataClause = `, parsed_data = $${16 + extraParams.length - 1}`;
+    }
+
     const result = await this.pool.query(`
       UPDATE catering_orders SET
         store_id                   = COALESCE($1,  store_id),
@@ -174,24 +189,26 @@ class CateringOrderRepository {
         override_notes             = $14,
         is_manually_edited         = true,
         updated_at                 = CURRENT_TIMESTAMP
+        ${parsedDataClause}
       WHERE id = $15
       RETURNING *
     `, [
-      data.storeId,
-      data.eventType,
-      data.status,
-      data.paymentStatus,
-      data.clientName,
-      data.clientEmail,
-      data.clientPhone,
-      data.estimatedFulfillmentDate,
-      data.deliveryMethod,
-      data.deliveryAddress ?? null,
-      data.deliveryNotes   ?? null,
-      data.guestCount,
-      data.totalAmount,
-      data.overrideNotes   ?? null,
+      data.storeId              || null,
+      data.eventType            || null,
+      data.status               || null,
+      data.paymentStatus        || null,
+      data.clientName           || null,
+      data.clientEmail          || null,
+      data.clientPhone          || null,
+      data.estimatedFulfillmentDate || null,
+      data.deliveryMethod       || null,
+      data.deliveryAddress      ?? null,
+      data.deliveryNotes        ?? null,
+      data.guestCount           || null,
+      data.totalAmount          || null,
+      data.overrideNotes        ?? null,
       id,
+      ...extraParams,
     ]);
     return result.rows[0] ? CateringOrderMapper.toDomain(result.rows[0]) : null;
   }

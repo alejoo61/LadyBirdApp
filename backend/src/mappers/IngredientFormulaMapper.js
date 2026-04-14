@@ -7,8 +7,9 @@ class IngredientFormulaMapper {
     return new IngredientFormula({
       id:              row.id,
       name:            row.name,
+      canonicalName:   row.canonical_name || row.name,
       category:        row.category,
-      amountPerPerson: row.amount_per_person,
+      amountPerPerson: parseFloat(row.amount_per_person) || 0,
       unit:            row.unit,
       utensil:         row.utensil,
       smallPackage:    row.small_package,
@@ -16,7 +17,8 @@ class IngredientFormulaMapper {
       largePackage:    row.large_package,
       largePackageMax: row.large_package_max,
       tempType:        row.temp_type,
-      eventTypes:      row.event_types,
+      eventType:       row.event_type,        // nueva columna singular
+      eventTypes:      row.event_types || [], // columna legacy array
       isActive:        row.is_active,
       createdAt:       row.created_at,
       updatedAt:       row.updated_at,
@@ -29,8 +31,9 @@ class IngredientFormulaMapper {
     return {
       id:              f.id,
       name:            f.name,
+      canonicalName:   f.canonicalName,
       category:        f.category,
-      categoryLabel:   f.getCategoryLabel(),
+      categoryLabel:   typeof f.getCategoryLabel === 'function' ? f.getCategoryLabel() : f.category,
       amountPerPerson: f.amountPerPerson,
       unit:            f.unit,
       utensil:         f.utensil,
@@ -39,6 +42,7 @@ class IngredientFormulaMapper {
       largePackage:    f.largePackage,
       largePackageMax: f.largePackageMax,
       tempType:        f.tempType,
+      eventType:       f.eventType,
       eventTypes:      f.eventTypes,
       isActive:        f.isActive,
       createdAt:       f.createdAt,
@@ -48,6 +52,17 @@ class IngredientFormulaMapper {
   static toDTOList(formulas) {
     if (!Array.isArray(formulas)) return [];
     return formulas.map(f => this.toDTO(f));
+  }
+
+  // Para ingredient_aliases (no necesita entidad propia)
+  static aliasToDTO(row) {
+    if (!row) return null;
+    return {
+      id:            row.id,
+      canonicalName: row.canonical_name,
+      alias:         row.alias,
+      createdAt:     row.created_at,
+    };
   }
 }
 

@@ -6,18 +6,21 @@ class IngredientFormulaController {
     this.service = ingredientFormulaService;
   }
 
+  // ─── FORMULAS ─────────────────────────────────────────────────────────────
+
   async getAll(req, res) {
     try {
-      const { category, eventType, isActive } = req.query;
+      const { category, eventType, isActive, canonicalName } = req.query;
       const formulas = await this.service.getAll({
         category,
         eventType,
-        isActive: isActive !== undefined ? isActive === 'true' : undefined
+        canonicalName,
+        isActive: isActive !== undefined ? isActive === 'true' : undefined,
       });
       res.json({
         success: true,
-        data: IngredientFormulaMapper.toDTOList(formulas),
-        count: formulas.length
+        data:    IngredientFormulaMapper.toDTOList(formulas),
+        count:   formulas.length,
       });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -34,13 +37,22 @@ class IngredientFormulaController {
     }
   }
 
+  async getCanonicalNames(req, res) {
+    try {
+      const names = await this.service.getAllCanonicalNames();
+      res.json({ success: true, data: names, count: names.length });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
   async create(req, res) {
     try {
       const formula = await this.service.create(req.body);
       res.status(201).json({
         success: true,
-        data: IngredientFormulaMapper.toDTO(formula),
-        message: 'Formula created successfully'
+        data:    IngredientFormulaMapper.toDTO(formula),
+        message: 'Formula created successfully',
       });
     } catch (error) {
       const code = error.message.includes('required') ? 400 : 500;
@@ -53,8 +65,8 @@ class IngredientFormulaController {
       const formula = await this.service.update(req.params.id, req.body);
       res.json({
         success: true,
-        data: IngredientFormulaMapper.toDTO(formula),
-        message: 'Formula updated successfully'
+        data:    IngredientFormulaMapper.toDTO(formula),
+        message: 'Formula updated successfully',
       });
     } catch (error) {
       const code = error.message.includes('not found') ? 404 : 500;
@@ -66,6 +78,43 @@ class IngredientFormulaController {
     try {
       await this.service.delete(req.params.id);
       res.json({ success: true, message: 'Formula deleted successfully' });
+    } catch (error) {
+      const code = error.message.includes('not found') ? 404 : 500;
+      res.status(code).json({ success: false, error: error.message });
+    }
+  }
+
+  // ─── ALIASES ──────────────────────────────────────────────────────────────
+
+  async getAllAliases(req, res) {
+    try {
+      const { canonicalName } = req.query;
+      const aliases = await this.service.getAllAliases(canonicalName || null);
+      res.json({ success: true, data: aliases, count: aliases.length });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async createAlias(req, res) {
+    try {
+      const { canonicalName, alias } = req.body;
+      const created = await this.service.createAlias(canonicalName, alias);
+      res.status(201).json({
+        success: true,
+        data:    created,
+        message: 'Alias created successfully',
+      });
+    } catch (error) {
+      const code = error.message.includes('required') ? 400 : 500;
+      res.status(code).json({ success: false, error: error.message });
+    }
+  }
+
+  async deleteAlias(req, res) {
+    try {
+      await this.service.deleteAlias(req.params.id);
+      res.json({ success: true, message: 'Alias deleted successfully' });
     } catch (error) {
       const code = error.message.includes('not found') ? 404 : 500;
       res.status(code).json({ success: false, error: error.message });
