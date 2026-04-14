@@ -13,7 +13,7 @@ import {
   Search, ChevronDown, ChevronUp, Clock, User,
   Phone, Mail, Package, CheckCircle, AlertTriangle, X,
   Calendar, Truck, ShoppingBag, Filter, FileText, LockKeyhole,
-  Receipt, CalendarDays, EyeOff, Pencil, Plus, RefreshCw,
+  Receipt, CalendarDays, EyeOff, Pencil, Plus, RefreshCw, FlaskConical,
 } from 'lucide-react';
 
 interface ApiError {
@@ -41,27 +41,10 @@ const PAYMENT_STATUS_STYLES: Record<string, string> = {
   CLOSED: 'bg-emerald-50 text-emerald-600 border border-emerald-200',
 };
 
-const EVENT_TYPES     = ['TACO_BAR', 'BIRD_BOX', 'PERSONAL_BOX', 'FOODA', 'NEEDS_REVIEW'];
+const EVENT_TYPES      = ['TACO_BAR', 'BIRD_BOX', 'PERSONAL_BOX', 'FOODA', 'NEEDS_REVIEW'];
 const DELIVERY_METHODS = ['PICKUP', 'DELIVERY'];
-const STATUSES        = ['pending', 'confirmed', 'completed', 'cancelled'];
+const STATUSES         = ['pending', 'confirmed', 'completed', 'cancelled'];
 const PAYMENT_STATUSES = ['OPEN', 'PAID', 'CLOSED'];
-
-const EMPTY_ORDER_FORM = {
-  storeId:                  '',
-  eventType:                'TACO_BAR',
-  status:                   'pending',
-  paymentStatus:            'CLOSED',
-  clientName:               '',
-  clientEmail:              '',
-  clientPhone:              '',
-  estimatedFulfillmentDate: '',
-  deliveryMethod:           'PICKUP',
-  deliveryAddress:          '',
-  deliveryNotes:            '',
-  guestCount:               0,
-  totalAmount:              0,
-  overrideNotes:            '',
-};
 
 function formatDate(dateStr: string) {
   if (!dateStr) return '—';
@@ -97,15 +80,9 @@ function formatDatetimeLocal(dateStr: string) {
 
 // ─── EDIT ORDER MODAL ──────────────────────────────────────────────────────
 function EditOrderModal({
-  order,
-  stores,
-  onClose,
-  onSave,
+  order, stores, onClose, onSave,
 }: {
-  order: CateringOrder;
-  stores: Store[];
-  onClose: () => void;
-  onSave: () => void;
+  order: CateringOrder; stores: Store[]; onClose: () => void; onSave: () => void;
 }) {
   const [form, setForm] = useState({
     storeId:                  order.storeId || '',
@@ -126,7 +103,6 @@ function EditOrderModal({
 
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
-
   const set = (key: string, value: unknown) => setForm(f => ({ ...f, [key]: value }));
 
   const handleSave = async () => {
@@ -165,7 +141,6 @@ function EditOrderModal({
             <X size={20} />
           </button>
         </div>
-
         <div className="overflow-y-auto px-8 pb-4 space-y-5 flex-1">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -182,13 +157,11 @@ function EditOrderModal({
               </select>
             </div>
           </div>
-
           <div>
             <label className={labelCls}>Client Name *</label>
             <input type="text" value={form.clientName} onChange={e => set('clientName', e.target.value)}
               className={inputCls} placeholder="Full name" />
           </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Email</label>
@@ -201,7 +174,6 @@ function EditOrderModal({
                 className={inputCls} placeholder="(000) 000-0000" />
             </div>
           </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Event Date & Time *</label>
@@ -214,7 +186,6 @@ function EditOrderModal({
                 className={inputCls} min={0} />
             </div>
           </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Delivery Method</label>
@@ -228,7 +199,6 @@ function EditOrderModal({
                 onChange={e => set('totalAmount', e.target.value)} className={inputCls} min={0} />
             </div>
           </div>
-
           {form.deliveryMethod === 'DELIVERY' && (
             <div>
               <label className={labelCls}>Delivery Address</label>
@@ -236,13 +206,11 @@ function EditOrderModal({
                 className={inputCls} placeholder="Full address" />
             </div>
           )}
-
           <div>
             <label className={labelCls}>Delivery Notes</label>
             <textarea value={form.deliveryNotes} onChange={e => set('deliveryNotes', e.target.value)}
               className={inputCls + ' resize-none'} rows={2} placeholder="Special instructions..." />
           </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Status</label>
@@ -257,20 +225,17 @@ function EditOrderModal({
               </select>
             </div>
           </div>
-
           <div>
             <label className={labelCls}>Internal Notes</label>
             <textarea value={form.overrideNotes} onChange={e => set('overrideNotes', e.target.value)}
               className={inputCls + ' resize-none'} rows={2} placeholder="Notes for the team..." />
           </div>
-
           {error && (
             <p className="p-3 bg-red-50 text-red-500 text-[10px] font-black uppercase tracking-widest rounded-2xl border border-red-100">
               {error}
             </p>
           )}
         </div>
-
         <div className="p-8 pt-4 flex gap-3 justify-end shrink-0 border-t border-tumbleweed/20">
           <button onClick={onClose}
             className="px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest bg-bone text-night/40 hover:text-night transition-all">
@@ -288,15 +253,15 @@ function EditOrderModal({
 
 // ─── MAIN COMPONENT ────────────────────────────────────────────────────────
 export default function CateringOrdersList() {
-  const [orders, setOrders]             = useState<CateringOrder[]>([]);
-  const [loading, setLoading]           = useState<boolean>(true);
-  const [expandedId, setExpandedId]     = useState<string | null>(null);
-  const [showToast, setShowToast]       = useState<string | null>(null);
-  const [isUpdating, setIsUpdating]     = useState<boolean>(false);
+  const [orders, setOrders]               = useState<CateringOrder[]>([]);
+  const [loading, setLoading]             = useState<boolean>(true);
+  const [expandedId, setExpandedId]       = useState<string | null>(null);
+  const [showToast, setShowToast]         = useState<string | null>(null);
+  const [isUpdating, setIsUpdating]       = useState<boolean>(false);
   const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
-  const [stores, setStores]             = useState<Store[]>([]);
-  const [editingOrder, setEditingOrder] = useState<CateringOrder | null>(null);
-  const [showCreate, setShowCreate]     = useState(false);
+  const [stores, setStores]               = useState<Store[]>([]);
+  const [editingOrder, setEditingOrder]   = useState<CateringOrder | null>(null);
+  const [showCreate, setShowCreate]       = useState(false);
 
   const [searchTerm, setSearchTerm]           = useState('');
   const [filterEventType, setFilterEventType] = useState('');
@@ -427,7 +392,6 @@ export default function CateringOrdersList() {
         </div>
       )}
 
-      {/* Edit Modal */}
       {editingOrder && (
         <EditOrderModal
           order={editingOrder}
@@ -441,7 +405,6 @@ export default function CateringOrdersList() {
         />
       )}
 
-      {/* Create Modal */}
       {showCreate && (
         <CreateOrderModal
           stores={stores}
@@ -487,13 +450,11 @@ export default function CateringOrdersList() {
 
         <div className="flex flex-wrap gap-2 items-center">
           <Filter size={14} className="text-night/30 ml-1" />
-
           <select value={filterStoreId} onChange={e => setFilterStoreId(e.target.value)}
             className="px-4 py-2 bg-bone rounded-xl text-[11px] font-black uppercase tracking-widest text-night/60 border-none outline-none cursor-pointer">
             <option value="">All Stores</option>
             {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-
           <select value={filterEventType} onChange={e => setFilterEventType(e.target.value)}
             className="px-4 py-2 bg-bone rounded-xl text-[11px] font-black uppercase tracking-widest text-night/60 border-none outline-none cursor-pointer">
             <option value="">All Types</option>
@@ -503,7 +464,6 @@ export default function CateringOrdersList() {
             <option value="FOODA">Fooda</option>
             <option value="NEEDS_REVIEW">Needs Review</option>
           </select>
-
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
             className="px-4 py-2 bg-bone rounded-xl text-[11px] font-black uppercase tracking-widest text-night/60 border-none outline-none cursor-pointer">
             <option value="">All Statuses</option>
@@ -512,14 +472,12 @@ export default function CateringOrdersList() {
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
           </select>
-
           <select value={filterMethod} onChange={e => setFilterMethod(e.target.value)}
             className="px-4 py-2 bg-bone rounded-xl text-[11px] font-black uppercase tracking-widest text-night/60 border-none outline-none cursor-pointer">
             <option value="">All Methods</option>
             <option value="DELIVERY">Delivery</option>
             <option value="PICKUP">Pickup</option>
           </select>
-
           <select value={filterPayment} onChange={e => setFilterPayment(e.target.value)}
             className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest border-none outline-none cursor-pointer ${
               filterPayment === 'OPEN' ? 'bg-orange-100 text-orange-600' : 'bg-bone text-night/60'
@@ -529,9 +487,7 @@ export default function CateringOrdersList() {
             <option value="PAID">Paid</option>
             <option value="CLOSED">Paid & Closed</option>
           </select>
-
           <DateRangePicker value={dateRange} onChange={setDateRange} placeholder="Date Range" />
-
           <button onClick={() => { setFilterToday(!filterToday); setDateRange(undefined); }}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
               filterToday ? 'bg-sky text-white shadow-sm' : 'bg-bone text-night/40 hover:text-night'
@@ -544,7 +500,6 @@ export default function CateringOrdersList() {
               </span>
             )}
           </button>
-
           <button onClick={() => setHideUnpaid(!hideUnpaid)}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
               hideUnpaid ? 'bg-night text-bone shadow-sm' : 'bg-bone text-night/40 hover:text-night'
@@ -557,14 +512,12 @@ export default function CateringOrdersList() {
               </span>
             )}
           </button>
-
           <button onClick={() => setFilterUpcoming(!filterUpcoming)}
             className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
               filterUpcoming ? 'bg-night text-bone shadow-sm' : 'bg-bone text-night/40 hover:text-night'
             }`}>
             Upcoming Only
           </button>
-
           {hasFilters && (
             <button onClick={() => {
               setFilterStoreId(''); setFilterEventType(''); setFilterStatus('');
@@ -591,24 +544,38 @@ export default function CateringOrdersList() {
             const isUnpaid       = order.paymentStatus === 'OPEN';
             const isHouseAccount = order.isHouseAccount;
             const isTodayOrder   = isToday(order.estimatedFulfillmentDate);
-            const isEdited       = order.isManuallyEdited;
+            const isTestOrder    = order.toastOrderGuid?.startsWith('MANUAL-');
+            const isEdited       = order.isManuallyEdited && !isTestOrder;
 
             return (
               <div key={order.id}
                 className={`bg-white rounded-[2rem] border shadow-sm transition-all duration-300 overflow-hidden ${
-                  isUnpaid ? 'border-orange-200 opacity-75'
+                  isTestOrder ? 'border-fuchsia-300 ring-1 ring-fuchsia-200'
+                  : isUnpaid ? 'border-orange-200 opacity-75'
                   : isTodayOrder ? 'border-sky ring-1 ring-sky/30'
                   : order.isUpcoming ? 'border-tumbleweed'
                   : 'border-tumbleweed/30 opacity-80'
                 }`}>
 
-                {isTodayOrder && !isUnpaid && (
+                {/* TEST banner — llamativo, no se puede confundir */}
+                {isTestOrder && (
+                  <div className="bg-fuchsia-500 px-6 py-2 flex items-center gap-2">
+                    <FlaskConical size={13} className="text-white shrink-0" />
+                    <span className="text-[11px] font-black uppercase tracking-[0.2em] text-white">
+                      ⚠ TEST ORDER — Manual Entry — Not synced with Toast
+                    </span>
+                  </div>
+                )}
+
+                {/* Today banner */}
+                {isTodayOrder && !isUnpaid && !isTestOrder && (
                   <div className="bg-sky/10 border-b border-sky/20 px-6 py-1.5 flex items-center gap-2">
                     <CalendarDays size={11} className="text-sky shrink-0" />
                     <span className="text-[10px] font-black uppercase tracking-widest text-sky">Today&apos;s Order</span>
                   </div>
                 )}
 
+                {/* Edited banner */}
                 {isEdited && (
                   <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-1.5 flex items-center gap-2">
                     <RefreshCw size={11} className="text-yellow-600 shrink-0" />
@@ -618,6 +585,7 @@ export default function CateringOrdersList() {
                   </div>
                 )}
 
+                {/* Awaiting Payment Banner */}
                 {isUnpaid && (
                   <div className={`border-b px-6 py-2 flex items-center gap-2 ${
                     isHouseAccount ? 'bg-purple-50 border-purple-200' : 'bg-orange-50 border-orange-200'
@@ -633,6 +601,7 @@ export default function CateringOrdersList() {
                   </div>
                 )}
 
+                {/* Row header */}
                 <div className="p-6 flex items-center gap-4 cursor-pointer hover:bg-bone/40 transition-colors"
                   onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}>
 
@@ -641,15 +610,22 @@ export default function CateringOrdersList() {
                   </span>
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-[10px] font-mono font-bold text-night/30">#{order.displayNumber}</span>
                       <span className="font-black text-night text-sm truncate">{order.clientName}</span>
+
+                      {/* TEST badge — fuchsia llamativo */}
+                      {isTestOrder && (
+                        <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-fuchsia-500 text-white shrink-0 animate-pulse">
+                          TEST
+                        </span>
+                      )}
                       {isHouseAccount && (
                         <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-purple-100 text-purple-500 shrink-0">
                           House Acct
                         </span>
                       )}
-                      {isTodayOrder && !isUnpaid && (
+                      {isTodayOrder && !isUnpaid && !isTestOrder && (
                         <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-sky/20 text-sky shrink-0">
                           Today
                         </span>
@@ -691,6 +667,7 @@ export default function CateringOrdersList() {
                   </div>
                 </div>
 
+                {/* Expanded detail */}
                 {expandedId === order.id && (
                   <div className="border-t border-tumbleweed/20 bg-bone/30 p-6 space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
