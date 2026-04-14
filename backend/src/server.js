@@ -73,6 +73,7 @@ const ingredientFormulaController = new IngredientFormulaController(
 
 const fulfillmentCalculator = new FulfillmentSheetCalculator(
   ingredientFormulaRepository,
+  pool,
 );
 const fulfillmentGenerator = new FulfillmentSheetGenerator();
 
