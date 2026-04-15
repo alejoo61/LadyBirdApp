@@ -21,6 +21,8 @@ interface ApiError {
   response?: { data?: { error?: string } };
 }
 
+type TabType = 'catering' | 'house_accounts' | 'needs_review';
+
 const EVENT_TYPE_COLORS: Record<string, string> = {
   TACO_BAR:     'bg-rose/20 text-rose border-rose/30',
   BIRD_BOX:     'bg-sky/20 text-sky border-sky/30',
@@ -41,11 +43,6 @@ const PAYMENT_STATUS_STYLES: Record<string, string> = {
   PAID:   'bg-emerald-50 text-emerald-600 border border-emerald-200',
   CLOSED: 'bg-emerald-50 text-emerald-600 border border-emerald-200',
 };
-
-const EVENT_TYPES      = ['TACO_BAR', 'BIRD_BOX', 'PERSONAL_BOX', 'FOODA', 'NEEDS_REVIEW'];
-const DELIVERY_METHODS = ['PICKUP', 'DELIVERY'];
-const STATUSES         = ['pending', 'confirmed', 'completed', 'cancelled'];
-const PAYMENT_STATUSES = ['OPEN', 'PAID', 'CLOSED'];
 
 function formatDate(dateStr: string) {
   if (!dateStr) return '—';
@@ -72,15 +69,6 @@ function isToday(dateStr: string) {
     d.getDate() === now.getDate();
 }
 
-function formatDatetimeLocal(dateStr: string) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-
-
 // ─── MAIN COMPONENT ────────────────────────────────────────────────────────
 export default function CateringOrdersList() {
   const [orders, setOrders]               = useState<CateringOrder[]>([]);
@@ -92,6 +80,7 @@ export default function CateringOrdersList() {
   const [stores, setStores]               = useState<Store[]>([]);
   const [editingOrder, setEditingOrder]   = useState<CateringOrder | null>(null);
   const [showCreate, setShowCreate]       = useState(false);
+  const [activeTab, setActiveTab]         = useState<TabType>('catering');
 
   const [searchTerm, setSearchTerm]           = useState('');
   const [filterEventType, setFilterEventType] = useState('');
@@ -167,45 +156,50 @@ export default function CateringOrdersList() {
     }
   };
 
-const handleGeneratePdf = async (id: string, order: CateringOrder) => {
-  setGeneratingPdf(id);
-  try {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/catering/orders/${id}/fulfillment-sheet`,
-      { method: 'POST' }
-    );
-    if (!response.ok) throw new Error('Failed to generate PDF');
-    const blob          = await response.blob();
-    const url           = window.URL.createObjectURL(blob);
-    const a             = document.createElement('a');
-    a.href              = url;
-    const eventTypeLabel = ({
-      TACO_BAR:     'TacoBar',
-      BIRD_BOX:     'BirdBox',
-      PERSONAL_BOX: 'PersonalBox',
-      FOODA:        'Fooda',
-      NEEDS_REVIEW: 'NeedsReview',
-    } as Record<string, string>)[order.eventType] || order.eventType;
-    const clientSlug    = (order.clientName || 'unknown')
-      .replace(/\s+/g, '')
-      .replace(/[^a-zA-Z0-9]/g, '')
-      .slice(0, 25);
-    const storeCode     = (order.storeCode || 'LB').replace(/\s/g, '');
-    a.download          = `${storeCode}_${clientSlug}_${eventTypeLabel}_V1.pdf`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-    triggerToast('PDF downloaded successfully');
-  } catch {
-    triggerToast('❌ Error generating PDF');
-  } finally {
-    setGeneratingPdf(null);
-  }
-};
+  const handleGeneratePdf = async (id: string, order: CateringOrder) => {
+    setGeneratingPdf(id);
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/catering/orders/${id}/fulfillment-sheet`,
+        { method: 'POST' }
+      );
+      if (!response.ok) throw new Error('Failed to generate PDF');
+      const blob           = await response.blob();
+      const url            = window.URL.createObjectURL(blob);
+      const a              = document.createElement('a');
+      a.href               = url;
+      const eventTypeLabel = ({
+        TACO_BAR: 'TacoBar', BIRD_BOX: 'BirdBox',
+        PERSONAL_BOX: 'PersonalBox', FOODA: 'Fooda', NEEDS_REVIEW: 'NeedsReview',
+      } as Record<string, string>)[order.eventType] || order.eventType;
+      const clientSlug     = (order.clientName || 'unknown')
+        .replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 25);
+      const storeCode      = (order.storeCode || 'LB').replace(/\s/g, '');
+      a.download           = `${storeCode}_${clientSlug}_${eventTypeLabel}_V1.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      triggerToast('PDF downloaded successfully');
+    } catch {
+      triggerToast('❌ Error generating PDF');
+    } finally {
+      setGeneratingPdf(null);
+    }
+  };
+
+  // ─── TAB FILTERING ────────────────────────────────────────────────────────
+
+  const cateringOrders     = orders.filter(o => !o.isHouseAccount && o.eventType !== 'NEEDS_REVIEW');
+  const houseAccountOrders = orders.filter(o => o.isHouseAccount);
+  const needsReviewOrders  = orders.filter(o => o.eventType === 'NEEDS_REVIEW');
+
+  const tabOrders = activeTab === 'catering'       ? cateringOrders
+                  : activeTab === 'house_accounts' ? houseAccountOrders
+                  : needsReviewOrders;
 
   const hasFilters = !!(filterStoreId || filterEventType || filterStatus || filterMethod ||
     dateRange || filterUpcoming || filterPayment || filterToday || hideUnpaid);
 
-  const filteredOrders = orders.filter(o => {
+  const filteredOrders = tabOrders.filter(o => {
     const matchSearch     = !searchTerm ||
       o.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       o.displayNumber?.includes(searchTerm) ||
@@ -216,9 +210,321 @@ const handleGeneratePdf = async (id: string, order: CateringOrder) => {
     return matchSearch && matchUpcoming && matchToday && matchHideUnpaid;
   });
 
-  const unpaidCount       = orders.filter(o => o.paymentStatus === 'OPEN').length;
+  const unpaidCount       = tabOrders.filter(o => o.paymentStatus === 'OPEN').length;
   const houseAccountCount = orders.filter(o => o.isHouseAccount && o.paymentStatus === 'OPEN').length;
-  const todayCount        = orders.filter(o => isToday(o.estimatedFulfillmentDate)).length;
+  const todayCount        = tabOrders.filter(o => isToday(o.estimatedFulfillmentDate)).length;
+
+  const tabs: { key: TabType; label: string; count: number; color: string }[] = [
+    {
+      key:   'catering',
+      label: 'Catering Events',
+      count: cateringOrders.length,
+      color: 'text-rose border-rose',
+    },
+    {
+      key:   'house_accounts',
+      label: 'House Accounts',
+      count: houseAccountOrders.length,
+      color: 'text-purple-600 border-purple-400',
+    },
+    {
+      key:   'needs_review',
+      label: 'Needs Review',
+      count: needsReviewOrders.length,
+      color: 'text-yellow-600 border-yellow-400',
+    },
+  ];
+
+  // ─── ORDER CARD ───────────────────────────────────────────────────────────
+  const renderOrder = (order: CateringOrder) => {
+    const isUnpaid       = order.paymentStatus === 'OPEN';
+    const isHouseAccount = order.isHouseAccount;
+    const isTodayOrder   = isToday(order.estimatedFulfillmentDate);
+    const isTestOrder    = order.toastOrderGuid?.startsWith('MANUAL-');
+    const isEdited       = order.isManuallyEdited && !isTestOrder;
+
+    return (
+      <div key={order.id}
+        className={`bg-white rounded-[2rem] border shadow-sm transition-all duration-300 overflow-hidden ${
+          isTestOrder    ? 'border-fuchsia-300 ring-1 ring-fuchsia-200'
+          : isUnpaid     ? 'border-orange-200 opacity-75'
+          : isTodayOrder ? 'border-sky ring-1 ring-sky/30'
+          : order.isUpcoming ? 'border-tumbleweed'
+          : 'border-tumbleweed/30 opacity-80'
+        }`}>
+
+        {isTestOrder && (
+          <div className="bg-fuchsia-500 px-6 py-2 flex items-center gap-2">
+            <FlaskConical size={13} className="text-white shrink-0" />
+            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-white">
+              ⚠ TEST ORDER — Manual Entry — Not synced with Toast
+            </span>
+          </div>
+        )}
+
+        {isTodayOrder && !isUnpaid && !isTestOrder && (
+          <div className="bg-sky/10 border-b border-sky/20 px-6 py-1.5 flex items-center gap-2">
+            <CalendarDays size={11} className="text-sky shrink-0" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-sky">Today&apos;s Order</span>
+          </div>
+        )}
+
+        {isEdited && (
+          <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-1.5 flex items-center gap-2">
+            <RefreshCw size={11} className="text-yellow-600 shrink-0" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-yellow-600">
+              Manually Edited — Not synced with Toast
+            </span>
+          </div>
+        )}
+
+        {isUnpaid && (
+          <div className={`border-b px-6 py-2 flex items-center gap-2 ${
+            isHouseAccount ? 'bg-purple-50 border-purple-200' : 'bg-orange-50 border-orange-200'
+          }`}>
+            {isHouseAccount
+              ? <Receipt size={12} className="text-purple-500 shrink-0" />
+              : <LockKeyhole size={12} className="text-orange-500 shrink-0" />}
+            <span className={`text-[10px] font-black uppercase tracking-widest ${isHouseAccount ? 'text-purple-500' : 'text-orange-500'}`}>
+              {isHouseAccount
+                ? 'House Account — Invoice pending. Override when client payment is confirmed.'
+                : 'Awaiting Payment — PDF and Calendar locked until payment is confirmed'}
+            </span>
+          </div>
+        )}
+
+        <div className="p-6 flex items-center gap-4 cursor-pointer hover:bg-bone/40 transition-colors"
+          onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}>
+
+          <span className={`text-[9px] font-black tracking-[0.15em] px-3 py-1.5 rounded-full uppercase border shrink-0 ${EVENT_TYPE_COLORS[order.eventType] || EVENT_TYPE_COLORS.NEEDS_REVIEW}`}>
+            {order.eventTypeLabel}
+          </span>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-mono font-bold text-night/30">#{order.displayNumber}</span>
+              <span className="font-black text-night text-sm truncate">{order.clientName}</span>
+              {isTestOrder && (
+                <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-fuchsia-500 text-white shrink-0 animate-pulse">
+                  TEST
+                </span>
+              )}
+              {isHouseAccount && (
+                <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-purple-100 text-purple-500 shrink-0">
+                  House Acct
+                </span>
+              )}
+              {isTodayOrder && !isUnpaid && !isTestOrder && (
+                <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-sky/20 text-sky shrink-0">
+                  Today
+                </span>
+              )}
+              {isEdited && (
+                <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-600 shrink-0">
+                  Edited
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-night/40 font-medium truncate mt-0.5">
+              {order.storeName} · {order.guestCount} guests
+            </p>
+          </div>
+
+          <div className="text-right shrink-0 hidden md:block">
+            <p className="text-[11px] font-black text-night/60">{formatDate(order.estimatedFulfillmentDate)}</p>
+            <p className="text-[10px] text-night/30 font-medium mt-0.5">
+              {order.deliveryMethod === 'DELIVERY' ? '🚗 Delivery' : '🏪 Pickup'}
+            </p>
+          </div>
+
+          <span className={`text-[9px] font-black tracking-[0.15em] px-3 py-1.5 rounded-full uppercase shrink-0 ${
+            isUnpaid && isHouseAccount
+              ? 'bg-purple-100 text-purple-600 border border-purple-200'
+              : PAYMENT_STATUS_STYLES[order.paymentStatus] || PAYMENT_STATUS_STYLES.OPEN
+          }`}>
+            {isHouseAccount && isUnpaid ? 'House Account' : order.paymentStatusLabel}
+          </span>
+
+          {!isUnpaid && (
+            <span className={`text-[9px] font-black tracking-[0.15em] px-3 py-1.5 rounded-full uppercase shrink-0 ${STATUS_COLORS[order.status] || STATUS_COLORS.pending}`}>
+              {order.statusLabel}
+            </span>
+          )}
+
+          <div className="text-night/30 shrink-0">
+            {expandedId === order.id ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          </div>
+        </div>
+
+        {expandedId === order.id && (
+          <div className="border-t border-tumbleweed/20 bg-bone/30 p-6 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white rounded-2xl p-4 space-y-2 border border-tumbleweed/20">
+                <p className="text-[9px] font-black text-night/30 uppercase tracking-widest">Client</p>
+                <div className="flex items-center gap-2">
+                  <User size={14} className="text-rose shrink-0" />
+                  <span className="font-black text-night text-sm">{order.clientName}</span>
+                </div>
+                {order.clientEmail && (
+                  <div className="flex items-center gap-2">
+                    <Mail size={12} className="text-night/30 shrink-0" />
+                    <span className="text-[11px] text-night/60 truncate">{order.clientEmail}</span>
+                  </div>
+                )}
+                {order.clientPhone && (
+                  <div className="flex items-center gap-2">
+                    <Phone size={12} className="text-night/30 shrink-0" />
+                    <span className="text-[11px] text-night/60">{formatPhone(order.clientPhone)}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white rounded-2xl p-4 space-y-2 border border-tumbleweed/20">
+                <p className="text-[9px] font-black text-night/30 uppercase tracking-widest">Timing</p>
+                <div className="flex items-start gap-2">
+                  <Calendar size={14} className="text-rose shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-[10px] text-night/40 font-black uppercase">Event Time</p>
+                    <p className="font-black text-night text-sm">{formatDate(order.estimatedFulfillmentDate)}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Clock size={14} className="text-night/30 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-[10px] text-night/40 font-black uppercase">Kitchen Finish</p>
+                    <p className="text-sm font-bold text-night/70">{formatDate(order.kitchenFinishTime)}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-4 space-y-2 border border-tumbleweed/20">
+                <p className="text-[9px] font-black text-night/30 uppercase tracking-widest">
+                  {order.deliveryMethod === 'DELIVERY' ? 'Delivery' : 'Pickup'}
+                </p>
+                <div className="flex items-start gap-2">
+                  {order.deliveryMethod === 'DELIVERY'
+                    ? <Truck size={14} className="text-rose shrink-0 mt-0.5" />
+                    : <ShoppingBag size={14} className="text-rose shrink-0 mt-0.5" />}
+                  <p className="text-[11px] text-night/70 font-medium leading-relaxed">
+                    {order.deliveryAddress || 'Customer Pickup'}
+                  </p>
+                </div>
+                {order.deliveryNotes && (
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle size={12} className="text-yellow-500 shrink-0 mt-0.5" />
+                    <p className="text-[10px] text-night/50 font-medium italic leading-relaxed">
+                      {order.deliveryNotes}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {order.items.length > 0 && (
+              <div className="bg-white rounded-2xl p-4 border border-tumbleweed/20">
+                <p className="text-[9px] font-black text-night/30 uppercase tracking-widest mb-3">Order Items</p>
+                <div className="space-y-3">
+                  {order.items.map((item, idx) => (
+                    <div key={idx} className="border-b border-tumbleweed/10 last:border-0 pb-3 last:pb-0">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-start gap-2">
+                          <span className="text-[10px] font-black text-night/30 bg-bone px-2 py-0.5 rounded-lg shrink-0">
+                            ×{item.quantity}
+                          </span>
+                          <span className="font-black text-night text-sm">{item.displayName}</span>
+                        </div>
+                        <span className="text-[11px] font-bold text-night/40 shrink-0 ml-2">
+                          ${item.price.toFixed(2)}
+                        </span>
+                      </div>
+                      {item.modifiers.length > 0 && (
+                        <div className="ml-8 mt-1.5 flex flex-wrap gap-1.5">
+                          {item.modifiers
+                            .filter(m => m.displayName && !m.displayName.startsWith('NO,'))
+                            .map((mod, mIdx) => (
+                              <span key={mIdx} className="text-[9px] font-bold bg-bone text-night/50 px-2 py-0.5 rounded-lg">
+                                {mod.displayName}
+                              </span>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 pt-3 border-t border-tumbleweed/20 flex justify-between items-center">
+                  <span className="text-[10px] font-black text-night/30 uppercase tracking-widest">Total</span>
+                  <span className="font-black text-night text-lg">${parseFloat(String(order.totalAmount)).toFixed(2)}</span>
+                </div>
+              </div>
+            )}
+
+            {order.overrideNotes && (
+              <div className="bg-yellow-50 rounded-2xl p-4 border border-yellow-200">
+                <p className="text-[9px] font-black text-yellow-600 uppercase tracking-widest mb-1">Internal Notes</p>
+                <p className="text-[11px] text-night/70 font-medium">{order.overrideNotes}</p>
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-3 justify-between items-center">
+              {isUnpaid ? (
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border ${
+                    isHouseAccount ? 'bg-purple-50 border-purple-200' : 'bg-orange-50 border-orange-200'
+                  }`}>
+                    {isHouseAccount
+                      ? <Receipt size={13} className="text-purple-500" />
+                      : <LockKeyhole size={13} className="text-orange-500" />}
+                    <span className={`text-[10px] font-black uppercase tracking-widest ${isHouseAccount ? 'text-purple-500' : 'text-orange-500'}`}>
+                      {isHouseAccount ? 'House Account — Invoice Pending' : 'Locked — Awaiting Payment'}
+                    </span>
+                  </div>
+                  <button onClick={() => handleOverridePayment(order.id)} disabled={isUpdating}
+                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-white transition-all active:scale-95 disabled:opacity-50 ${
+                      isHouseAccount ? 'bg-purple-500 hover:bg-purple-600' : 'bg-orange-500 hover:bg-orange-600'
+                    }`}>
+                    {isHouseAccount ? 'Confirm Invoice Paid' : 'Override — Mark as Paid'}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2 flex-wrap items-center">
+                  {['pending', 'confirmed', 'completed', 'cancelled'].map(status => (
+                    <button key={status}
+                      onClick={() => handleStatusUpdate(order.id, status)}
+                      disabled={isUpdating || order.status === status}
+                      className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-30 ${
+                        order.status === status
+                          ? 'bg-night text-bone cursor-default'
+                          : 'bg-bone text-night/40 hover:bg-night hover:text-bone'
+                      }`}>
+                      {status}
+                    </button>
+                  ))}
+                  <button onClick={() => handleGeneratePdf(order.id, order)}
+                    disabled={generatingPdf === order.id}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-rose/10 text-rose hover:bg-rose hover:text-white transition-all active:scale-95 disabled:opacity-50">
+                    <FileText size={13} />
+                    {generatingPdf === order.id ? 'Generating...' : 'Fulfillment PDF'}
+                  </button>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2">
+                <button onClick={e => { e.stopPropagation(); setEditingOrder(order); }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-bone text-night/40 hover:bg-night hover:text-bone transition-all">
+                  <Pencil size={13} />
+                  Edit
+                </button>
+                <button onClick={() => setExpandedId(null)}
+                  className="p-2 text-night/30 hover:text-rose transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6 relative">
@@ -266,7 +572,7 @@ const handleGeneratePdf = async (id: string, order: CateringOrder) => {
             {unpaidCount > 0 && (
               <span className="text-orange-500 font-black">
                 · {unpaidCount} awaiting payment
-                {houseAccountCount > 0 && ` (${houseAccountCount} house account)`}
+                {activeTab === 'catering' && houseAccountCount > 0 && ` (${houseAccountCount} house account)`}
               </span>
             )}
           </p>
@@ -276,6 +582,39 @@ const handleGeneratePdf = async (id: string, order: CateringOrder) => {
           <Plus size={16} />
           New Order
         </button>
+      </div>
+
+      {/* ── TABS ── */}
+      <div className="flex gap-1 bg-bone p-1.5 rounded-2xl w-fit">
+        {tabs.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => { setActiveTab(tab.key); setExpandedId(null); }}
+            className={`relative flex items-center gap-2 px-5 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
+              activeTab === tab.key
+                ? 'bg-white shadow-sm text-night'
+                : 'text-night/40 hover:text-night'
+            }`}>
+            {tab.label}
+            {tab.count > 0 && (
+              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${
+                activeTab === tab.key
+                  ? `bg-night/10 text-night`
+                  : 'bg-night/5 text-night/40'
+              }`}>
+                {tab.count}
+              </span>
+            )}
+            {/* Indicador de alerta para needs_review */}
+            {tab.key === 'needs_review' && tab.count > 0 && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full" />
+            )}
+            {/* Indicador de alerta para house_accounts con unpaid */}
+            {tab.key === 'house_accounts' && houseAccountOrders.filter(o => o.paymentStatus === 'OPEN').length > 0 && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-purple-400 rounded-full" />
+            )}
+          </button>
+        ))}
       </div>
 
       {/* Filters */}
@@ -294,15 +633,18 @@ const handleGeneratePdf = async (id: string, order: CateringOrder) => {
             <option value="">All Stores</option>
             {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-          <select value={filterEventType} onChange={e => setFilterEventType(e.target.value)}
-            className="px-4 py-2 bg-bone rounded-xl text-[11px] font-black uppercase tracking-widest text-night/60 border-none outline-none cursor-pointer">
-            <option value="">All Types</option>
-            <option value="TACO_BAR">Taco Bar</option>
-            <option value="BIRD_BOX">&apos;Bird Box</option>
-            <option value="PERSONAL_BOX">Personal Box</option>
-            <option value="FOODA">Fooda</option>
-            <option value="NEEDS_REVIEW">Needs Review</option>
-          </select>
+
+          {activeTab === 'catering' && (
+            <select value={filterEventType} onChange={e => setFilterEventType(e.target.value)}
+              className="px-4 py-2 bg-bone rounded-xl text-[11px] font-black uppercase tracking-widest text-night/60 border-none outline-none cursor-pointer">
+              <option value="">All Types</option>
+              <option value="TACO_BAR">Taco Bar</option>
+              <option value="BIRD_BOX">&apos;Bird Box</option>
+              <option value="PERSONAL_BOX">Personal Box</option>
+              <option value="FOODA">Fooda</option>
+            </select>
+          )}
+
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
             className="px-4 py-2 bg-bone rounded-xl text-[11px] font-black uppercase tracking-widest text-night/60 border-none outline-none cursor-pointer">
             <option value="">All Statuses</option>
@@ -375,307 +717,15 @@ const handleGeneratePdf = async (id: string, order: CateringOrder) => {
       ) : filteredOrders.length === 0 ? (
         <div className="flex flex-col items-center py-20 text-night/30">
           <Package size={48} className="mb-4" />
-          <p className="font-black uppercase tracking-widest text-sm">No orders found</p>
+          <p className="font-black uppercase tracking-widest text-sm">
+            {activeTab === 'catering'       ? 'No catering orders found'
+           : activeTab === 'house_accounts' ? 'No house accounts found'
+           : 'No orders needing review'}
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredOrders.map(order => {
-            const isUnpaid       = order.paymentStatus === 'OPEN';
-            const isHouseAccount = order.isHouseAccount;
-            const isTodayOrder   = isToday(order.estimatedFulfillmentDate);
-            const isTestOrder    = order.toastOrderGuid?.startsWith('MANUAL-');
-            const isEdited       = order.isManuallyEdited && !isTestOrder;
-
-            return (
-              <div key={order.id}
-                className={`bg-white rounded-[2rem] border shadow-sm transition-all duration-300 overflow-hidden ${
-                  isTestOrder ? 'border-fuchsia-300 ring-1 ring-fuchsia-200'
-                  : isUnpaid ? 'border-orange-200 opacity-75'
-                  : isTodayOrder ? 'border-sky ring-1 ring-sky/30'
-                  : order.isUpcoming ? 'border-tumbleweed'
-                  : 'border-tumbleweed/30 opacity-80'
-                }`}>
-
-                {/* TEST banner — llamativo, no se puede confundir */}
-                {isTestOrder && (
-                  <div className="bg-fuchsia-500 px-6 py-2 flex items-center gap-2">
-                    <FlaskConical size={13} className="text-white shrink-0" />
-                    <span className="text-[11px] font-black uppercase tracking-[0.2em] text-white">
-                      ⚠ TEST ORDER — Manual Entry — Not synced with Toast
-                    </span>
-                  </div>
-                )}
-
-                {/* Today banner */}
-                {isTodayOrder && !isUnpaid && !isTestOrder && (
-                  <div className="bg-sky/10 border-b border-sky/20 px-6 py-1.5 flex items-center gap-2">
-                    <CalendarDays size={11} className="text-sky shrink-0" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-sky">Today&apos;s Order</span>
-                  </div>
-                )}
-
-                {/* Edited banner */}
-                {isEdited && (
-                  <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-1.5 flex items-center gap-2">
-                    <RefreshCw size={11} className="text-yellow-600 shrink-0" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-yellow-600">
-                      Manually Edited — Not synced with Toast
-                    </span>
-                  </div>
-                )}
-
-                {/* Awaiting Payment Banner */}
-                {isUnpaid && (
-                  <div className={`border-b px-6 py-2 flex items-center gap-2 ${
-                    isHouseAccount ? 'bg-purple-50 border-purple-200' : 'bg-orange-50 border-orange-200'
-                  }`}>
-                    {isHouseAccount
-                      ? <Receipt size={12} className="text-purple-500 shrink-0" />
-                      : <LockKeyhole size={12} className="text-orange-500 shrink-0" />}
-                    <span className={`text-[10px] font-black uppercase tracking-widest ${isHouseAccount ? 'text-purple-500' : 'text-orange-500'}`}>
-                      {isHouseAccount
-                        ? 'House Account — Invoice pending. Override when client payment is confirmed.'
-                        : 'Awaiting Payment — PDF and Calendar locked until payment is confirmed'}
-                    </span>
-                  </div>
-                )}
-
-                {/* Row header */}
-                <div className="p-6 flex items-center gap-4 cursor-pointer hover:bg-bone/40 transition-colors"
-                  onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}>
-
-                  <span className={`text-[9px] font-black tracking-[0.15em] px-3 py-1.5 rounded-full uppercase border shrink-0 ${EVENT_TYPE_COLORS[order.eventType] || EVENT_TYPE_COLORS.NEEDS_REVIEW}`}>
-                    {order.eventTypeLabel}
-                  </span>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[10px] font-mono font-bold text-night/30">#{order.displayNumber}</span>
-                      <span className="font-black text-night text-sm truncate">{order.clientName}</span>
-
-                      {/* TEST badge — fuchsia llamativo */}
-                      {isTestOrder && (
-                        <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-fuchsia-500 text-white shrink-0 animate-pulse">
-                          TEST
-                        </span>
-                      )}
-                      {isHouseAccount && (
-                        <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-purple-100 text-purple-500 shrink-0">
-                          House Acct
-                        </span>
-                      )}
-                      {isTodayOrder && !isUnpaid && !isTestOrder && (
-                        <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-sky/20 text-sky shrink-0">
-                          Today
-                        </span>
-                      )}
-                      {isEdited && (
-                        <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-600 shrink-0">
-                          Edited
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-night/40 font-medium truncate mt-0.5">
-                      {order.storeName} · {order.guestCount} guests
-                    </p>
-                  </div>
-
-                  <div className="text-right shrink-0 hidden md:block">
-                    <p className="text-[11px] font-black text-night/60">{formatDate(order.estimatedFulfillmentDate)}</p>
-                    <p className="text-[10px] text-night/30 font-medium mt-0.5">
-                      {order.deliveryMethod === 'DELIVERY' ? '🚗 Delivery' : '🏪 Pickup'}
-                    </p>
-                  </div>
-
-                  <span className={`text-[9px] font-black tracking-[0.15em] px-3 py-1.5 rounded-full uppercase shrink-0 ${
-                    isUnpaid && isHouseAccount
-                      ? 'bg-purple-100 text-purple-600 border border-purple-200'
-                      : PAYMENT_STATUS_STYLES[order.paymentStatus] || PAYMENT_STATUS_STYLES.OPEN
-                  }`}>
-                    {isHouseAccount && isUnpaid ? 'House Account' : order.paymentStatusLabel}
-                  </span>
-
-                  {!isUnpaid && (
-                    <span className={`text-[9px] font-black tracking-[0.15em] px-3 py-1.5 rounded-full uppercase shrink-0 ${STATUS_COLORS[order.status] || STATUS_COLORS.pending}`}>
-                      {order.statusLabel}
-                    </span>
-                  )}
-
-                  <div className="text-night/30 shrink-0">
-                    {expandedId === order.id ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                  </div>
-                </div>
-
-                {/* Expanded detail */}
-                {expandedId === order.id && (
-                  <div className="border-t border-tumbleweed/20 bg-bone/30 p-6 space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="bg-white rounded-2xl p-4 space-y-2 border border-tumbleweed/20">
-                        <p className="text-[9px] font-black text-night/30 uppercase tracking-widest">Client</p>
-                        <div className="flex items-center gap-2">
-                          <User size={14} className="text-rose shrink-0" />
-                          <span className="font-black text-night text-sm">{order.clientName}</span>
-                        </div>
-                        {order.clientEmail && (
-                          <div className="flex items-center gap-2">
-                            <Mail size={12} className="text-night/30 shrink-0" />
-                            <span className="text-[11px] text-night/60 truncate">{order.clientEmail}</span>
-                          </div>
-                        )}
-                        {order.clientPhone && (
-                          <div className="flex items-center gap-2">
-                            <Phone size={12} className="text-night/30 shrink-0" />
-                            <span className="text-[11px] text-night/60">{formatPhone(order.clientPhone)}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="bg-white rounded-2xl p-4 space-y-2 border border-tumbleweed/20">
-                        <p className="text-[9px] font-black text-night/30 uppercase tracking-widest">Timing</p>
-                        <div className="flex items-start gap-2">
-                          <Calendar size={14} className="text-rose shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-[10px] text-night/40 font-black uppercase">Event Time</p>
-                            <p className="font-black text-night text-sm">{formatDate(order.estimatedFulfillmentDate)}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <Clock size={14} className="text-night/30 shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-[10px] text-night/40 font-black uppercase">Kitchen Finish</p>
-                            <p className="text-sm font-bold text-night/70">{formatDate(order.kitchenFinishTime)}</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="bg-white rounded-2xl p-4 space-y-2 border border-tumbleweed/20">
-                        <p className="text-[9px] font-black text-night/30 uppercase tracking-widest">
-                          {order.deliveryMethod === 'DELIVERY' ? 'Delivery' : 'Pickup'}
-                        </p>
-                        <div className="flex items-start gap-2">
-                          {order.deliveryMethod === 'DELIVERY'
-                            ? <Truck size={14} className="text-rose shrink-0 mt-0.5" />
-                            : <ShoppingBag size={14} className="text-rose shrink-0 mt-0.5" />}
-                          <p className="text-[11px] text-night/70 font-medium leading-relaxed">
-                            {order.deliveryAddress || 'Customer Pickup'}
-                          </p>
-                        </div>
-                        {order.deliveryNotes && (
-                          <div className="flex items-start gap-2">
-                            <AlertTriangle size={12} className="text-yellow-500 shrink-0 mt-0.5" />
-                            <p className="text-[10px] text-night/50 font-medium italic leading-relaxed">
-                              {order.deliveryNotes}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {order.items.length > 0 && (
-                      <div className="bg-white rounded-2xl p-4 border border-tumbleweed/20">
-                        <p className="text-[9px] font-black text-night/30 uppercase tracking-widest mb-3">Order Items</p>
-                        <div className="space-y-3">
-                          {order.items.map((item, idx) => (
-                            <div key={idx} className="border-b border-tumbleweed/10 last:border-0 pb-3 last:pb-0">
-                              <div className="flex justify-between items-start">
-                                <div className="flex items-start gap-2">
-                                  <span className="text-[10px] font-black text-night/30 bg-bone px-2 py-0.5 rounded-lg shrink-0">
-                                    ×{item.quantity}
-                                  </span>
-                                  <span className="font-black text-night text-sm">{item.displayName}</span>
-                                </div>
-                                <span className="text-[11px] font-bold text-night/40 shrink-0 ml-2">
-                                  ${item.price.toFixed(2)}
-                                </span>
-                              </div>
-                              {item.modifiers.length > 0 && (
-                                <div className="ml-8 mt-1.5 flex flex-wrap gap-1.5">
-                                  {item.modifiers
-                                    .filter(m => m.displayName && !m.displayName.startsWith('NO,'))
-                                    .map((mod, mIdx) => (
-                                      <span key={mIdx} className="text-[9px] font-bold bg-bone text-night/50 px-2 py-0.5 rounded-lg">
-                                        {mod.displayName}
-                                      </span>
-                                    ))}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                        <div className="mt-4 pt-3 border-t border-tumbleweed/20 flex justify-between items-center">
-                          <span className="text-[10px] font-black text-night/30 uppercase tracking-widest">Total</span>
-                          <span className="font-black text-night text-lg">${parseFloat(String(order.totalAmount)).toFixed(2)}</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {order.overrideNotes && (
-                      <div className="bg-yellow-50 rounded-2xl p-4 border border-yellow-200">
-                        <p className="text-[9px] font-black text-yellow-600 uppercase tracking-widest mb-1">Internal Notes</p>
-                        <p className="text-[11px] text-night/70 font-medium">{order.overrideNotes}</p>
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap gap-3 justify-between items-center">
-                      {isUnpaid ? (
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border ${
-                            isHouseAccount ? 'bg-purple-50 border-purple-200' : 'bg-orange-50 border-orange-200'
-                          }`}>
-                            {isHouseAccount
-                              ? <Receipt size={13} className="text-purple-500" />
-                              : <LockKeyhole size={13} className="text-orange-500" />}
-                            <span className={`text-[10px] font-black uppercase tracking-widest ${isHouseAccount ? 'text-purple-500' : 'text-orange-500'}`}>
-                              {isHouseAccount ? 'House Account — Invoice Pending' : 'Locked — Awaiting Payment'}
-                            </span>
-                          </div>
-                          <button onClick={() => handleOverridePayment(order.id)} disabled={isUpdating}
-                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-white transition-all active:scale-95 disabled:opacity-50 ${
-                              isHouseAccount ? 'bg-purple-500 hover:bg-purple-600' : 'bg-orange-500 hover:bg-orange-600'
-                            }`}>
-                            {isHouseAccount ? 'Confirm Invoice Paid' : 'Override — Mark as Paid'}
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex gap-2 flex-wrap items-center">
-                          {['pending', 'confirmed', 'completed', 'cancelled'].map(status => (
-                            <button key={status}
-                              onClick={() => handleStatusUpdate(order.id, status)}
-                              disabled={isUpdating || order.status === status}
-                              className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-30 ${
-                                order.status === status
-                                  ? 'bg-night text-bone cursor-default'
-                                  : 'bg-bone text-night/40 hover:bg-night hover:text-bone'
-                              }`}>
-                              {status}
-                            </button>
-                          ))}
-                          <button onClick={() => handleGeneratePdf(order.id, order)}
-                            disabled={generatingPdf === order.id}
-                            className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-rose/10 text-rose hover:bg-rose hover:text-white transition-all active:scale-95 disabled:opacity-50">
-                            <FileText size={13} />
-                            {generatingPdf === order.id ? 'Generating...' : 'Fulfillment PDF'}
-                          </button>
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-2">
-                        <button onClick={e => { e.stopPropagation(); setEditingOrder(order); }}
-                          className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-bone text-night/40 hover:bg-night hover:text-bone transition-all">
-                          <Pencil size={13} />
-                          Edit
-                        </button>
-                        <button onClick={() => setExpandedId(null)}
-                          className="p-2 text-night/30 hover:text-rose transition-colors">
-                          <X size={18} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {filteredOrders.map(order => renderOrder(order))}
         </div>
       )}
     </div>
