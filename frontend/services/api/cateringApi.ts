@@ -46,6 +46,9 @@ export interface CateringOrder {
   isPaid: boolean;
   isHouseAccount: boolean;
   isManuallyEdited: boolean;
+  pdfVersion:          number;
+  pdfNeedsUpdate:      boolean;
+  calendarNeedsUpdate: boolean;
 }
 
 export interface CateringOrdersParams {
@@ -77,15 +80,9 @@ export const cateringApi = {
     apiClient.get<CateringOrderResponse>(`/catering/orders/${id}`),
 
   updateStatus: (id: string, status: string) =>
-    apiClient.patch<CateringOrderResponse>(`/catering/orders/${id}/status`, {
-      status,
-    }),
+    apiClient.patch<CateringOrderResponse>(`/catering/orders/${id}/status`, { status }),
 
-  updateOverride: (
-    id: string,
-    overrideData: Record<string, unknown>,
-    overrideNotes: string,
-  ) =>
+  updateOverride: (id: string, overrideData: Record<string, unknown>, overrideNotes: string) =>
     apiClient.patch<CateringOrderResponse>(`/catering/orders/${id}/override`, {
       overrideData,
       overrideNotes,
@@ -95,13 +92,10 @@ export const cateringApi = {
     apiClient.post<CateringOrderResponse>("/catering/orders", data),
 
   updateManual: (id: string, data: Partial<CateringOrder>) =>
-  apiClient.patch<CateringOrderResponse>(`/catering/orders/${id}/manual`, data),
+    apiClient.patch<CateringOrderResponse>(`/catering/orders/${id}/manual`, data),
 
   overridePaymentStatus: (id: string, paymentStatus: string) =>
-    apiClient.patch<CateringOrderResponse>(
-      `/catering/orders/${id}/payment-status`,
-      { paymentStatus },
-    ),
+    apiClient.patch<CateringOrderResponse>(`/catering/orders/${id}/payment-status`, { paymentStatus }),
 };
 
 export default cateringApi;

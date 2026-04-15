@@ -175,7 +175,8 @@ export default function CateringOrdersList() {
       const clientSlug     = (order.clientName || 'unknown')
         .replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 25);
       const storeCode      = (order.storeCode || 'LB').replace(/\s/g, '');
-      a.download           = `${storeCode}_${clientSlug}_${eventTypeLabel}_V1.pdf`;
+      const version        = order.pdfVersion || 1;
+    a.download           = `${storeCode}_${clientSlug}_${eventTypeLabel}_V${version}.pdf`;
       a.click();
       window.URL.revokeObjectURL(url);
       triggerToast('PDF downloaded successfully');
@@ -462,6 +463,24 @@ export default function CateringOrdersList() {
               <div className="bg-yellow-50 rounded-2xl p-4 border border-yellow-200">
                 <p className="text-[9px] font-black text-yellow-600 uppercase tracking-widest mb-1">Internal Notes</p>
                 <p className="text-[11px] text-night/70 font-medium">{order.overrideNotes}</p>
+              </div>
+            )}
+
+            {/* Outdated badges */}
+            {(order.pdfNeedsUpdate || order.calendarNeedsUpdate) && (
+              <div className="flex flex-wrap gap-2">
+                {order.pdfNeedsUpdate && (
+                  <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-amber-100 text-amber-600 border border-amber-200">
+                    <AlertTriangle size={11} />
+                    PDF Outdated — Regenerate
+                  </span>
+                )}
+                {order.calendarNeedsUpdate && (
+                  <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-blue-100 text-blue-600 border border-blue-200">
+                    <CalendarDays size={11} />
+                    Calendar Out of Sync
+                  </span>
+                )}
               </div>
             )}
 
