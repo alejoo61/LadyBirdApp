@@ -4,6 +4,11 @@ const IngredientFormula = require('../entities/IngredientFormula');
 class IngredientFormulaMapper {
   static toDomain(row) {
     if (!row) return null;
+
+    const singularType = row.event_type ? [row.event_type] : [];
+    const arrayTypes   = row.event_types || [];
+    const eventTypes   = [...new Set([...arrayTypes, ...singularType])];
+
     return new IngredientFormula({
       id:              row.id,
       name:            row.name,
@@ -17,8 +22,8 @@ class IngredientFormulaMapper {
       largePackage:    row.large_package,
       largePackageMax: row.large_package_max,
       tempType:        row.temp_type,
-      eventType:       row.event_type,        // nueva columna singular
-      eventTypes:      row.event_types || [], // columna legacy array
+      eventType:       row.event_type,
+      eventTypes,
       isActive:        row.is_active,
       createdAt:       row.created_at,
       updatedAt:       row.updated_at,
@@ -54,7 +59,6 @@ class IngredientFormulaMapper {
     return formulas.map(f => this.toDTO(f));
   }
 
-  // Para ingredient_aliases (no necesita entidad propia)
   static aliasToDTO(row) {
     if (!row) return null;
     return {
