@@ -422,7 +422,7 @@ class FulfillmentSheetGenerator {
 
   // ─── BIRD BOX ─────────────────────────────────────────────────────────────
   _buildBirdBoxHTML(data) {
-    const { header, boxes, tacoRows, chipsAndSalsa, drinks, paperGoods, hotItems, coldItems, dryItems } = data;
+    const { header, boxes, tacoRows, chipsAndSalsa, salsas, drinks, paperGoods, hotItems, coldItems, dryItems } = data;
     const badge = this._eventTypeBadge(header.eventType);
 
     const boxSummary = `
