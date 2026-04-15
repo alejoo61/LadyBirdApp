@@ -1,17 +1,18 @@
-require("dotenv").config();
-const { Pool } = require("pg");
+require('dotenv').config();
+const { Pool } = require('pg');
 
 const pool = new Pool({
-  host: process.env.DB_HOST || "localhost",
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || "ladybird_db",
-  user: process.env.DB_USER || "postgres",
+  host:     process.env.DB_HOST     || 'localhost',
+  port:     process.env.DB_PORT     || 5432,
+  database: process.env.DB_NAME     || 'ladybird_db',
+  user:     process.env.DB_USER     || 'postgres',
   password: process.env.DB_PASSWORD,
-  ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false,
+  ssl:      process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
 });
 
 const initDB = async () => {
   try {
+
     // ─── 1. usuarios ──────────────────────────────────────────────────────────
     await pool.query(`
       CREATE TABLE IF NOT EXISTS usuarios (
@@ -21,7 +22,7 @@ const initDB = async () => {
         creado_en   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    console.log("✅ usuarios");
+    console.log('✅ usuarios');
 
     // ─── 2. stores ────────────────────────────────────────────────────────────
     await pool.query(`
@@ -36,7 +37,7 @@ const initDB = async () => {
         created_at             TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    console.log("✅ stores");
+    console.log('✅ stores');
 
     // ─── 3. equipment ─────────────────────────────────────────────────────────
     await pool.query(`
@@ -54,7 +55,7 @@ const initDB = async () => {
         created_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    console.log("✅ equipment");
+    console.log('✅ equipment');
 
     // ─── 4. equipment_transfer_history ────────────────────────────────────────
     await pool.query(`
@@ -67,7 +68,7 @@ const initDB = async () => {
         reason          TEXT DEFAULT 'Transferencia de sucursal'
       )
     `);
-    console.log("✅ equipment_transfer_history");
+    console.log('✅ equipment_transfer_history');
 
     // ─── 5. Enums mantenimiento ───────────────────────────────────────────────
     await pool.query(`
@@ -98,7 +99,7 @@ const initDB = async () => {
         updated_at            TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    console.log("✅ maintenance_requests");
+    console.log('✅ maintenance_requests');
 
     // ─── 7. toast_orders ──────────────────────────────────────────────────────
     await pool.query(`
@@ -113,7 +114,7 @@ const initDB = async () => {
         updated_at        TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    console.log("✅ toast_orders");
+    console.log('✅ toast_orders');
 
     // ─── 8. catering_orders ───────────────────────────────────────────────────
     await pool.query(`
@@ -149,11 +150,15 @@ const initDB = async () => {
         payment_status              TEXT DEFAULT 'OPEN',
         is_manually_edited          BOOLEAN DEFAULT false,
 
+        pdf_version                 INTEGER DEFAULT 1,
+        pdf_needs_update            BOOLEAN DEFAULT false,
+        calendar_needs_update       BOOLEAN DEFAULT false,
+
         created_at                  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         updated_at                  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    console.log("✅ catering_orders");
+    console.log('✅ catering_orders');
 
     // ─── 9. ingredient_formulas ───────────────────────────────────────────────
     await pool.query(`
@@ -178,7 +183,7 @@ const initDB = async () => {
         CONSTRAINT ingredient_formula_unique UNIQUE (canonical_name, event_type)
       )
     `);
-    console.log("✅ ingredient_formulas");
+    console.log('✅ ingredient_formulas');
 
     // ─── 10. ingredient_aliases ───────────────────────────────────────────────
     await pool.query(`
@@ -191,7 +196,7 @@ const initDB = async () => {
         UNIQUE(alias)
       )
     `);
-    console.log("✅ ingredient_aliases");
+    console.log('✅ ingredient_aliases');
 
     // ─── 11. menu_items ───────────────────────────────────────────────────────
     await pool.query(`
@@ -208,7 +213,7 @@ const initDB = async () => {
         updated_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    console.log("✅ menu_items");
+    console.log('✅ menu_items');
 
     // ─── MIGRATIONS (idempotentes) ────────────────────────────────────────────
     // Agregar columnas que pueden faltar en DBs existentes
@@ -218,6 +223,9 @@ const initDB = async () => {
       `ALTER TABLE ingredient_formulas ADD COLUMN IF NOT EXISTS canonical_name TEXT`,
       `ALTER TABLE ingredient_formulas ADD COLUMN IF NOT EXISTS event_type TEXT`,
       `ALTER TABLE stores ADD COLUMN IF NOT EXISTS toast_restaurant_guid TEXT`,
+      `ALTER TABLE catering_orders ADD COLUMN IF NOT EXISTS pdf_version INTEGER DEFAULT 1`,
+      `ALTER TABLE catering_orders ADD COLUMN IF NOT EXISTS pdf_needs_update BOOLEAN DEFAULT false`,
+      `ALTER TABLE catering_orders ADD COLUMN IF NOT EXISTS calendar_needs_update BOOLEAN DEFAULT false`,
     ];
 
     for (const migration of migrations) {
@@ -225,17 +233,17 @@ const initDB = async () => {
         await pool.query(migration);
       } catch (err) {
         // Ignorar errores de columnas ya existentes
-        if (!err.message.includes("already exists")) {
-          console.warn("⚠️  Migration warning:", err.message);
+        if (!err.message.includes('already exists')) {
+          console.warn('⚠️  Migration warning:', err.message);
         }
       }
     }
-    console.log("✅ Migrations aplicadas");
+    console.log('✅ Migrations aplicadas');
 
     // ─── SEED STORES ──────────────────────────────────────────────────────────
-    const storesCount = await pool.query("SELECT COUNT(*) FROM stores");
+    const storesCount = await pool.query('SELECT COUNT(*) FROM stores');
     if (parseInt(storesCount.rows[0].count) === 0) {
-      console.log("📝 Insertando stores...");
+      console.log('📝 Insertando stores...');
       await pool.query(`
         INSERT INTO stores (code, name, timezone, is_active, emails, toast_restaurant_guid)
         VALUES
@@ -248,15 +256,15 @@ const initDB = async () => {
           toast_restaurant_guid = EXCLUDED.toast_restaurant_guid,
           name                  = EXCLUDED.name
       `);
-      console.log("✅ Stores insertados");
+      console.log('✅ Stores insertados');
     }
 
     // ─── SEED INGREDIENT FORMULAS ─────────────────────────────────────────────
     const formulasCount = await pool.query(
-      `SELECT COUNT(*) FROM ingredient_formulas`,
+      `SELECT COUNT(*) FROM ingredient_formulas WHERE event_type IS NOT NULL`
     );
     if (parseInt(formulasCount.rows[0].count) === 0) {
-      console.log("📝 Insertando fórmulas base...");
+      console.log('📝 Insertando fórmulas base...');
       await pool.query(`
         INSERT INTO ingredient_formulas
           (name, canonical_name, category, amount_per_person, unit, utensil,
@@ -326,15 +334,13 @@ const initDB = async () => {
 
         ON CONFLICT (canonical_name, event_type) DO NOTHING
       `);
-      console.log("✅ Fórmulas base insertadas");
+      console.log('✅ Fórmulas base insertadas');
     }
 
     // ─── SEED INGREDIENT ALIASES ──────────────────────────────────────────────
-    const aliasesCount = await pool.query(
-      "SELECT COUNT(*) FROM ingredient_aliases",
-    );
+    const aliasesCount = await pool.query('SELECT COUNT(*) FROM ingredient_aliases');
     if (parseInt(aliasesCount.rows[0].count) === 0) {
-      console.log("📝 Insertando aliases base...");
+      console.log('📝 Insertando aliases base...');
       await pool.query(`
         INSERT INTO ingredient_aliases (canonical_name, alias) VALUES
           ('Salsa Verde Braised Chicken', 'Salsa Verde Braised Chicken (taco bar)'),
@@ -385,12 +391,13 @@ const initDB = async () => {
           ('Corn Tortillas',              'Housemade Corn Tortillas')
         ON CONFLICT (alias) DO NOTHING
       `);
-      console.log("✅ Aliases base insertados");
+      console.log('✅ Aliases base insertados');
     }
 
-    console.log("\n🎉 Base de datos inicializada correctamente\n");
+    console.log('\n🎉 Base de datos inicializada correctamente\n');
+
   } catch (error) {
-    console.error("❌ Error al inicializar la base de datos:", error);
+    console.error('❌ Error al inicializar la base de datos:', error);
     throw error;
   }
 };
