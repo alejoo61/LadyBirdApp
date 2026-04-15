@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { menuApi } from '@/services/api/menuApi';
 import { cateringApi } from '@/services/api/cateringApi';
 import type { MenuItem } from '@/services/api/menuApi';
 import type { Store } from '@/services/api/storesApi';
-import { X, Plus, Minus, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Plus, Minus, ChevronDown, ChevronUp, DollarSign } from 'lucide-react';
 
 interface ApiError {
   response?: { data?: { error?: string } };
@@ -15,17 +15,18 @@ interface OrderItem {
   menuItemId:  string;
   displayName: string;
   quantity:    number;
-  price:       number;
+  price:       number;  // precio por persona (upgrade) o precio fijo
   category:    string;
   modifiers:   { menuItemId: string; displayName: string; quantity: number; price: number }[];
 }
 
-const EVENT_TYPES   = ['TACO_BAR', 'BIRD_BOX', 'PERSONAL_BOX', 'FOODA'];
-const METHODS       = ['PICKUP', 'DELIVERY'];
-const STATUSES      = ['pending', 'confirmed'];
-const PAYMENT_ST    = ['OPEN', 'PAID', 'CLOSED'];
+const EVENT_TYPES = ['TACO_BAR', 'BIRD_BOX', 'PERSONAL_BOX', 'FOODA'];
+const METHODS     = ['PICKUP', 'DELIVERY'];
+const STATUSES    = ['pending', 'confirmed'];
+const PAYMENT_ST  = ['OPEN', 'PAID', 'CLOSED'];
 
 const CATEGORY_LABELS: Record<string, string> = {
+  menu_item:   'Event Package',
   size:        'Box Size',
   combo:       'Combos',
   protein:     'Proteins',
@@ -41,22 +42,26 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  size:        'bg-sky/20 text-sky border-sky/30',
-  combo:       'bg-rose/20 text-rose border-rose/30',
+  menu_item:   'bg-night/10 text-night border-night/20',
+  size:        'bg-sky-100 text-sky-700 border-sky-200',
+  combo:       'bg-rose-100 text-rose-600 border-rose-200',
   protein:     'bg-red-100 text-red-600 border-red-200',
   topping:     'bg-emerald-100 text-emerald-700 border-emerald-200',
   salsa:       'bg-orange-100 text-orange-600 border-orange-200',
   tortilla:    'bg-purple-100 text-purple-600 border-purple-200',
   snack:       'bg-yellow-100 text-yellow-700 border-yellow-200',
   chips_salsa: 'bg-amber-100 text-amber-700 border-amber-200',
-  paper:       'bg-tumbleweed/30 text-night/70 border-tumbleweed',
+  paper:       'bg-stone-100 text-stone-600 border-stone-200',
   drink:       'bg-blue-100 text-blue-600 border-blue-200',
   drink_cups:  'bg-blue-50 text-blue-500 border-blue-100',
   creamer:     'bg-stone-100 text-stone-600 border-stone-200',
 };
 
-// Categorías que son "single select" (solo una opción a la vez)
-const SINGLE_SELECT = new Set(['tortilla', 'chips_salsa', 'paper', 'drink_cups']);
+// Categorías single-select (solo una opción a la vez)
+const SINGLE_SELECT = new Set(['tortilla', 'chips_salsa', 'paper', 'drink_cups', 'size', 'menu_item']);
+
+// Categorías cuyo precio se multiplica por guest count
+const PRICE_PER_PERSON_CATEGORIES = new Set(['protein', 'topping', 'salsa', 'tortilla', 'snack', 'paper', 'menu_item']);
 
 export default function CreateOrderModal({
   stores,
@@ -67,17 +72,17 @@ export default function CreateOrderModal({
   onClose: () => void;
   onSave: () => void;
 }) {
-  const [step, setStep]           = useState<1 | 2>(1);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [step, setStep]               = useState<1 | 2>(1);
+  const [menuItems, setMenuItems]     = useState<MenuItem[]>([]);
+  const [baseItem, setBaseItem]       = useState<MenuItem | null>(null);
   const [loadingMenu, setLoadingMenu] = useState(false);
-  const [saving, setSaving]       = useState(false);
-  const [error, setError]         = useState('');
+  const [saving, setSaving]           = useState(false);
+  const [error, setError]             = useState('');
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
 
-  // Step 1 — basic info
   const [form, setForm] = useState({
     storeId:                  '',
-    eventType:                'BIRD_BOX',
+    eventType:                'TACO_BAR',
     clientName:               '',
     clientEmail:              '',
     clientPhone:              '',
@@ -91,30 +96,30 @@ export default function CreateOrderModal({
     overrideNotes:            '',
   });
 
-  // Step 2 — items
   const [selectedItems, setSelectedItems] = useState<OrderItem[]>([]);
 
   const set = (key: string, value: unknown) => setForm(f => ({ ...f, [key]: value }));
 
-  // Cargar menu items cuando cambia eventType
-  useEffect(() => {
-    if (form.eventType) loadMenu();
-  }, [form.eventType]);
-
-  const loadMenu = async () => {
+  const loadMenu = useCallback(async () => {
     setLoadingMenu(true);
+    setSelectedItems([]);
+    setBaseItem(null);
     try {
-      const res = await menuApi.getByEventType(form.eventType);
+      const res = await menuApi.getForOrderCreation(form.eventType);
       setMenuItems(res.data.data);
-      // Expandir todas las categorías por defecto
-      const cats = new Set(res.data.data.map(i => i.category));
+      setBaseItem(res.data.baseItem || null);
+      const cats = new Set(res.data.data.map((i: MenuItem) => i.category));
       setExpandedCats(cats);
     } catch (err) {
       console.error(err);
     } finally {
       setLoadingMenu(false);
     }
-  };
+  }, [form.eventType]);
+
+  useEffect(() => {
+    if (form.eventType) loadMenu();
+  }, [form.eventType, loadMenu]);
 
   // Agrupar items por categoría
   const grouped = menuItems.reduce<Record<string, MenuItem[]>>((acc, item) => {
@@ -130,19 +135,14 @@ export default function CreateOrderModal({
     const isSingle = SINGLE_SELECT.has(item.category);
 
     setSelectedItems(prev => {
-      // Si es single select, remover otros de la misma categoría
       const filtered = isSingle
         ? prev.filter(i => i.category !== item.category)
         : prev.filter(i => i.menuItemId !== item.id);
 
-      if (filtered.length < prev.length && !isSingle) {
-        // Ya estaba — lo removemos
-        return filtered;
-      }
-      if (isSingle && prev.some(i => i.menuItemId === item.id)) {
-        // Toggle off en single select
-        return filtered;
-      }
+      // Toggle off
+      if (!isSingle && filtered.length === prev.length - 1 &&
+          prev.some(i => i.menuItemId === item.id)) return filtered;
+      if (isSingle && prev.some(i => i.menuItemId === item.id)) return filtered;
 
       return [...filtered, {
         menuItemId:  item.id,
@@ -156,14 +156,51 @@ export default function CreateOrderModal({
   };
 
   const updateQty = (itemId: string, delta: number) => {
-    setSelectedItems(prev => prev.map(i => {
-      if (i.menuItemId !== itemId) return i;
-      const newQty = Math.max(1, i.quantity + delta);
-      return { ...i, quantity: newQty };
-    }));
+    setSelectedItems(prev => prev.map(i =>
+      i.menuItemId !== itemId ? i : { ...i, quantity: Math.max(1, i.quantity + delta) }
+    ));
   };
 
-  const totalAmount = selectedItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  // ─── CÁLCULO DE PRECIO ────────────────────────────────────────────────────
+
+  const guestCount = Number(form.guestCount) || 1;
+
+  const calculateTotal = (): number => {
+    let total = 0;
+
+    // Precio base del evento (por persona)
+    if (baseItem && Number(baseItem.price) > 0) {
+      total += Number(baseItem.price) * guestCount;
+    }
+
+    for (const item of selectedItems) {
+      const price = Number(item.price) || 0;
+      if (price === 0) continue;
+
+      if (PRICE_PER_PERSON_CATEGORIES.has(item.category)) {
+        // Upgrade por persona
+        total += price * guestCount * item.quantity;
+      } else {
+        // Precio fijo (size de Bird Box, drinks, etc.)
+        total += price * item.quantity;
+      }
+    }
+
+    return total;
+  };
+
+  const getPriceLabel = (item: MenuItem): string => {
+    const price = Number(item.price);
+    if (price === 0) return 'Included';
+    if (PRICE_PER_PERSON_CATEGORIES.has(item.category)) {
+      return `+$${price.toFixed(2)}/person`;
+    }
+    return `$${price.toFixed(2)}`;
+  };
+
+  const totalAmount = calculateTotal();
+
+  // ─── SUBMIT ───────────────────────────────────────────────────────────────
 
   const handleSave = async () => {
     if (!form.clientName || !form.estimatedFulfillmentDate || !form.storeId) {
@@ -182,13 +219,14 @@ export default function CreateOrderModal({
           modifiers:   i.modifiers,
         })),
         isManualOrder: true,
+        baseItem: baseItem ? { name: baseItem.name, price: baseItem.price } : null,
       };
 
       await cateringApi.createManual({
         ...form,
         estimatedFulfillmentDate: new Date(form.estimatedFulfillmentDate).toISOString(),
-        guestCount:   Number(form.guestCount),
-        totalAmount:  String(totalAmount.toFixed(2)),
+        guestCount:  Number(form.guestCount),
+        totalAmount: String(totalAmount.toFixed(2)),
         parsedData,
         isManuallyEdited: true,
       } as never);
@@ -233,10 +271,9 @@ export default function CreateOrderModal({
         {/* Body */}
         <div className="overflow-y-auto px-8 pb-4 flex-1">
 
-          {/* ── STEP 1: Basic Info ── */}
+          {/* ── STEP 1 ── */}
           {step === 1 && (
             <div className="space-y-5">
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className={labelCls}>Store *</label>
@@ -255,22 +292,19 @@ export default function CreateOrderModal({
 
               <div>
                 <label className={labelCls}>Client Name *</label>
-                <input type="text" value={form.clientName}
-                  onChange={e => set('clientName', e.target.value)}
+                <input type="text" value={form.clientName} onChange={e => set('clientName', e.target.value)}
                   className={inputCls} placeholder="Full name" />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className={labelCls}>Email</label>
-                  <input type="email" value={form.clientEmail}
-                    onChange={e => set('clientEmail', e.target.value)}
+                  <input type="email" value={form.clientEmail} onChange={e => set('clientEmail', e.target.value)}
                     className={inputCls} placeholder="email@example.com" />
                 </div>
                 <div>
                   <label className={labelCls}>Phone</label>
-                  <input type="tel" value={form.clientPhone}
-                    onChange={e => set('clientPhone', e.target.value)}
+                  <input type="tel" value={form.clientPhone} onChange={e => set('clientPhone', e.target.value)}
                     className={inputCls} placeholder="(000) 000-0000" />
                 </div>
               </div>
@@ -279,14 +313,12 @@ export default function CreateOrderModal({
                 <div>
                   <label className={labelCls}>Event Date & Time *</label>
                   <input type="datetime-local" value={form.estimatedFulfillmentDate}
-                    onChange={e => set('estimatedFulfillmentDate', e.target.value)}
-                    className={inputCls} />
+                    onChange={e => set('estimatedFulfillmentDate', e.target.value)} className={inputCls} />
                 </div>
                 <div>
                   <label className={labelCls}>Guest Count</label>
                   <input type="number" value={form.guestCount}
-                    onChange={e => set('guestCount', e.target.value)}
-                    className={inputCls} min={1} />
+                    onChange={e => set('guestCount', e.target.value)} className={inputCls} min={1} />
                 </div>
               </div>
 
@@ -316,10 +348,8 @@ export default function CreateOrderModal({
 
               <div>
                 <label className={labelCls}>Delivery Notes</label>
-                <textarea value={form.deliveryNotes}
-                  onChange={e => set('deliveryNotes', e.target.value)}
-                  className={inputCls + ' resize-none'} rows={2}
-                  placeholder="Special instructions..." />
+                <textarea value={form.deliveryNotes} onChange={e => set('deliveryNotes', e.target.value)}
+                  className={inputCls + ' resize-none'} rows={2} placeholder="Special instructions..." />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -331,15 +361,14 @@ export default function CreateOrderModal({
                 </div>
                 <div>
                   <label className={labelCls}>Internal Notes</label>
-                  <input type="text" value={form.overrideNotes}
-                    onChange={e => set('overrideNotes', e.target.value)}
+                  <input type="text" value={form.overrideNotes} onChange={e => set('overrideNotes', e.target.value)}
                     className={inputCls} placeholder="Notes for the team..." />
                 </div>
               </div>
             </div>
           )}
 
-          {/* ── STEP 2: Menu Items ── */}
+          {/* ── STEP 2 ── */}
           {step === 2 && (
             <div className="space-y-4">
               {loadingMenu ? (
@@ -348,11 +377,25 @@ export default function CreateOrderModal({
                 </div>
               ) : (
                 <>
-                  {/* Selected summary */}
+                  {/* Precio base del evento */}
+                  {baseItem && (
+                    <div className="bg-night/5 border border-night/10 rounded-2xl p-4 flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-night/40 mb-0.5">Base Package</p>
+                        <p className="text-sm font-black text-night">{baseItem.name}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-night/40 mb-0.5">Per Person</p>
+                        <p className="text-sm font-black text-night">${Number(baseItem.price).toFixed(2)}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Summary de seleccionados */}
                   {selectedItems.length > 0 && (
                     <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
                       <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">
-                        Selected Items ({selectedItems.length})
+                        Selected ({selectedItems.length})
                       </p>
                       <div className="flex flex-wrap gap-2">
                         {selectedItems.map(item => (
@@ -367,7 +410,7 @@ export default function CreateOrderModal({
                                   className="w-4 h-4 rounded-full bg-bone flex items-center justify-center hover:bg-night/10">
                                   <Minus size={9} />
                                 </button>
-                                <span className="text-[10px] font-black text-night w-4 text-center">{item.quantity}</span>
+                                <span className="text-[10px] font-black w-4 text-center">{item.quantity}</span>
                                 <button onClick={() => updateQty(item.menuItemId, 1)}
                                   className="w-4 h-4 rounded-full bg-bone flex items-center justify-center hover:bg-night/10">
                                   <Plus size={9} />
@@ -381,15 +424,31 @@ export default function CreateOrderModal({
                           </div>
                         ))}
                       </div>
-                      {totalAmount > 0 && (
-                        <p className="text-[11px] font-black text-emerald-700 mt-2">
-                          Estimated Total: ${totalAmount.toFixed(2)}
-                        </p>
-                      )}
                     </div>
                   )}
 
-                  {/* Menu by category */}
+                  {/* Precio estimado */}
+                  <div className="bg-night rounded-2xl p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <DollarSign size={16} className="text-bone/60" />
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-bone/40">
+                          Estimated Total — {guestCount} guest{guestCount !== 1 ? 's' : ''}
+                        </p>
+                        {baseItem && (
+                          <p className="text-[9px] text-bone/40 mt-0.5">
+                            Base: ${(Number(baseItem.price) * guestCount).toFixed(2)}
+                            {selectedItems.filter(i => i.price > 0).length > 0 && (
+                              <> + upgrades: ${(totalAmount - Number(baseItem.price) * guestCount).toFixed(2)}</>
+                            )}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-2xl font-black text-bone">${totalAmount.toFixed(2)}</p>
+                  </div>
+
+                  {/* Menu por categoría */}
                   {Object.entries(grouped).map(([category, items]) => (
                     <div key={category} className="border border-tumbleweed/30 rounded-2xl overflow-hidden">
                       <button
@@ -417,10 +476,10 @@ export default function CreateOrderModal({
                       {expandedCats.has(category) && (
                         <div className="p-3 grid grid-cols-1 gap-2">
                           {items.map(item => {
-                            const selected = isSelected(item.id);
+                            const selected  = isSelected(item.id);
+                            const priceLabel = getPriceLabel(item);
                             return (
-                              <button key={item.id}
-                                onClick={() => toggleItem(item)}
+                              <button key={item.id} onClick={() => toggleItem(item)}
                                 className={`w-full text-left px-4 py-3 rounded-xl border transition-all ${
                                   selected
                                     ? 'bg-night text-bone border-night'
@@ -428,11 +487,11 @@ export default function CreateOrderModal({
                                 }`}>
                                 <div className="flex items-center justify-between">
                                   <span className="text-[11px] font-black">{item.name}</span>
-                                  {Number(item.price) > 0 && (
-                                    <span className={`text-[10px] font-bold ${selected ? 'text-bone/70' : 'text-night/40'}`}>
-                                      ${Number(item.price).toFixed(2)}
-                                    </span>
-                                  )}
+                                  <span className={`text-[10px] font-bold ${
+                                    selected ? 'text-bone/70' : priceLabel === 'Included' ? 'text-emerald-600' : 'text-night/50'
+                                  }`}>
+                                    {priceLabel}
+                                  </span>
                                 </div>
                                 {item.description && (
                                   <p className={`text-[9px] mt-0.5 ${selected ? 'text-bone/60' : 'text-night/40'}`}>
@@ -472,22 +531,21 @@ export default function CreateOrderModal({
               </button>
             )}
             {step === 1 ? (
-              <button
-                onClick={() => {
-                  if (!form.clientName || !form.estimatedFulfillmentDate || !form.storeId) {
-                    setError('Store, client name and event date are required.');
-                    return;
-                  }
-                  setError('');
-                  setStep(2);
-                }}
+              <button onClick={() => {
+                if (!form.clientName || !form.estimatedFulfillmentDate || !form.storeId) {
+                  setError('Store, client name and event date are required.');
+                  return;
+                }
+                setError('');
+                setStep(2);
+              }}
                 className="px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest bg-night text-bone hover:bg-rose hover:text-white transition-all">
                 Next → Select Items
               </button>
             ) : (
               <button onClick={handleSave} disabled={saving}
                 className="px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest bg-night text-bone hover:bg-rose hover:text-white transition-all disabled:opacity-40">
-                {saving ? 'Creating...' : `Create Order${selectedItems.length > 0 ? ` (${selectedItems.length} items)` : ''}`}
+                {saving ? 'Creating...' : `Create Order${totalAmount > 0 ? ` — $${totalAmount.toFixed(2)}` : ''}`}
               </button>
             )}
           </div>

@@ -17,12 +17,24 @@ interface MenuItemsResponse {
   count: number;
 }
 
+interface MenuItemsForCreationResponse {
+  success: boolean;
+  data: MenuItem[];
+  baseItem: MenuItem | null;
+  count: number;
+}
+
 export const menuApi = {
   getAll: (params?: { category?: string; eventType?: string; isActive?: boolean }) =>
     apiClient.get<MenuItemsResponse>('/menu-items', { params }),
 
   getByEventType: (eventType: string) =>
     apiClient.get<MenuItemsResponse>(`/menu-items/event/${eventType}`),
+
+  // Endpoint optimizado para el modal de creación de órdenes
+  // Retorna items filtrados por categorías relevantes + baseItem del evento
+  getForOrderCreation: (eventType: string) =>
+    apiClient.get<MenuItemsForCreationResponse>(`/menu-items/order-creation/${eventType}`),
 
   create: (data: Partial<MenuItem>) =>
     apiClient.post<{ success: boolean; data: MenuItem }>('/menu-items', data),

@@ -309,6 +309,7 @@ app.get('/api/catering/orders/:id/fulfillment-sheet/preview', async (req, res) =
 app.get('/api/menu-items',                  (req, res) => menuItemController.getAll(req, res));
 app.get('/api/menu-items/event/:eventType', (req, res) => menuItemController.getByEventType(req, res));
 app.post('/api/menu-items',                 (req, res) => menuItemController.create(req, res));
+app.get('/api/menu-items/order-creation/:eventType', (req, res) => menuItemController.getForOrderCreation(req, res));
 app.put('/api/menu-items/:id',              (req, res) => menuItemController.update(req, res));
 app.delete('/api/menu-items/:id',           (req, res) => menuItemController.delete(req, res));
 
