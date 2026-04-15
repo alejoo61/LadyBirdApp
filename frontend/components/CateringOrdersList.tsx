@@ -167,31 +167,40 @@ export default function CateringOrdersList() {
     }
   };
 
-  const handleGeneratePdf = async (id: string, order: CateringOrder) => {
-    setGeneratingPdf(id);
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/catering/orders/${id}/fulfillment-sheet`,
-        { method: 'POST' }
-      );
-      if (!response.ok) throw new Error('Failed to generate PDF');
-      const blob       = await response.blob();
-      const url        = window.URL.createObjectURL(blob);
-      const a          = document.createElement('a');
-      a.href           = url;
-      const eventCode  = ({ TACO_BAR: 'TB', BIRD_BOX: 'BB', PERSONAL_BOX: 'PB', FOODA: 'FD', NEEDS_REVIEW: 'NR' } as Record<string,string>)[order.eventType] || 'XX';
-      const clientSlug = (order.clientName || 'unknown').replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 20);
-      const storeCode  = (order.storeCode || 'LB').replace(/\s/g, '');
-      a.download       = `LB-${storeCode}-${clientSlug}-${eventCode}-v1.pdf`;
-      a.click();
-      window.URL.revokeObjectURL(url);
-      triggerToast('PDF downloaded successfully');
-    } catch {
-      triggerToast('❌ Error generating PDF');
-    } finally {
-      setGeneratingPdf(null);
-    }
-  };
+const handleGeneratePdf = async (id: string, order: CateringOrder) => {
+  setGeneratingPdf(id);
+  try {
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/catering/orders/${id}/fulfillment-sheet`,
+      { method: 'POST' }
+    );
+    if (!response.ok) throw new Error('Failed to generate PDF');
+    const blob          = await response.blob();
+    const url           = window.URL.createObjectURL(blob);
+    const a             = document.createElement('a');
+    a.href              = url;
+    const eventTypeLabel = ({
+      TACO_BAR:     'TacoBar',
+      BIRD_BOX:     'BirdBox',
+      PERSONAL_BOX: 'PersonalBox',
+      FOODA:        'Fooda',
+      NEEDS_REVIEW: 'NeedsReview',
+    } as Record<string, string>)[order.eventType] || order.eventType;
+    const clientSlug    = (order.clientName || 'unknown')
+      .replace(/\s+/g, '')
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .slice(0, 25);
+    const storeCode     = (order.storeCode || 'LB').replace(/\s/g, '');
+    a.download          = `${storeCode}_${clientSlug}_${eventTypeLabel}_V1.pdf`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    triggerToast('PDF downloaded successfully');
+  } catch {
+    triggerToast('❌ Error generating PDF');
+  } finally {
+    setGeneratingPdf(null);
+  }
+};
 
   const hasFilters = !!(filterStoreId || filterEventType || filterStatus || filterMethod ||
     dateRange || filterUpcoming || filterPayment || filterToday || hideUnpaid);

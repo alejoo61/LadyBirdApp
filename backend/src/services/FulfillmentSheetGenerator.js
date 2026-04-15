@@ -40,20 +40,20 @@ class FulfillmentSheetGenerator {
 
   buildFilename(order, storeCode) {
     const eventTypeCode = {
-      TACO_BAR:     'TB',
-      BIRD_BOX:     'BB',
-      PERSONAL_BOX: 'PB',
-      FOODA:        'FD',
-      NEEDS_REVIEW: 'NR',
-    }[order.eventType] || 'XX';
+      TACO_BAR:     'TacoBar',
+      BIRD_BOX:     'BirdBox',
+      PERSONAL_BOX: 'PersonalBox',
+      FOODA:        'Fooda',
+      NEEDS_REVIEW: 'NeedsReview',
+    }[order.eventType] || order.eventType || 'Unknown';
 
     const store      = (storeCode || 'LB').replace(/\s/g, '');
     const clientSlug = (order.clientName || 'unknown')
-      .replace(/\s+/g, '-')
-      .replace(/[^a-zA-Z0-9-]/g, '')
-      .slice(0, 20);
+      .replace(/\s+/g, '')
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .slice(0, 25);
 
-    return `LB-${store}-${clientSlug}-${eventTypeCode}-v1.pdf`;
+    return `${store}_${clientSlug}_${eventTypeCode}_V1.pdf`;
   }
 
   // ─── HELPERS ──────────────────────────────────────────────────────────────
