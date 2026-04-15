@@ -13,7 +13,7 @@ import {
   Search,
 } from "lucide-react";
 
-const CATEGORIES = ["protein", "topping", "salsa", "snack", "tortilla"];
+const CATEGORIES = ["protein", "topping", "salsa", "snack", "tortilla", "paper"];
 const TEMP_TYPES = ["hot", "cold", "dry"];
 const EVENT_TYPES = ["TACO_BAR", "BIRD_BOX", "PERSONAL_BOX", "FOODA"];
 const UNITS = ["oz", "oz-fl", "lb", "each", "cup", "tbsp", "tsp"];
