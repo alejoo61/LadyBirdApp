@@ -188,6 +188,8 @@ class CateringOrderRepository {
         total_amount               = COALESCE($13, total_amount),
         override_notes             = $14,
         is_manually_edited         = true,
+        pdf_needs_update           = true,
+        calendar_needs_update      = true,
         updated_at                 = CURRENT_TIMESTAMP
         ${parsedDataClause}
       WHERE id = $15

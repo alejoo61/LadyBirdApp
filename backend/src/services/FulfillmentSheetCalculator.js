@@ -42,10 +42,7 @@ class FulfillmentSheetCalculator {
       };
     });
 
-    // Tortillas — calcular separado porque dependen de elección flour/corn/50-50
-    const tortillas = this._calculateTortillasFromResolved(ingredients, guestCount);
-
-    // Filtrar tortillas del calculated para no duplicar
+    const tortillas        = this._calculateTortillasFromResolved(ingredients, guestCount);
     const withoutTortillas = calculated.filter(
       i => !['Flour Tortillas', 'Corn Tortillas'].includes(i.name)
     );
@@ -59,9 +56,9 @@ class FulfillmentSheetCalculator {
 
     return {
       header:    this._buildHeader(cateringOrder, delivery),
-      proteins:  grouped.protein  || [],
-      toppings:  grouped.topping  || [],
-      salsas:    grouped.salsa    || [],
+      proteins:  grouped.protein || [],
+      toppings:  grouped.topping || [],
+      salsas:    grouped.salsa   || [],
       snacks,
       tortillas,
       paperGoods,
@@ -77,16 +74,17 @@ class FulfillmentSheetCalculator {
     const delivery = parsedData?.delivery || {};
     const items    = parsedData?.items || [];
 
-    const boxes  = [];
-    const drinks = [];
-
-    const drinkKeywords = ['coffee', 'agua', 'limeade', 'drink', 'beverage', 'side pack', 'milk', 'water'];
+    const boxes          = [];
+    const drinks         = [];
+    const manualSalsas   = []; // salsas agregadas manualmente (modifiers vacío)
+    const drinkKeywords  = ['coffee', 'agua', 'limeade', 'drink', 'beverage', 'side pack', 'milk', 'water'];
 
     for (const item of items) {
-      const itemNameLc = (item.displayName || item.name || '').toLowerCase();
-      const modifiers  = item.modifiers || [];
+      const itemNameLc   = (item.displayName || item.name || '').toLowerCase();
+      const modifiers    = item.modifiers || [];
+      const hasModifiers = modifiers.length > 0;
 
-      // Detectar bebidas
+      // ── Bebidas ──
       if (drinkKeywords.some(k => itemNameLc.includes(k))) {
         const wantsCups = modifiers.some(m =>
           (m.displayName || '').toLowerCase().includes('yes, i want cups')
@@ -100,22 +98,46 @@ class FulfillmentSheetCalculator {
         continue;
       }
 
-      // Detectar tamaño del box
+      // ── Items sin modifiers — pueden ser salsas/ingredientes agregados manualmente ──
+      if (!hasModifiers) {
+        const dn           = item.displayName || item.name || '';
+        const canonicalName = await this.resolver.resolveCanonicalName(dn);
+        if (canonicalName) {
+          const formula = await this.resolver.getFormula(canonicalName, 'BIRD_BOX');
+          if (formula) {
+            const totalAmount = this.resolver.calculateAmount(formula, guestCount);
+            const packaging   = this.resolver.getPackaging(formula, guestCount);
+            manualSalsas.push({
+              name:         canonicalName,
+              category:     formula.category,
+              tempType:     formula.temp_type,
+              unit:         formula.unit,
+              utensil:      formula.utensil,
+              totalAmount,
+              packaging:    packaging.package,
+              packagingQty: packaging.qty,
+              included:     'Yes',
+            });
+            continue;
+          }
+        }
+        // Si no se resuelve como ingrediente, ignorar (no procesarlo como box)
+        continue;
+      }
+
+      // ── Bird Box con modifiers ──
       const sizeMod   = modifiers.find(m => this.resolver.isSizeModifier(m.displayName || ''));
       const tacoCount = sizeMod
         ? parseInt((sizeMod.displayName || '').match(/(\d+)\s*tacos?/i)?.[1] || 0)
         : (guestCount * 2);
 
-      // Combos (#1, #2, etc.)
       const combos = modifiers.filter(m => /^#\d+/i.test((m.displayName || '').trim()));
 
-      // Tortilla
       const tortillaMod = modifiers.find(m => {
         const n = (m.displayName || '').toLowerCase();
         return n.includes('flour') || n.includes('corn') || n.includes('50/50');
       });
 
-      // Chips
       const chipsModifier = modifiers.find(m => {
         const n = (m.displayName || '').toLowerCase();
         return n.includes('chip') || n.includes('yes! i would like') || n.includes('nope');
@@ -124,10 +146,11 @@ class FulfillmentSheetCalculator {
         ? (chipsModifier.displayName || '').toLowerCase().includes('yes')
         : false;
 
-      // Paper
       const wantsPaper = modifiers.some(m =>
         this.resolver.isPaperYes(m.displayName || '')
       );
+
+      const is5050 = (tortillaMod?.displayName || '').toLowerCase().includes('50/50');
 
       boxes.push({
         name:       item.displayName || item.name,
@@ -135,35 +158,70 @@ class FulfillmentSheetCalculator {
         tacoCount,
         combos:     combos.map(c => c.displayName),
         tortilla:   tortillaMod?.displayName || 'Flour Tortillas',
+        is5050,
         wantsChips,
         wantsPaper,
       });
     }
 
-    // Calcular totales por combo
+    // ── Calcular totales por combo + tortillas por combo ──
     const comboTotals = {};
     let totalTacos = 0;
+
     for (const box of boxes) {
       totalTacos += box.tacoCount * box.quantity;
-      const tacosPerCombo = box.combos.length > 0
-        ? Math.ceil(box.tacoCount / box.combos.length)
-        : box.tacoCount;
+      const numCombos     = box.combos.length > 0 ? box.combos.length : 1;
+      const tacosPerCombo = Math.ceil(box.tacoCount / numCombos);
+
       for (const combo of box.combos) {
-        comboTotals[combo] = (comboTotals[combo] || 0) + (tacosPerCombo * box.quantity);
+        if (!comboTotals[combo]) {
+          comboTotals[combo] = { total: 0, flourTortillas: 0, cornTortillas: 0 };
+        }
+        const qty = tacosPerCombo * box.quantity;
+        comboTotals[combo].total += qty;
+
+        // Calcular tortillas por combo según tipo
+        if (box.is5050) {
+          // 50/50: dividir lo más equitativamente posible
+          const flour = Math.ceil(qty / 2);
+          const corn  = Math.floor(qty / 2);
+          comboTotals[combo].flourTortillas += flour;
+          comboTotals[combo].cornTortillas  += corn;
+        } else if ((box.tortilla || '').toLowerCase().includes('corn')) {
+          comboTotals[combo].cornTortillas  += qty;
+        } else {
+          // Default: flour
+          comboTotals[combo].flourTortillas += qty;
+        }
       }
     }
 
-    const tacoRows = Object.entries(comboTotals).map(([combo, total]) => ({
-      name:         combo,
-      total,
-      unit:         'tacos',
-      packaging:    'Half Pan',
-      packagingQty: Math.ceil(total / 50),
-      utensil:      'Tongs Small',
-      tempType:     'hot',
-    }));
+    const tacoRows = Object.entries(comboTotals).map(([combo, data]) => {
+      // Construir label de tortillas
+      let tortillaLabel = '';
+      if (data.flourTortillas > 0 && data.cornTortillas > 0) {
+        tortillaLabel = `${data.flourTortillas}F / ${data.cornTortillas}C`;
+      } else if (data.flourTortillas > 0) {
+        tortillaLabel = `${data.flourTortillas} Flour`;
+      } else if (data.cornTortillas > 0) {
+        tortillaLabel = `${data.cornTortillas} Corn`;
+      }
 
-    // Chips & Salsa
+      return {
+        name:             combo,
+        total:            data.total,
+        unit:             'tacos',
+        tortillaLabel,
+        flourTortillas:   data.flourTortillas,
+        cornTortillas:    data.cornTortillas,
+        packaging:        'Half Pan',
+        packagingQty:     Math.ceil(data.total / 50),
+        utensil:          'Tongs Small',
+        tempType:         'hot',
+      };
+    });
+
+    // ── Chips & Salsa ──
     const anyWantsChips = boxes.some(b => b.wantsChips);
     const chipsAndSalsa = anyWantsChips ? [
       {
@@ -178,24 +236,34 @@ class FulfillmentSheetCalculator {
       },
     ] : [{ name: 'Chips & Salsa', included: 'No', tempType: 'dry' }];
 
-    // Paper goods desde DB
+    // ── Salsas manuales — separar por categoría ──
+    const manualSalsaItems  = manualSalsas.filter(i => i.category === 'salsa');
+    const manualOtherItems  = manualSalsas.filter(i => i.category !== 'salsa');
+
+    // ── Paper goods ──
     const anyWantsPaper = boxes.some(b => b.wantsPaper);
     const paperGoods    = anyWantsPaper
       ? await this.resolver.calculatePaperGoods('BIRD_BOX', guestCount)
       : { included: false, items: [] };
 
     return {
-      header:       this._buildHeader(cateringOrder, delivery),
+      header:         this._buildHeader(cateringOrder, delivery),
       boxes,
       tacoRows,
       chipsAndSalsa,
+      salsas:         manualSalsaItems,   // salsas agregadas manualmente
+      extras:         manualOtherItems,   // otros ingredientes manuales
       drinks,
       paperGoods,
       totalTacos,
       hotItems:  [...tacoRows, ...drinks.filter(d => d.tempType === 'hot')],
-      coldItems: [...chipsAndSalsa.filter(i => i.tempType === 'cold'), ...drinks.filter(d => d.tempType === 'cold')],
+      coldItems: [
+        ...chipsAndSalsa.filter(i => i.tempType === 'cold'),
+        ...drinks.filter(d => d.tempType === 'cold'),
+        ...manualSalsaItems,
+      ],
       dryItems:  chipsAndSalsa.filter(i => i.tempType === 'dry'),
-      proteins: [], toppings: [], salsas: [], tortillas: [], snacks: [],
+      proteins: [], toppings: [], tortillas: [], snacks: [],
     };
   }
 
@@ -296,18 +364,19 @@ class FulfillmentSheetCalculator {
       storeCode:                order.storeCode,
       isManuallyEdited:         order.isManuallyEdited,
       toastOrderGuid:           order.toastOrderGuid,
+      pdfVersion:               order.pdfVersion || 1,
     };
   }
 
   _calculateTortillasFromResolved(ingredients, guestCount) {
-    const result     = [];
-    const flourItem  = ingredients.find(i => i.canonicalName === 'Flour Tortillas');
-    const cornItem   = ingredients.find(i => i.canonicalName === 'Corn Tortillas');
-    const is5050     = flourItem && cornItem;
+    const result    = [];
+    const flourItem = ingredients.find(i => i.canonicalName === 'Flour Tortillas');
+    const cornItem  = ingredients.find(i => i.canonicalName === 'Corn Tortillas');
+    const is5050    = flourItem && cornItem;
 
     if (flourItem) {
-      const total      = this.resolver.calculateAmount(flourItem.formula, guestCount);
-      const packaging  = this.resolver.getPackaging(flourItem.formula, guestCount);
+      const total     = this.resolver.calculateAmount(flourItem.formula, guestCount);
+      const packaging = this.resolver.getPackaging(flourItem.formula, guestCount);
       result.push({
         name:         is5050 ? 'Flour Tortillas (50/50)' : 'Flour Tortillas',
         total,
@@ -320,8 +389,8 @@ class FulfillmentSheetCalculator {
     }
 
     if (cornItem) {
-      const total      = this.resolver.calculateAmount(cornItem.formula, guestCount);
-      const packaging  = this.resolver.getPackaging(cornItem.formula, guestCount);
+      const total     = this.resolver.calculateAmount(cornItem.formula, guestCount);
+      const packaging = this.resolver.getPackaging(cornItem.formula, guestCount);
       result.push({
         name:         is5050 ? 'Corn Tortillas (50/50)' : 'Corn Tortillas',
         total,

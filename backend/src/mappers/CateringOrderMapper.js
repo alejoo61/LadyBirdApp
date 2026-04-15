@@ -42,8 +42,11 @@ class CateringOrderMapper {
       updatedAt:                row.updated_at,
     });
 
-    entity.paymentStatus     = row.payment_status    || 'OPEN';
-    entity.isManuallyEdited  = row.is_manually_edited || false;
+    entity.paymentStatus          = row.payment_status       || 'OPEN';
+    entity.isManuallyEdited       = row.is_manually_edited   || false;
+    entity.pdfVersion             = row.pdf_version          || 1;
+    entity.pdfNeedsUpdate         = row.pdf_needs_update     || false;
+    entity.calendarNeedsUpdate    = row.calendar_needs_update || false;
 
     return entity;
   }
@@ -68,6 +71,9 @@ class CateringOrderMapper {
       isPaid:                   ['PAID', 'CLOSED'].includes(entity.paymentStatus),
       isHouseAccount:           entity.parsedData?.isHouseAccount || false,
       isManuallyEdited:         entity.isManuallyEdited || false,
+      pdfVersion:               entity.pdfVersion || 1,
+      pdfNeedsUpdate:           entity.pdfNeedsUpdate || false,
+      calendarNeedsUpdate:      entity.calendarNeedsUpdate || false,
       clientName:               entity.clientName,
       clientEmail:              entity.clientEmail,
       clientPhone:              entity.clientPhone,

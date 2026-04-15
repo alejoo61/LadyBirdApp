@@ -67,11 +67,11 @@ const ingredientFormulaController = new IngredientFormulaController(ingredientFo
 
 const fulfillmentCalculator = new FulfillmentSheetCalculator(
   ingredientFormulaRepository,
-  pool,                          // ← requerido por IngredientResolverService
+  pool,
 );
 const fulfillmentGenerator = new FulfillmentSheetGenerator();
 
-const storeRepository    = new StoreRepository(pool);
+const storeRepository     = new StoreRepository(pool);
 const equipmentRepository = new EquipmentRepository(pool);
 const storeService        = new StoreService(storeRepository);
 const equipmentService    = new EquipmentService(equipmentRepository, storeRepository);
@@ -97,9 +97,7 @@ app.post("/api/auth/registro", async (req, res) => {
   if (contrasena.length < 6)
     return res.status(400).json({ error: "La contraseña debe tener al menos 6 caracteres" });
   try {
-    const userExists = await pool.query(
-      "SELECT * FROM usuarios WHERE usuario = $1", [usuario]
-    );
+    const userExists = await pool.query("SELECT * FROM usuarios WHERE usuario = $1", [usuario]);
     if (userExists.rows.length > 0)
       return res.status(400).json({ error: "El usuario ya existe" });
     const result = await pool.query(
@@ -134,22 +132,22 @@ app.post("/api/auth/login", async (req, res) => {
 
 // ============= STORE ROUTES =============
 
-app.get("/api/stores",      (req, res) => storeController.getAll(req, res));
-app.get("/api/stores/:id",  (req, res) => storeController.getById(req, res));
-app.post("/api/stores",     (req, res) => storeController.create(req, res));
-app.put("/api/stores/:id",  (req, res) => storeController.update(req, res));
+app.get("/api/stores",        (req, res) => storeController.getAll(req, res));
+app.get("/api/stores/:id",    (req, res) => storeController.getById(req, res));
+app.post("/api/stores",       (req, res) => storeController.create(req, res));
+app.put("/api/stores/:id",    (req, res) => storeController.update(req, res));
 app.delete("/api/stores/:id", (req, res) => storeController.delete(req, res));
 
 // ============= EQUIPMENT ROUTES =============
 
-app.get("/api/equipment",                      (req, res) => equipmentController.getAll(req, res));
-app.get("/api/equipment/types",                (req, res) => equipmentController.getTypes(req, res));
-app.get("/api/equipment/:id",                  (req, res) => equipmentController.getById(req, res));
-app.get("/api/stores/:storeId/equipment",      (req, res) => equipmentController.getByStore(req, res));
-app.post("/api/equipment",                     (req, res) => equipmentController.create(req, res));
-app.put("/api/equipment/:id",                  (req, res) => equipmentController.update(req, res));
-app.delete("/api/equipment/:id",               (req, res) => equipmentController.delete(req, res));
-app.patch("/api/equipment/:id/mark-down",      (req, res) => equipmentController.markAsDown(req, res));
+app.get("/api/equipment",                        (req, res) => equipmentController.getAll(req, res));
+app.get("/api/equipment/types",                  (req, res) => equipmentController.getTypes(req, res));
+app.get("/api/equipment/:id",                    (req, res) => equipmentController.getById(req, res));
+app.get("/api/stores/:storeId/equipment",        (req, res) => equipmentController.getByStore(req, res));
+app.post("/api/equipment",                       (req, res) => equipmentController.create(req, res));
+app.put("/api/equipment/:id",                    (req, res) => equipmentController.update(req, res));
+app.delete("/api/equipment/:id",                 (req, res) => equipmentController.delete(req, res));
+app.patch("/api/equipment/:id/mark-down",        (req, res) => equipmentController.markAsDown(req, res));
 app.patch("/api/equipment/:id/mark-operational", (req, res) => equipmentController.markAsOperational(req, res));
 
 // ============= TOAST ROUTES =============
@@ -196,8 +194,8 @@ app.get("/api/toast/orders", async (req, res) => {
     const { storeId, syncStatus, limit = 50 } = req.query;
     let query = "SELECT * FROM toast_orders WHERE 1=1";
     const params = [];
-    if (storeId)     { params.push(storeId);             query += ` AND store_id = $${params.length}`; }
-    if (syncStatus)  { params.push(syncStatus);          query += ` AND sync_status = $${params.length}`; }
+    if (storeId)    { params.push(storeId);    query += ` AND store_id = $${params.length}`; }
+    if (syncStatus) { params.push(syncStatus); query += ` AND sync_status = $${params.length}`; }
     params.push(parseInt(limit));
     query += ` ORDER BY order_date DESC LIMIT $${params.length}`;
     const result = await pool.query(query, params);
@@ -227,7 +225,7 @@ app.patch("/api/catering/orders/:id/payment-status", (req, res) => cateringOrder
 app.patch("/api/catering/orders/:id/manual",         (req, res) => cateringOrderController.updateManual(req, res));
 
 // ============= INGREDIENT FORMULA ROUTES =============
-// IMPORTANTE: rutas específicas ANTES de /:id para evitar colisiones
+// Rutas específicas ANTES de /:id para evitar colisiones
 
 app.get("/api/formulas/aliases",         (req, res) => ingredientFormulaController.getAllAliases(req, res));
 app.post("/api/formulas/aliases",        (req, res) => ingredientFormulaController.createAlias(req, res));
@@ -256,8 +254,20 @@ app.post('/api/catering/orders/:id/fulfillment-sheet', async (req, res) => {
       order.items = order.parsedData?.items || [];
     }
 
+    // Incrementar versión y limpiar flag pdf_needs_update
+    const newVersion = (order.pdfVersion || 1) + 1;
+    await pool.query(`
+      UPDATE catering_orders
+      SET pdf_version       = $1,
+          pdf_needs_update  = false,
+          updated_at        = CURRENT_TIMESTAMP
+      WHERE id = $2
+    `, [newVersion, order.id]);
+    order.pdfVersion = newVersion;
+
     const calculatedData = await fulfillmentCalculator.calculate(order);
     calculatedData.header.isManuallyEdited = order.isManuallyEdited || false;
+    calculatedData.header.pdfVersion       = newVersion;
 
     const pdf     = await fulfillmentGenerator.generate(calculatedData);
     const pdfName = fulfillmentGenerator.buildFilename(order, order.storeCode);
@@ -274,7 +284,7 @@ app.post('/api/catering/orders/:id/fulfillment-sheet', async (req, res) => {
   }
 });
 
-// TEMP — preview PDF en browser
+// Preview PDF en browser
 app.get('/api/catering/orders/:id/fulfillment-sheet/preview', async (req, res) => {
   try {
     const order = await cateringOrderService.getOrderById(req.params.id);
@@ -291,6 +301,7 @@ app.get('/api/catering/orders/:id/fulfillment-sheet/preview', async (req, res) =
 
     const calculatedData = await fulfillmentCalculator.calculate(order);
     calculatedData.header.isManuallyEdited = order.isManuallyEdited || false;
+    calculatedData.header.pdfVersion       = order.pdfVersion || 1;
 
     const pdf = await fulfillmentGenerator.generate(calculatedData);
     res.set({
@@ -306,12 +317,12 @@ app.get('/api/catering/orders/:id/fulfillment-sheet/preview', async (req, res) =
 
 // ============= MENU ITEM ROUTES =============
 
-app.get('/api/menu-items',                  (req, res) => menuItemController.getAll(req, res));
-app.get('/api/menu-items/event/:eventType', (req, res) => menuItemController.getByEventType(req, res));
-app.post('/api/menu-items',                 (req, res) => menuItemController.create(req, res));
+app.get('/api/menu-items',                           (req, res) => menuItemController.getAll(req, res));
+app.get('/api/menu-items/event/:eventType',          (req, res) => menuItemController.getByEventType(req, res));
 app.get('/api/menu-items/order-creation/:eventType', (req, res) => menuItemController.getForOrderCreation(req, res));
-app.put('/api/menu-items/:id',              (req, res) => menuItemController.update(req, res));
-app.delete('/api/menu-items/:id',           (req, res) => menuItemController.delete(req, res));
+app.post('/api/menu-items',                          (req, res) => menuItemController.create(req, res));
+app.put('/api/menu-items/:id',                       (req, res) => menuItemController.update(req, res));
+app.delete('/api/menu-items/:id',                    (req, res) => menuItemController.delete(req, res));
 
 // ─── Start server ──────────────────────────────────────────────────────────
 
@@ -336,12 +347,10 @@ app.listen(PORT, () => {
 });
 
 // ============= POLLING AUTOMÁTICO =============
-// Corre cada 15 minutos — sincroniza los últimos 30 min de cada store
-
 cron.schedule("*/15 * * * *", async () => {
   console.log(`\n⏰ [${new Date().toISOString()}] Auto-sync iniciado...`);
   try {
-    const results      = await toastSyncService.syncAll({ minutesBack: 30 });
+    const results       = await toastSyncService.syncAll({ minutesBack: 30 });
     const totalCatering = results.reduce((sum, r) => sum + (r.catering || 0), 0);
     if (totalCatering > 0)
       console.log(`🍽️  ${totalCatering} nuevas órdenes de catering detectadas`);

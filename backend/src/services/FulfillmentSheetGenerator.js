@@ -53,7 +53,8 @@ class FulfillmentSheetGenerator {
       .replace(/[^a-zA-Z0-9]/g, '')
       .slice(0, 25);
 
-    return `${store}_${clientSlug}_${eventTypeCode}_V1.pdf`;
+    const version = order.pdfVersion || 1;
+    return `${store}_${clientSlug}_${eventTypeCode}_V${version}.pdf`;
   }
 
   // ─── HELPERS ──────────────────────────────────────────────────────────────
@@ -293,6 +294,42 @@ class FulfillmentSheetGenerator {
     </div>`;
   }
 
+  _renderTacosByCombo(tacoRows) {
+    if (!tacoRows || tacoRows.length === 0) return '';
+    return `
+    <div class="section">
+      <div class="section-header" style="background:#457b9d">Tacos by Combo</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Tacos</th>
+            <th>Tortillas</th>
+            <th>Utensil</th>
+            <th>Packaging</th>
+            <th>Packed?</th>
+            <th>Loaded?</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tacoRows.map(item => `
+            <tr>
+              <td>${item.name}</td>
+              <td>${item.total} ${item.unit || ''}</td>
+              <td style="font-size:8px; font-weight:bold; color:#457b9d">
+                ${item.tortillaLabel || '—'}
+              </td>
+              <td>${item.utensil || '—'}</td>
+              <td>${item.packagingQty ? `${item.packagingQty}x ${item.packaging}` : (item.packaging || '—')}</td>
+              <td class="checkbox-cell"><span class="checkbox"></span></td>
+              <td class="checkbox-cell"><span class="checkbox"></span></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  }
+
   _renderDrinksChecklist(drinks = []) {
     if (!drinks || drinks.length === 0) return '';
     const rows = [];
@@ -412,6 +449,27 @@ class FulfillmentSheetGenerator {
     const wantsChips    = (boxes || []).some(b => b.wantsChips);
     const chipsFiltered = (chipsAndSalsa || []).filter(i => i.included === 'Yes');
 
+    // Sección de salsas manuales (agregadas por el equipo)
+    const salsasSection = (salsas || []).length > 0 ? `
+    <div class="section">
+      <div class="section-header" style="background:#7d5a00">Salsas</div>
+      <table>
+        <thead><tr><th>Item</th><th>Amount</th><th>Utensil</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th></tr></thead>
+        <tbody>
+          ${(salsas || []).map(item => `
+            <tr>
+              <td>${item.name}</td>
+              <td>${item.totalAmount || '—'} ${item.unit || ''}</td>
+              <td>${item.utensil || '—'}</td>
+              <td>${item.packagingQty ? `${item.packagingQty}x ${item.packaging}` : (item.packaging || '—')}</td>
+              <td class="checkbox-cell"><span class="checkbox"></span></td>
+              <td class="checkbox-cell"><span class="checkbox"></span></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>` : '';
+
     const chipsSection = wantsChips && chipsFiltered.length > 0 ? `
     <div class="section">
       <div class="section-header" style="background:#784212">Chips & Salsa</div>
@@ -437,7 +495,8 @@ class FulfillmentSheetGenerator {
     ${boxSummary}
     <div class="main-grid">
       <div class="left-col">
-        ${this._renderSection('Tacos by Combo', tacoRows || [], '#457b9d')}
+        ${this._renderTacosByCombo(tacoRows || [])}
+        ${salsasSection}
         ${chipsSection}
       </div>
       <div class="right-col">
