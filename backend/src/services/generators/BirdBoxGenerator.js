@@ -4,7 +4,7 @@ const BaseGenerator = require('./BaseGenerator');
 class BirdBoxGenerator extends BaseGenerator {
 
   build(data) {
-    const { header, boxes, tacoRows, chipsAndSalsa, salsas, drinks, paperGoods, hotItems, coldItems, dryItems } = data;
+    const { header, boxes, tacoRows, chipsAndSalsa, salsas, hasManuasSalsas, drinks, paperGoods, hotItems, coldItems, dryItems } = data;
     const badge = this._eventTypeBadge(header.eventType);
 
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -15,7 +15,7 @@ class BirdBoxGenerator extends BaseGenerator {
       <div class="left-col">
         ${this._renderTacosByCombo(tacoRows || [])}
         ${this._renderSalsas(salsas || [])}
-        ${this._renderChipsAndSalsa(chipsAndSalsa || [], boxes || [])}
+        ${this._renderChipsAndSalsa(chipsAndSalsa || [], boxes || [], hasManuasSalsas)}
       </div>
       <div class="right-col">
         ${this._renderPaperGoods(paperGoods)}
@@ -111,13 +111,14 @@ class BirdBoxGenerator extends BaseGenerator {
     </div>`;
   }
 
-  _renderChipsAndSalsa(chipsAndSalsa, boxes) {
+  _renderChipsAndSalsa(chipsAndSalsa, boxes, hasManuasSalsas = false) {
     const wantsChips    = boxes.some(b => b.wantsChips);
     const chipsFiltered = chipsAndSalsa.filter(i => i.included === 'Yes');
     if (!wantsChips || chipsFiltered.length === 0) return '';
+    const title = hasManuasSalsas ? 'Chips' : 'Chips & Salsa';
     return `
     <div class="section">
-      <div class="section-header" style="background:#784212">Chips & Salsa</div>
+      <div class="section-header" style="background:#784212">${title}</div>
       <table>
         <thead><tr><th>Item</th><th>Amount</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th></tr></thead>
         <tbody>

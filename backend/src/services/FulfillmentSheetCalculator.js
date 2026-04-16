@@ -76,7 +76,7 @@ class FulfillmentSheetCalculator {
 
     const boxes          = [];
     const drinks         = [];
-    const manualSalsas   = []; // salsas agregadas manualmente (modifiers vacío)
+    const manualSalsas   = [];
     const drinkKeywords  = ['coffee', 'agua', 'limeade', 'drink', 'beverage', 'side pack', 'milk', 'water'];
 
     for (const item of items) {
@@ -98,9 +98,9 @@ class FulfillmentSheetCalculator {
         continue;
       }
 
-      // ── Items sin modifiers — pueden ser salsas/ingredientes agregados manualmente ──
+      // ── Items sin modifiers — salsas/ingredientes agregados manualmente ──
       if (!hasModifiers) {
-        const dn           = item.displayName || item.name || '';
+        const dn          = item.displayName || item.name || '';
         const canonicalName = await this.resolver.resolveCanonicalName(dn);
         if (canonicalName) {
           const formula = await this.resolver.getFormula(canonicalName, 'BIRD_BOX');
@@ -121,7 +121,6 @@ class FulfillmentSheetCalculator {
             continue;
           }
         }
-        // Si no se resuelve como ingrediente, ignorar (no procesarlo como box)
         continue;
       }
 
@@ -180,24 +179,18 @@ class FulfillmentSheetCalculator {
         const qty = tacosPerCombo * box.quantity;
         comboTotals[combo].total += qty;
 
-        // Calcular tortillas por combo según tipo
         if (box.is5050) {
-          // 50/50: dividir lo más equitativamente posible
-          const flour = Math.ceil(qty / 2);
-          const corn  = Math.floor(qty / 2);
-          comboTotals[combo].flourTortillas += flour;
-          comboTotals[combo].cornTortillas  += corn;
+          comboTotals[combo].flourTortillas += Math.ceil(qty / 2);
+          comboTotals[combo].cornTortillas  += Math.floor(qty / 2);
         } else if ((box.tortilla || '').toLowerCase().includes('corn')) {
           comboTotals[combo].cornTortillas  += qty;
         } else {
-          // Default: flour
           comboTotals[combo].flourTortillas += qty;
         }
       }
     }
 
     const tacoRows = Object.entries(comboTotals).map(([combo, data]) => {
-      // Construir label de tortillas
       let tortillaLabel = '';
       if (data.flourTortillas > 0 && data.cornTortillas > 0) {
         tortillaLabel = `${data.flourTortillas}F / ${data.cornTortillas}C`;
@@ -206,39 +199,42 @@ class FulfillmentSheetCalculator {
       } else if (data.cornTortillas > 0) {
         tortillaLabel = `${data.cornTortillas} Corn`;
       }
-
       return {
-        name:             combo,
-        total:            data.total,
-        unit:             'tacos',
+        name:           combo,
+        total:          data.total,
+        unit:           'tacos',
         tortillaLabel,
-        flourTortillas:   data.flourTortillas,
-        cornTortillas:    data.cornTortillas,
-        packaging:        'Half Pan',
-        packagingQty:     Math.ceil(data.total / 50),
-        utensil:          'Tongs Small',
-        tempType:         'hot',
+        flourTortillas: data.flourTortillas,
+        cornTortillas:  data.cornTortillas,
+        packaging:      'Half Pan',
+        packagingQty:   Math.ceil(data.total / 50),
+        utensil:        'Tongs Small',
+        tempType:       'hot',
       };
     });
 
+    // ── Salsas manuales — separar por categoría ──
+    const manualSalsaItems = manualSalsas.filter(i => i.category === 'salsa');
+    const manualOtherItems = manualSalsas.filter(i => i.category !== 'salsa');
+
     // ── Chips & Salsa ──
+    // Si hay salsas manuales, los chips van solos (las salsas tienen su propia sección)
     const anyWantsChips = boxes.some(b => b.wantsChips);
+    const hasManuasSalsas = manualSalsaItems.length > 0;
+
     const chipsAndSalsa = anyWantsChips ? [
       {
-        name: 'Chips', total: 1, unit: 'Full Pan',
+        name: hasManuasSalsas ? 'Chips' : 'Chips', total: 1, unit: 'Full Pan',
         packaging: 'Full Pan', packagingQty: 1,
         utensil: 'Tongs Large', tempType: 'dry', included: 'Yes',
       },
-      {
+      // Salsa Roja solo si NO hay salsas manuales
+      ...(!hasManuasSalsas ? [{
         name: 'Salsa Roja', total: Math.ceil(guestCount / 12), unit: '6 oz cups',
         packaging: '6 oz cup', packagingQty: Math.ceil(guestCount / 12),
         utensil: 'Ladle', tempType: 'cold', included: 'Yes',
-      },
+      }] : []),
     ] : [{ name: 'Chips & Salsa', included: 'No', tempType: 'dry' }];
-
-    // ── Salsas manuales — separar por categoría ──
-    const manualSalsaItems  = manualSalsas.filter(i => i.category === 'salsa');
-    const manualOtherItems  = manualSalsas.filter(i => i.category !== 'salsa');
 
     // ── Paper goods ──
     const anyWantsPaper = boxes.some(b => b.wantsPaper);
@@ -247,12 +243,13 @@ class FulfillmentSheetCalculator {
       : { included: false, items: [] };
 
     return {
-      header:         this._buildHeader(cateringOrder, delivery),
+      header:       this._buildHeader(cateringOrder, delivery),
       boxes,
       tacoRows,
       chipsAndSalsa,
-      salsas:         manualSalsaItems,   // salsas agregadas manualmente
-      extras:         manualOtherItems,   // otros ingredientes manuales
+      salsas:       manualSalsaItems,
+      extras:       manualOtherItems,
+      hasManuasSalsas,
       drinks,
       paperGoods,
       totalTacos,
