@@ -20,10 +20,7 @@ const GROUP_TO_EVENT_TYPES = {
   'fresh salads (copy)':   ['TACO_BAR'],
 };
 
-// Reglas de clasificación de modifierGroups → { category, eventTypes }
-// El orden importa — más específico primero
 const MOD_GROUP_RULES = [
-  // Taco Bar específicos
   { match: /taco bar protein/i,                          category: 'protein',     eventTypes: ['TACO_BAR']             },
   { match: /additional taco bar protein/i,               category: 'protein',     eventTypes: ['TACO_BAR']             },
   { match: /taco bar toppings/i,                         category: 'topping',     eventTypes: ['TACO_BAR']             },
@@ -31,7 +28,6 @@ const MOD_GROUP_RULES = [
   { match: /taco bar salsas/i,                           category: 'salsa',       eventTypes: ['TACO_BAR']             },
   { match: /taco bar paper|paper goods/i,                category: 'paper',       eventTypes: ['TACO_BAR']             },
   { match: /taco bar tortilla/i,                         category: 'tortilla',    eventTypes: ['TACO_BAR']             },
-  // Bird Box específicos
   { match: /bird box.*combo/i,                           category: 'combo',       eventTypes: ['BIRD_BOX']             },
   { match: /bird box.*size/i,                            category: 'size',        eventTypes: ['BIRD_BOX']             },
   { match: /bird box.*tortilla/i,                        category: 'tortilla',    eventTypes: ['BIRD_BOX']             },
@@ -39,11 +35,9 @@ const MOD_GROUP_RULES = [
   { match: /bird box.*chip/i,                            category: 'chips_salsa', eventTypes: ['BIRD_BOX']             },
   { match: /bird box.*salsa/i,                           category: 'salsa',       eventTypes: ['BIRD_BOX']             },
   { match: /bird box.*protein/i,                         category: 'protein',     eventTypes: ['BIRD_BOX']             },
-  // Personal Box
   { match: /personal.*combo|combo.*personal/i,           category: 'combo',       eventTypes: ['PERSONAL_BOX']         },
   { match: /personal.*tortilla/i,                        category: 'tortilla',    eventTypes: ['PERSONAL_BOX']         },
   { match: /personal.*paper/i,                           category: 'paper',       eventTypes: ['PERSONAL_BOX']         },
-  // Genéricos de catering (se resuelven por contexto del item padre)
   { match: /^tortillas$/i,                               category: 'tortilla',    eventTypes: null                     },
   { match: /^salsas$/i,                                  category: 'salsa',       eventTypes: null                     },
   { match: /^proteins?$/i,                               category: 'protein',     eventTypes: null                     },
@@ -144,11 +138,8 @@ class ToastMenuSyncService {
 
       this._mergeItem(itemMap, entry);
 
-      // Extraer modifiers — pasar eventTypes del item como contexto
       if (isCateringMenu) {
-        this._extractModifiersFromItem(
-          item, modGroups, modOpts, itemMap, groupEventTypes
-        );
+        this._extractModifiersFromItem(item, modGroups, modOpts, itemMap, groupEventTypes);
       }
     }
 
@@ -165,14 +156,12 @@ class ToastMenuSyncService {
       const modGroupName = modGroup.name || '';
       let { category, eventTypes } = this._classifyModGroup(modGroupName);
 
-      // Si el modGroup no tiene eventTypes propios, heredar del item padre
       if (!eventTypes) eventTypes = itemEventTypes;
 
       for (const optRef of modGroup.modifierOptionReferences || []) {
         const opt = modOpts[String(optRef)];
         if (!opt?.name) continue;
 
-        // Ignorar opciones negativas / sin valor
         const nameLc = opt.name.toLowerCase();
         if (
           nameLc.startsWith('no ') ||
@@ -197,17 +186,17 @@ class ToastMenuSyncService {
   // ─── MERGE ────────────────────────────────────────────────────────────────
 
   _mergeItem(itemMap, entry) {
-    if (itemMap.has(entry.name)) {
-      const existing = itemMap.get(entry.name);
+    // Usar lowercase como key para evitar duplicados por capitalización
+    const key = entry.name.toLowerCase();
+    if (itemMap.has(key)) {
+      const existing = itemMap.get(key);
       existing.eventTypes = [...new Set([...existing.eventTypes, ...entry.eventTypes])];
-      // Conservar precio mayor (upgrade price > base price)
       if (entry.price > existing.price) existing.price = entry.price;
-      // Conservar categoría más específica (no sobreescribir con 'modifier')
       if (entry.category !== 'modifier' && existing.category === 'modifier') {
         existing.category = entry.category;
       }
     } else {
-      itemMap.set(entry.name, { ...entry });
+      itemMap.set(key, { ...entry });
     }
   }
 
@@ -236,7 +225,6 @@ class ToastMenuSyncService {
         return { category: rule.category, eventTypes: rule.eventTypes };
       }
     }
-    // Fallback por palabras clave
     const n = modGroupName.toLowerCase();
     if (n.includes('taco bar'))  return { category: 'modifier', eventTypes: ['TACO_BAR']     };
     if (n.includes('bird box'))  return { category: 'modifier', eventTypes: ['BIRD_BOX']     };
@@ -250,7 +238,7 @@ class ToastMenuSyncService {
     await this.pool.query(`
       INSERT INTO menu_items (name, category, event_types, price, is_active)
       VALUES ($1, $2, $3, $4, true)
-      ON CONFLICT (name) DO UPDATE SET
+      ON CONFLICT (LOWER(name)) DO UPDATE SET
         category    = EXCLUDED.category,
         event_types = EXCLUDED.event_types,
         price       = EXCLUDED.price,
