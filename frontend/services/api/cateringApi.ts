@@ -96,6 +96,10 @@ export const cateringApi = {
 
   overridePaymentStatus: (id: string, paymentStatus: string) =>
     apiClient.patch<CateringOrderResponse>(`/catering/orders/${id}/payment-status`, { paymentStatus }),
+
+  syncCalendar: (id: string) =>
+  apiClient.post(`/catering/orders/${id}/sync-calendar`),
 };
+
 
 export default cateringApi;

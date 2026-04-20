@@ -28,8 +28,9 @@ const toastMenuSyncService = new ToastMenuSyncService(toastApiClient, pool);
 
 // Catering Orders
 const CateringOrderRepository = require("./repositories/CateringOrderRepository");
-const CateringOrderService = require("./services/CateringOrderService");
+const CateringOrderService    = require("./services/CateringOrderService");
 const CateringOrderController = require("./controllers/CateringOrderController");
+const CateringOrderMapper     = require("./mappers/CateringOrderMapper");
 
 // Ingredients
 const IngredientFormulaRepository = require("./repositories/IngredientFormulaRepository");
@@ -234,7 +235,43 @@ app.post("/api/catering/orders",                     (req, res) => cateringOrder
 app.patch("/api/catering/orders/:id/status",         (req, res) => cateringOrderController.updateStatus(req, res));
 app.patch("/api/catering/orders/:id/override",       (req, res) => cateringOrderController.updateOverride(req, res));
 app.patch("/api/catering/orders/:id/payment-status", (req, res) => cateringOrderController.overridePaymentStatus(req, res));
-app.patch("/api/catering/orders/:id/manual",         (req, res) => cateringOrderController.updateManual(req, res));
+
+// Manual edit — responde al usuario y dispara PDF+Calendar en background
+app.patch("/api/catering/orders/:id/manual", async (req, res) => {
+  try {
+    const order = await cateringOrderService.updateManual(req.params.id, req.body);
+    const dto   = CateringOrderMapper.toDTO(order);
+    res.json({ success: true, data: dto, message: 'Order updated manually' });
+
+    // Auto-regenerar PDF y Calendar en background
+    setImmediate(() =>
+      toastSyncService._autoPdfAndCalendar(order.id, dto.storeCode, dto.storeName)
+        .catch(err => console.error('❌ Auto PDF/Calendar after edit:', err.message))
+    );
+  } catch (error) {
+    const code = error.message.includes('not found') ? 404 : 500;
+    res.status(code).json({ success: false, error: error.message });
+  }
+});
+
+// Sync Calendar manual (fallback si el automático falla)
+app.post("/api/catering/orders/:id/sync-calendar", async (req, res) => {
+  try {
+    const order = await cateringOrderService.getOrderById(req.params.id);
+    const storeResult = await pool.query(
+      'SELECT name, code FROM stores WHERE id = $1', [order.storeId]
+    );
+    order.storeName = storeResult.rows[0]?.name || '';
+    order.storeCode = storeResult.rows[0]?.code || '';
+    res.json({ success: true, message: 'Calendar sync started' });
+    setImmediate(() =>
+      toastSyncService._autoPdfAndCalendar(order.id, order.storeCode, order.storeName)
+        .catch(err => console.error('❌ Manual Calendar sync:', err.message))
+    );
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 // ============= INGREDIENT FORMULA ROUTES =============
 // Rutas específicas ANTES de /:id para evitar colisiones

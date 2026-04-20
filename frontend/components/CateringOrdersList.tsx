@@ -81,6 +81,7 @@ export default function CateringOrdersList() {
   const [editingOrder, setEditingOrder]   = useState<CateringOrder | null>(null);
   const [showCreate, setShowCreate]       = useState(false);
   const [activeTab, setActiveTab]         = useState<TabType>('catering');
+  const [syncingCalendar, setSyncingCalendar] = useState<string | null>(null);
 
   const [searchTerm, setSearchTerm]           = useState('');
   const [filterEventType, setFilterEventType] = useState('');
@@ -176,14 +177,28 @@ export default function CateringOrdersList() {
         .replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 25);
       const storeCode      = (order.storeCode || 'LB').replace(/\s/g, '');
       const version        = order.pdfVersion || 1;
-    a.download           = `${storeCode}_${clientSlug}_${eventTypeLabel}_V${version}.pdf`;
+      a.download           = `${storeCode}_${clientSlug}_${eventTypeLabel}_V${version}.pdf`;
       a.click();
       window.URL.revokeObjectURL(url);
       triggerToast('PDF downloaded successfully');
+      await loadOrders();
     } catch {
       triggerToast('❌ Error generating PDF');
     } finally {
       setGeneratingPdf(null);
+    }
+  };
+
+  const handleSyncCalendar = async (id: string) => {
+    setSyncingCalendar(id);
+    try {
+      await cateringApi.syncCalendar(id);
+      triggerToast('Calendar sync started — refreshing in a moment...');
+      setTimeout(() => loadOrders(), 4000);
+    } catch {
+      triggerToast('❌ Error syncing calendar');
+    } finally {
+      setSyncingCalendar(null);
     }
   };
 
@@ -216,24 +231,9 @@ export default function CateringOrdersList() {
   const todayCount        = tabOrders.filter(o => isToday(o.estimatedFulfillmentDate)).length;
 
   const tabs: { key: TabType; label: string; count: number; color: string }[] = [
-    {
-      key:   'catering',
-      label: 'Catering Events',
-      count: cateringOrders.length,
-      color: 'text-rose border-rose',
-    },
-    {
-      key:   'house_accounts',
-      label: 'House Accounts',
-      count: houseAccountOrders.length,
-      color: 'text-purple-600 border-purple-400',
-    },
-    {
-      key:   'needs_review',
-      label: 'Needs Review',
-      count: needsReviewOrders.length,
-      color: 'text-yellow-600 border-yellow-400',
-    },
+    { key: 'catering',       label: 'Catering Events', count: cateringOrders.length,     color: 'text-rose border-rose'               },
+    { key: 'house_accounts', label: 'House Accounts',  count: houseAccountOrders.length, color: 'text-purple-600 border-purple-400'   },
+    { key: 'needs_review',   label: 'Needs Review',    count: needsReviewOrders.length,  color: 'text-yellow-600 border-yellow-400'   },
   ];
 
   // ─── ORDER CARD ───────────────────────────────────────────────────────────
@@ -468,18 +468,21 @@ export default function CateringOrdersList() {
 
             {/* Outdated badges */}
             {(order.pdfNeedsUpdate || order.calendarNeedsUpdate) && (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 pb-2 border-b border-tumbleweed/20">
                 {order.pdfNeedsUpdate && (
                   <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-amber-100 text-amber-600 border border-amber-200">
                     <AlertTriangle size={11} />
-                    PDF Outdated — Regenerate
+                    PDF Outdated — Regenerating...
                   </span>
                 )}
                 {order.calendarNeedsUpdate && (
-                  <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-blue-100 text-blue-600 border border-blue-200">
+                  <button
+                    onClick={() => handleSyncCalendar(order.id)}
+                    disabled={syncingCalendar === order.id}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-blue-100 text-blue-600 border border-blue-200 hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50">
                     <CalendarDays size={11} />
-                    Calendar Out of Sync
-                  </span>
+                    {syncingCalendar === order.id ? 'Syncing...' : 'Sync Calendar'}
+                  </button>
                 )}
               </div>
             )}
@@ -563,7 +566,7 @@ export default function CateringOrdersList() {
           onClose={() => setEditingOrder(null)}
           onSave={async () => {
             setEditingOrder(null);
-            triggerToast('Order updated successfully');
+            triggerToast('Order updated — regenerating PDF & Calendar...');
             await loadOrders();
           }}
         />
@@ -617,18 +620,14 @@ export default function CateringOrdersList() {
             {tab.label}
             {tab.count > 0 && (
               <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${
-                activeTab === tab.key
-                  ? `bg-night/10 text-night`
-                  : 'bg-night/5 text-night/40'
+                activeTab === tab.key ? 'bg-night/10 text-night' : 'bg-night/5 text-night/40'
               }`}>
                 {tab.count}
               </span>
             )}
-            {/* Indicador de alerta para needs_review */}
             {tab.key === 'needs_review' && tab.count > 0 && (
               <span className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full" />
             )}
-            {/* Indicador de alerta para house_accounts con unpaid */}
             {tab.key === 'house_accounts' && houseAccountOrders.filter(o => o.paymentStatus === 'OPEN').length > 0 && (
               <span className="absolute -top-1 -right-1 w-2 h-2 bg-purple-400 rounded-full" />
             )}
