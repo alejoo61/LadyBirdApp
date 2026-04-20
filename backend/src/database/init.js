@@ -153,6 +153,7 @@ const initDB = async () => {
         pdf_version                 INTEGER DEFAULT 1,
         pdf_needs_update            BOOLEAN DEFAULT false,
         calendar_needs_update       BOOLEAN DEFAULT false,
+        google_event_id             TEXT,
 
         created_at                  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         updated_at                  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
@@ -226,6 +227,7 @@ const initDB = async () => {
       `ALTER TABLE catering_orders ADD COLUMN IF NOT EXISTS pdf_version INTEGER DEFAULT 1`,
       `ALTER TABLE catering_orders ADD COLUMN IF NOT EXISTS pdf_needs_update BOOLEAN DEFAULT false`,
       `ALTER TABLE catering_orders ADD COLUMN IF NOT EXISTS calendar_needs_update BOOLEAN DEFAULT false`,
+      `ALTER TABLE catering_orders ADD COLUMN IF NOT EXISTS google_event_id TEXT`,
     ];
 
     for (const migration of migrations) {

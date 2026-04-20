@@ -39,7 +39,11 @@ const IngredientFormulaController = require("./controllers/IngredientFormulaCont
 
 // Fulfillment Sheet
 const FulfillmentSheetCalculator = require("./services/FulfillmentSheetCalculator");
-const FulfillmentSheetGenerator = require("./services/FulfillmentSheetGenerator");
+const FulfillmentSheetGenerator  = require("./services/FulfillmentSheetGenerator");
+
+// Google Calendar
+const GoogleCalendarService = require("./services/GoogleCalendarService");
+const googleCalendarService = new GoogleCalendarService();
 
 // Menu Items
 const MenuItemRepository = require('./repositories/MenuItemRepository');
@@ -271,6 +275,42 @@ app.post('/api/catering/orders/:id/fulfillment-sheet', async (req, res) => {
 
     const pdf     = await fulfillmentGenerator.generate(calculatedData);
     const pdfName = fulfillmentGenerator.buildFilename(order, order.storeCode);
+
+    // ── Google Calendar sync (async — no bloquea la respuesta al usuario) ──
+    setImmediate(async () => {
+      try {
+        // Obtener google_event_id actual
+        const orderRow = await pool.query(
+          'SELECT google_event_id FROM catering_orders WHERE id = $1',
+          [order.id]
+        );
+        const existingEventId = orderRow.rows[0]?.google_event_id;
+
+        let calResult;
+        if (existingEventId) {
+          // Actualizar evento existente con nuevo PDF
+          calResult = await googleCalendarService.updateEvent(
+            order, existingEventId, pdf, pdfName
+          );
+        } else {
+          // Crear evento nuevo
+          calResult = await googleCalendarService.createEvent(order, pdf, pdfName);
+        }
+
+        if (calResult?.eventId) {
+          await pool.query(`
+            UPDATE catering_orders
+            SET google_event_id       = $1,
+                calendar_needs_update = false,
+                updated_at            = CURRENT_TIMESTAMP
+            WHERE id = $2
+          `, [calResult.eventId, order.id]);
+          console.log(`📅 Calendar synced for order ${order.displayNumber}`);
+        }
+      } catch (calErr) {
+        console.error('❌ Calendar sync error:', calErr.message);
+      }
+    });
 
     res.set({
       'Content-Type':        'application/pdf',
