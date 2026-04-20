@@ -22,8 +22,7 @@ const EquipmentController = require("./controllers/EquipmentController");
 
 // Toast DI
 const toastAuthService = new ToastAuthService();
-const toastApiClient = new ToastApiClient(toastAuthService);
-const toastSyncService = new ToastSyncService(toastApiClient, pool);
+const toastApiClient   = new ToastApiClient(toastAuthService);
 const ToastMenuSyncService = require('./services/ToastMenuSyncService');
 const toastMenuSyncService = new ToastMenuSyncService(toastApiClient, pool);
 
@@ -74,6 +73,15 @@ const fulfillmentCalculator = new FulfillmentSheetCalculator(
   pool,
 );
 const fulfillmentGenerator = new FulfillmentSheetGenerator();
+
+// Toast Sync — necesita fulfillment y calendar para auto-generar PDF+Calendar
+const toastSyncService = new ToastSyncService(
+  toastApiClient,
+  pool,
+  fulfillmentCalculator,
+  fulfillmentGenerator,
+  googleCalendarService,
+);
 
 const storeRepository     = new StoreRepository(pool);
 const equipmentRepository = new EquipmentRepository(pool);
