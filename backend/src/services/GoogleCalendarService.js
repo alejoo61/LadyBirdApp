@@ -37,6 +37,9 @@ class GoogleCalendarService {
         'https://www.googleapis.com/auth/calendar',
         'https://www.googleapis.com/auth/drive',
       ],
+      clientOptions: {
+        subject: 'catering@ladybird.com',
+      },
     });
     return this.auth;
   }
