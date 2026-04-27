@@ -42,8 +42,7 @@ class TacoBarGenerator extends BaseGenerator {
     if (!salads || salads.length === 0) return '';
 
     const rows = salads.map(salad => {
-      const qty         = salad.quantity || 1;
-      const proteinText = salad.protein || 'No Protein';
+      const qty       = salad.quantity || 1;
       const isNoProtein = !salad.protein ||
         salad.protein.toLowerCase().includes('without') ||
         salad.protein.toLowerCase().includes('no protein');
@@ -53,9 +52,9 @@ class TacoBarGenerator extends BaseGenerator {
         ? 'NO PROTEIN'
         : (salad.protein || '').replace(/^(small|large)\s+with\s+/i, '').toUpperCase();
 
-      const servesText = salad.serves
-        ? `${salad.serves * qty} ppl`
-        : (salad.size === 'Large' ? '20 ppl' : '10 ppl');
+      const servesTotal = salad.serves
+        ? salad.serves * qty
+        : (salad.size === 'Large' ? 20 : 10) * qty;
 
       return `
         <tr>
@@ -77,7 +76,7 @@ class TacoBarGenerator extends BaseGenerator {
               border:1.5px solid ${isNoProtein ? '#ccc' : '#f5aaaa'};
             ">${proteinDisplay}</span>
           </td>
-          <td style="text-align:center; font-weight:700">${servesText}</td>
+          <td style="text-align:center; font-weight:700">${servesTotal} ppl</td>
           <td style="font-size:8px; color:#555; font-style:italic">${salad.dressing || '—'}</td>
           <td>${salad.packaging || '—'}</td>
           <td>${salad.utensil || '—'}</td>
@@ -86,12 +85,11 @@ class TacoBarGenerator extends BaseGenerator {
         </tr>`;
     }).join('');
 
-    // Recopilar dressings únicos para el reminder al pie
     const dressings = [...new Set(salads.map(s => s.dressing).filter(Boolean))];
 
     return `
     <div class="section">
-      <div class="section-header" style="background:#2e7d32">🥗 Salads</div>
+      <div class="section-header" style="background:#2e7d32">Salads</div>
       <table>
         <thead>
           <tr>
@@ -118,7 +116,7 @@ class TacoBarGenerator extends BaseGenerator {
         letter-spacing:0.08em;
       ">
         ⚠ Dressing served on the side — do not forget:
-        ${dressings.map(d => `<span style="font-weight:700; color:#1a1a1a">${d}</span>`).join(' &nbsp;|&nbsp; ')}
+        ${dressings.map(d => `<span style="font-weight:700; color:#1a1a1a; margin-left:4px">${d}</span>`).join(' &nbsp;|&nbsp; ')}
       </div>
     </div>`;
   }

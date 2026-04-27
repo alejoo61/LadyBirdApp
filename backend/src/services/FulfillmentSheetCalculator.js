@@ -2,6 +2,9 @@
 
 const IngredientResolverService = require('./IngredientResolverService');
 
+// Keywords para detectar ensaladas desde el nombre del line item
+const SALAD_KEYWORDS = ['salad', 'city slicker', 'cowboy', 'farmer'];
+
 class FulfillmentSheetCalculator {
   constructor(ingredientFormulaRepository, pool) {
     this.formulaRepo = ingredientFormulaRepository;
@@ -54,9 +57,7 @@ class FulfillmentSheetCalculator {
       : { included: false, items: [] };
 
     const snacks = grouped.snack || [];
-
-    // ── Detectar ensaladas (addons) desde los line items de Toast ──
-    const salads = await this._extractSalads(items);
+    const salads = this._extractSalads(items);
 
     return {
       header:    this._buildHeader(cateringOrder, delivery),
@@ -88,6 +89,12 @@ class FulfillmentSheetCalculator {
       const itemNameLc   = (item.displayName || item.name || '').toLowerCase();
       const modifiers    = item.modifiers || [];
       const hasModifiers = modifiers.length > 0;
+
+      // ── Ensaladas — detectar ANTES que cualquier otra cosa ──
+      // Las ensaladas tienen modifiers de proteína pero NO son boxes
+      if (SALAD_KEYWORDS.some(k => itemNameLc.includes(k))) {
+        continue; // se procesan aparte con _extractSalads al final
+      }
 
       // ── Salsa Pack — tiene modifier de salsa elegida pero NO es un box ──
       if (itemNameLc.includes('salsa pack')) {
@@ -277,6 +284,9 @@ class FulfillmentSheetCalculator {
       ? await this.resolver.calculatePaperGoods('BIRD_BOX', guestCount)
       : { included: false, items: [] };
 
+    // ── Ensaladas (pueden agregarse a Bird Box también) ──
+    const salads = this._extractSalads(items);
+
     return {
       header:         this._buildHeader(cateringOrder, delivery),
       boxes,
@@ -289,6 +299,7 @@ class FulfillmentSheetCalculator {
       drinks,
       paperGoods,
       totalTacos,
+      salads,
       hotItems:  [
         ...tacoRows,
         ...drinks.filter(d => d.tempType === 'hot'),
@@ -299,6 +310,7 @@ class FulfillmentSheetCalculator {
         ...drinks.filter(d => d.tempType === 'cold'),
         ...manualSalsaItems,
         ...addonItems.filter(i => i.tempType === 'cold'),
+        ...salads,
       ],
       dryItems: [
         ...chipsAndSalsa.filter(i => i.tempType === 'dry'),
@@ -390,21 +402,21 @@ class FulfillmentSheetCalculator {
 
   /**
    * Extrae ensaladas desde los line items de Toast.
-   * Las ensaladas vienen con modifiers de proteína.
+   * Funciona para TACO_BAR y BIRD_BOX.
+   * Las ensaladas tienen modifiers de proteína — se detectan por nombre, no por ausencia de modifiers.
    */
-  async _extractSalads(items) {
-    const saladKeywords = ['salad', 'city slicker', 'cowboy', 'farmer'];
+  _extractSalads(items) {
     const salads = [];
 
     for (const item of items) {
       const itemNameLc = (item.displayName || item.name || '').toLowerCase();
-      const isSalad    = saladKeywords.some(k => itemNameLc.includes(k));
+      const isSalad    = SALAD_KEYWORDS.some(k => itemNameLc.includes(k));
       if (!isSalad) continue;
 
       const modifiers = item.modifiers || [];
       const qty       = item.quantity || 1;
 
-      // Detectar proteína elegida
+      // Detectar proteína elegida desde los modifiers
       const proteinMod = modifiers.find(m => {
         const n = (m.displayName || '').toLowerCase();
         return n.includes('brisket') || n.includes('chicken') || n.includes('chorizo') ||
@@ -412,15 +424,15 @@ class FulfillmentSheetCalculator {
       });
       const protein = proteinMod?.displayName || null;
 
-      // Detectar serves (10 o 20) desde el nombre
+      // Detectar serves desde el nombre (ej. "for 10", "for 20")
       const servesMatch = itemNameLc.match(/for\s+(\d+)/i);
       const serves      = servesMatch ? parseInt(servesMatch[1]) : null;
 
-      // Detectar size
+      // Size
       const isLarge = itemNameLc.includes('large');
       const size    = isLarge ? 'Large' : 'Small';
 
-      // Detectar tipo
+      // Tipo de ensalada
       let saladType = 'Salad';
       if (itemNameLc.includes('city slicker')) saladType = 'City Slicker';
       else if (itemNameLc.includes('cowboy'))  saladType = 'The Cowboy';
