@@ -9,6 +9,7 @@ import type { CateringOrder, CateringOrdersParams } from '@/services/api/caterin
 import { storesApi } from '@/services/api/storesApi';
 import type { Store } from '@/services/api/storesApi';
 import CreateOrderModal from '@/components/CreateOrderModal';
+import { useRouter } from 'next/navigation';
 import EditOrderModal from '@/components/EditOrderModal';
 import {
   Search, ChevronDown, ChevronUp, Clock, User,
@@ -93,6 +94,8 @@ export default function CateringOrdersList() {
   const [hideUnpaid, setHideUnpaid]           = useState(false);
   const [filterStoreId, setFilterStoreId]     = useState('');
   const [dateRange, setDateRange]             = useState<DateRange | undefined>(undefined);
+
+  const router = useRouter();
 
   useEffect(() => { loadStores(); }, []);
   useEffect(() => { loadOrders(); }, [filterEventType, filterStatus, filterMethod, filterStoreId, dateRange, filterPayment]);
@@ -573,18 +576,9 @@ export default function CateringOrdersList() {
       )}
 
       {showCreate && (
-        <CreateOrderModal
-          stores={stores}
-          onClose={() => setShowCreate(false)}
-          onSave={async () => {
-            setShowCreate(false);
-            triggerToast('Order created successfully');
-            await loadOrders();
-          }}
-        />
-      )}
+        <button onClick={() => router.push('/orders/new')}>New Order</button>
 
-      {/* Header */}
+       )} {/* Header */}
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-black text-night tracking-tight uppercase italic">Catering Orders</h2>
