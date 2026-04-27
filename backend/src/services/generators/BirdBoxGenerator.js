@@ -4,7 +4,11 @@ const BaseGenerator = require('./BaseGenerator');
 class BirdBoxGenerator extends BaseGenerator {
 
   build(data) {
-    const { header, boxes, tacoRows, chipsAndSalsa, salsas, hasManuasSalsas, drinks, paperGoods, hotItems, coldItems, dryItems } = data;
+    const {
+      header, boxes, tacoRows, chipsAndSalsa, salsas,
+      hasManuasSalsas, drinks, paperGoods, hotItems, coldItems, dryItems,
+      addons,
+    } = data;
     const badge = this._eventTypeBadge(header.eventType);
 
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -16,6 +20,7 @@ class BirdBoxGenerator extends BaseGenerator {
         ${this._renderTacosByCombo(tacoRows || [])}
         ${this._renderSalsas(salsas || [])}
         ${this._renderChipsAndSalsa(chipsAndSalsa || [], boxes || [], hasManuasSalsas)}
+        ${this._renderAddons(addons || [])}
       </div>
       <div class="right-col">
         ${this._renderPaperGoods(paperGoods)}
@@ -25,6 +30,7 @@ class BirdBoxGenerator extends BaseGenerator {
     ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
     ${this._renderQC([
       'All taco combos counted and packed correctly',
+      'Add-on packs prepared and labeled (Queso / Guac / Salsa / Churro Chips)',
       'Chips & Salsa included if requested',
       'Drinks packed with cups & lids if requested',
       'Paper goods / taco boats matched to guest count',
@@ -132,6 +138,51 @@ class BirdBoxGenerator extends BaseGenerator {
             </tr>
           `).join('')}
         </tbody>
+      </table>
+    </div>`;
+  }
+
+  _renderAddons(addons) {
+    if (!addons || addons.length === 0) return '';
+
+    const rows = addons.map(addon => {
+      const qty        = addon.quantity || 1;
+      const isChurro   = addon.unit === 'pan';
+      const amountStr  = isChurro
+        ? `${qty} pan${qty > 1 ? 's' : ''}`
+        : `${addon.totalAmount || (32 * qty)} ${addon.unit}`;
+      const chipsStr   = `+ ${qty} pan${qty > 1 ? 's' : ''} chips`;
+      const servesStr  = addon.servesCount ? `Serves ${addon.servesCount}` : (isChurro ? 'Serves 8–10' : `Serves ${20 * qty}`);
+
+      return `
+        <tr>
+          <td>
+            <strong>${addon.name}</strong>
+            ${qty > 1 ? `<span style="color:#6b21a8; font-weight:900; margin-left:4px">×${qty}</span>` : ''}
+          </td>
+          <td>
+            ${amountStr}
+            ${!isChurro ? `<br><span style="font-size:8px; color:#666">${chipsStr}</span>` : ''}
+          </td>
+          <td style="font-size:8px; color:#555">${servesStr}</td>
+          <td>${addon.utensil || '—'}</td>
+          <td>${addon.packagingQty ? `${addon.packagingQty}x ${addon.packaging}` : (addon.packaging || '—')}</td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+        </tr>`;
+    }).join('');
+
+    return `
+    <div class="section">
+      <div class="section-header" style="background:#6b21a8">Add-on Packs</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Pack</th><th>Amount</th><th>Serves</th>
+            <th>Utensil</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
       </table>
     </div>`;
   }

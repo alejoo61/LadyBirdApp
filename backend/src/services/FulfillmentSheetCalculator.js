@@ -77,12 +77,36 @@ class FulfillmentSheetCalculator {
     const boxes          = [];
     const drinks         = [];
     const manualSalsas   = [];
-    const drinkKeywords  = ['coffee', 'agua', 'limeade', 'drink', 'beverage', 'side pack', 'milk', 'water'];
+    const drinkKeywords  = ['coffee', 'agua', 'limeade', 'drink', 'beverage', 'milk', 'water'];
 
     for (const item of items) {
       const itemNameLc   = (item.displayName || item.name || '').toLowerCase();
       const modifiers    = item.modifiers || [];
       const hasModifiers = modifiers.length > 0;
+
+      // ── Salsa Pack — tiene modifier de salsa elegida pero NO es un box ──
+      if (itemNameLc.includes('salsa pack')) {
+        const salsaMod = modifiers.find(m => {
+          const n = (m.displayName || '').toLowerCase();
+          return n.includes('roja') || n.includes('verde') || n.includes('patron') || n.includes('patrón');
+        });
+        const qty = item.quantity || 1;
+        manualSalsas.push({
+          name:         `Salsa Pack${salsaMod ? ` (${salsaMod.displayName})` : ''}`,
+          category:     'addon',
+          tempType:     'cold',
+          unit:         'oz',
+          utensil:      'Ladle',
+          totalAmount:  32 * qty,
+          packaging:    '32 oz container',
+          packagingQty: qty,
+          included:     'Yes',
+          quantity:     qty,
+          servesCount:  20 * qty,
+          chipsQty:     qty,
+        });
+        continue;
+      }
 
       // ── Bebidas ──
       if (drinkKeywords.some(k => itemNameLc.includes(k))) {
@@ -98,14 +122,19 @@ class FulfillmentSheetCalculator {
         continue;
       }
 
-      // ── Items sin modifiers — salsas/ingredientes agregados manualmente ──
+      // ── Items sin modifiers — salsas/ingredientes/addons agregados manualmente ──
       if (!hasModifiers) {
-        const dn          = item.displayName || item.name || '';
+        const dn            = item.displayName || item.name || '';
         const canonicalName = await this.resolver.resolveCanonicalName(dn);
         if (canonicalName) {
           const formula = await this.resolver.getFormula(canonicalName, 'BIRD_BOX');
           if (formula) {
-            const totalAmount = this.resolver.calculateAmount(formula, guestCount);
+            const qty         = item.quantity || 1;
+            // amount_per_person = 0 significa cantidad fija (addon pack)
+            const isFixedPack = formula.amount_per_person === 0;
+            const totalAmount = isFixedPack
+              ? this._getFixedPackAmount(canonicalName, qty)
+              : this.resolver.calculateAmount(formula, guestCount);
             const packaging   = this.resolver.getPackaging(formula, guestCount);
             manualSalsas.push({
               name:         canonicalName,
@@ -115,8 +144,11 @@ class FulfillmentSheetCalculator {
               utensil:      formula.utensil,
               totalAmount,
               packaging:    packaging.package,
-              packagingQty: packaging.qty,
+              packagingQty: isFixedPack ? qty : packaging.qty,
               included:     'Yes',
+              quantity:     qty,
+              servesCount:  isFixedPack ? 20 * qty : null,
+              chipsQty:     isFixedPack ? qty : null,
             });
             continue;
           }
@@ -213,22 +245,21 @@ class FulfillmentSheetCalculator {
       };
     });
 
-    // ── Salsas manuales — separar por categoría ──
+    // ── Clasificar items manuales por categoría ──
     const manualSalsaItems = manualSalsas.filter(i => i.category === 'salsa');
-    const manualOtherItems = manualSalsas.filter(i => i.category !== 'salsa');
+    const addonItems       = manualSalsas.filter(i => i.category === 'addon');
+    const manualOtherItems = manualSalsas.filter(i => !['salsa', 'addon'].includes(i.category));
 
     // ── Chips & Salsa ──
-    // Si hay salsas manuales, los chips van solos (las salsas tienen su propia sección)
-    const anyWantsChips = boxes.some(b => b.wantsChips);
+    const anyWantsChips   = boxes.some(b => b.wantsChips);
     const hasManuasSalsas = manualSalsaItems.length > 0;
 
     const chipsAndSalsa = anyWantsChips ? [
       {
-        name: hasManuasSalsas ? 'Chips' : 'Chips', total: 1, unit: 'Full Pan',
+        name: 'Chips', total: 1, unit: 'Full Pan',
         packaging: 'Full Pan', packagingQty: 1,
         utensil: 'Tongs Large', tempType: 'dry', included: 'Yes',
       },
-      // Salsa Roja solo si NO hay salsas manuales
       ...(!hasManuasSalsas ? [{
         name: 'Salsa Roja', total: Math.ceil(guestCount / 12), unit: '6 oz cups',
         packaging: '6 oz cup', packagingQty: Math.ceil(guestCount / 12),
@@ -243,23 +274,32 @@ class FulfillmentSheetCalculator {
       : { included: false, items: [] };
 
     return {
-      header:       this._buildHeader(cateringOrder, delivery),
+      header:         this._buildHeader(cateringOrder, delivery),
       boxes,
       tacoRows,
       chipsAndSalsa,
-      salsas:       manualSalsaItems,
-      extras:       manualOtherItems,
+      salsas:         manualSalsaItems,
+      addons:         addonItems,
+      extras:         manualOtherItems,
       hasManuasSalsas,
       drinks,
       paperGoods,
       totalTacos,
-      hotItems:  [...tacoRows, ...drinks.filter(d => d.tempType === 'hot')],
+      hotItems:  [
+        ...tacoRows,
+        ...drinks.filter(d => d.tempType === 'hot'),
+        ...addonItems.filter(i => i.tempType === 'hot'),
+      ],
       coldItems: [
         ...chipsAndSalsa.filter(i => i.tempType === 'cold'),
         ...drinks.filter(d => d.tempType === 'cold'),
         ...manualSalsaItems,
+        ...addonItems.filter(i => i.tempType === 'cold'),
       ],
-      dryItems:  chipsAndSalsa.filter(i => i.tempType === 'dry'),
+      dryItems: [
+        ...chipsAndSalsa.filter(i => i.tempType === 'dry'),
+        ...addonItems.filter(i => i.tempType === 'dry'),
+      ],
       proteins: [], toppings: [], tortillas: [], snacks: [],
     };
   }
@@ -343,6 +383,21 @@ class FulfillmentSheetCalculator {
   }
 
   // ─── HELPERS ──────────────────────────────────────────────────────────────
+
+  /**
+   * Retorna la cantidad fija para addon packs (no escalados por guest count).
+   * Cada pack tiene contenido fijo independientemente del guest count.
+   */
+  _getFixedPackAmount(canonicalName, qty) {
+    const fixedAmounts = {
+      'Queso Pack':   32,
+      'Guac Pack':    32,
+      'Salsa Pack':   32,
+      'Churro Chips': 1,
+    };
+    const base = fixedAmounts[canonicalName] ?? 1;
+    return base * qty;
+  }
 
   _buildHeader(order, delivery) {
     return {
