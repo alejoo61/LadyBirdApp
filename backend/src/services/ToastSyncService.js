@@ -35,7 +35,7 @@ class ToastSyncService {
       ON CONFLICT (toast_order_guid)
       DO UPDATE SET
         raw_payload = EXCLUDED.raw_payload,
-        order_date  = EXCLUDED.raw_payload,
+        order_date  = EXCLUDED.order_date,
         updated_at  = CURRENT_TIMESTAMP
       RETURNING id
     `, [storeId, toastOrderGuid, JSON.stringify(rawPayload), orderDate]);
@@ -102,7 +102,6 @@ class ToastSyncService {
 
   async _autoPdfAndCalendar(orderId, storeCode, storeName) {
     try {
-      // Obtener orden completa
       const orderResult = await this.pool.query(`
         SELECT co.*, s.name as store_name, s.code as store_code
         FROM catering_orders co
@@ -111,7 +110,8 @@ class ToastSyncService {
       `, [orderId]);
 
       if (!orderResult.rows[0]) return;
-      const row   = orderResult.rows[0];
+      const row = orderResult.rows[0];
+
       const order = {
         id:                       row.id,
         storeId:                  row.store_id,
@@ -141,7 +141,7 @@ class ToastSyncService {
 
       // Generar PDF
       const calculatedData = await this.fulfillmentCalculator.calculate(order);
-      calculatedData.header.isManuallyEdited = false;
+      calculatedData.header.isManuallyEdited = order.isManuallyEdited;
       calculatedData.header.pdfVersion       = order.pdfVersion;
 
       const pdf     = await this.fulfillmentGenerator.generate(calculatedData);
@@ -149,13 +149,15 @@ class ToastSyncService {
 
       console.log(`📄 Auto-generated PDF: ${pdfName}`);
 
-      // Crear/actualizar evento en Calendar
+      // Crear o actualizar evento en Calendar
       let calResult;
       if (order.googleEventId) {
+        console.log(`📅 Updating existing event: ${order.googleEventId}`);
         calResult = await this.googleCalendarService.updateEvent(
           order, order.googleEventId, pdf, pdfName
         );
       } else {
+        console.log(`📅 Creating new calendar event...`);
         calResult = await this.googleCalendarService.createEvent(order, pdf, pdfName);
       }
 
@@ -169,7 +171,7 @@ class ToastSyncService {
               updated_at            = CURRENT_TIMESTAMP
           WHERE id = $2
         `, [calResult.eventId, orderId]);
-        console.log(`📅 Auto-synced Calendar for order ${order.displayNumber}`);
+        console.log(`✅ Calendar synced for order ${order.displayNumber} — event: ${calResult.eventId}`);
       }
     } catch (err) {
       console.error(`❌ Auto PDF/Calendar error for order ${orderId}:`, err.message);
@@ -187,8 +189,7 @@ class ToastSyncService {
       try {
         const orderDate    = order.estimatedFulfillmentDate || order.openedDate || order.createdDate;
         const toastOrderId = await this._upsertRawOrder(storeId, order.guid, order, orderDate);
-
-        const eventType = this.classifier.classify(order);
+        const eventType    = this.classifier.classify(order);
 
         if (eventType) {
           const parsed = this.parser.parse(order, eventType);
@@ -198,7 +199,6 @@ class ToastSyncService {
             );
             catering++;
 
-            // Auto-generar PDF y Calendar solo para órdenes nuevas
             if (isNew && this.fulfillmentCalculator && this.googleCalendarService) {
               setImmediate(() => this._autoPdfAndCalendar(cateringOrderId, storeCode, storeName));
             }
@@ -225,21 +225,15 @@ class ToastSyncService {
       1
     );
 
-    if (!orders || orders.length === 0) {
-      return { store: store.code, synced: 0, catering: 0 };
-    }
+    if (!orders || orders.length === 0) return { store: store.code, synced: 0, catering: 0 };
 
     const guids     = orders.map(o => o.guid).filter(Boolean);
     const existing  = await this._getExistingGuids(guids);
     const newOrders = orders.filter(o => o.guid && !existing.has(o.guid));
 
-    if (newOrders.length === 0) {
-      return { store: store.code, synced: 0, catering: 0 };
-    }
+    if (newOrders.length === 0) return { store: store.code, synced: 0, catering: 0 };
 
-    const { synced, catering } = await this._processOrders(
-      newOrders, store.id, store.code, store.name
-    );
+    const { synced, catering } = await this._processOrders(newOrders, store.id, store.code, store.name);
     console.log(`   ✅ ${store.code}: ${synced} new — ${catering} catering`);
     return { store: store.code, synced, catering };
   }
@@ -272,19 +266,14 @@ class ToastSyncService {
           page
         );
 
-        if (!orders || orders.length === 0) {
-          hasMore = false;
-          break;
-        }
+        if (!orders || orders.length === 0) { hasMore = false; break; }
 
         const guids     = orders.map(o => o.guid).filter(Boolean);
         const existing  = await this._getExistingGuids(guids);
         const newOrders = orders.filter(o => o.guid && !existing.has(o.guid));
 
         if (newOrders.length > 0) {
-          const { synced, catering } = await this._processOrders(
-            newOrders, store.id, store.code, store.name
-          );
+          const { synced, catering } = await this._processOrders(newOrders, store.id, store.code, store.name);
           totalSynced   += synced;
           totalCatering += catering;
           console.log(`   📅 ${businessDate} p${page}: ${synced} new — ${catering} catering`);
