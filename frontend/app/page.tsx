@@ -9,6 +9,8 @@ import CateringOrdersList from '@/components/CateringOrdersList';
 import StoreList from '@/components/StoresList';
 import EquipmentList from '@/components/EquipmentList';
 import FormulaManager from '@/components/FormulaManager';
+import NewOrderWizard from '@/components/NewOrderWizard';
+import type { Store } from '@/services/api/storesApi';
 
 interface Usuario {
   id: number;
@@ -26,6 +28,8 @@ export default function Home() {
   const [mensaje, setMensaje]                 = useState('');
   const [usuarioLogueado, setUsuarioLogueado] = useState<Usuario | null>(null);
   const [activeTab, setActiveTab]             = useState('Dashboard');
+  const [showNewOrder, setShowNewOrder]       = useState(false);
+  const [stores, setStores]                   = useState<Store[]>([]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,6 +55,7 @@ export default function Home() {
     setContrasena('');
     setMensaje('');
     setActiveTab('Dashboard');
+    setShowNewOrder(false);
   };
 
   if (usuarioLogueado) {
@@ -64,12 +69,30 @@ export default function Home() {
         />
         <main className="flex-1 overflow-y-auto p-10 bg-bone">
           {activeTab === 'Dashboard'   && <Dashboard usuario={usuarioLogueado.usuario} />}
-          {activeTab === 'Catering'    && <CateringOrdersList />}
+          {activeTab === 'Catering'    && (
+            <CateringOrdersList
+              onNewOrder={(storeList) => {
+                if (storeList) setStores(storeList);
+                setShowNewOrder(true);
+              }}
+            />
+          )}
           {activeTab === 'Formulas'    && <FormulaManager />}
           {activeTab === 'Stores'      && <StoreList />}
           {activeTab === 'Equipments'  && <EquipmentList />}
           {activeTab === 'Maintenance' && <Dashboard usuario={usuarioLogueado.usuario} />}
         </main>
+
+        {showNewOrder && (
+          <NewOrderWizard
+            stores={stores}
+            onClose={() => setShowNewOrder(false)}
+            onSave={() => {
+              setShowNewOrder(false);
+              setActiveTab('Catering');
+            }}
+          />
+        )}
       </div>
     );
   }
