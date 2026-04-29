@@ -13,14 +13,14 @@ import {
   Search, ChevronDown, ChevronUp, Clock, User, Phone, Mail, Package,
   CheckCircle, AlertTriangle, X, Calendar, Truck, ShoppingBag, Filter,
   FileText, LockKeyhole, Receipt, CalendarDays, EyeOff, Pencil, Plus,
-  RefreshCw, FlaskConical,
+  RefreshCw, FlaskConical, Building2,
 } from "lucide-react";
 
 interface ApiError {
   response?: { data?: { error?: string } };
 }
 
-type TabType = "catering" | "house_accounts" | "needs_review";
+type TabType = "catering" | "house_accounts" | "space_rentals" | "needs_review";
 
 const EVENT_TYPE_COLORS: Record<string, string> = {
   TACO_BAR:     "bg-rose/20 text-rose border-rose/30",
@@ -208,12 +208,14 @@ export default function CateringOrdersList({
 
   // ─── TAB FILTERING ────────────────────────────────────────────────────────
 
-  const cateringOrders     = orders.filter(o => !o.isHouseAccount && o.eventType !== "NEEDS_REVIEW");
-  const houseAccountOrders = orders.filter(o => o.isHouseAccount);
-  const needsReviewOrders  = orders.filter(o => o.eventType === "NEEDS_REVIEW");
+  const cateringOrders      = orders.filter(o => !o.isHouseAccount && !o.isSpaceRental && o.eventType !== "NEEDS_REVIEW");
+  const houseAccountOrders  = orders.filter(o => o.isHouseAccount);
+  const spaceRentalOrders   = orders.filter(o => o.isSpaceRental && !o.isHouseAccount);
+  const needsReviewOrders   = orders.filter(o => o.eventType === "NEEDS_REVIEW");
 
   const tabOrders = activeTab === "catering"       ? cateringOrders
                   : activeTab === "house_accounts" ? houseAccountOrders
+                  : activeTab === "space_rentals"  ? spaceRentalOrders
                   : needsReviewOrders;
 
   const hasFilters = !!(filterStoreId || filterEventType || filterStatus || filterMethod ||
@@ -230,33 +232,53 @@ export default function CateringOrdersList({
     return matchSearch && matchUpcoming && matchToday && matchHideUnpaid;
   });
 
-  const unpaidCount       = tabOrders.filter(o => o.paymentStatus === "OPEN").length;
-  const houseAccountCount = orders.filter(o => o.isHouseAccount && o.paymentStatus === "OPEN").length;
-  const todayCount        = tabOrders.filter(o => isToday(o.estimatedFulfillmentDate)).length;
+  const unpaidCount         = tabOrders.filter(o => o.paymentStatus === "OPEN").length;
+  const houseAccountCount   = orders.filter(o => o.isHouseAccount && o.paymentStatus === "OPEN").length;
+  const spaceRentalUnpaid   = spaceRentalOrders.filter(o => o.paymentStatus === "OPEN").length;
+  const todayCount          = tabOrders.filter(o => isToday(o.estimatedFulfillmentDate)).length;
 
-  const tabs: { key: TabType; label: string; count: number; color: string }[] = [
-    { key: "catering",       label: "Catering Events", count: cateringOrders.length,     color: "text-rose border-rose"             },
-    { key: "house_accounts", label: "House Accounts",  count: houseAccountOrders.length, color: "text-purple-600 border-purple-400" },
-    { key: "needs_review",   label: "Needs Review",    count: needsReviewOrders.length,  color: "text-yellow-600 border-yellow-400" },
+  const tabs: { key: TabType; label: string; count: number; dotColor?: string }[] = [
+    { key: "catering",       label: "Catering Events", count: cateringOrders.length    },
+    { key: "house_accounts", label: "House Accounts",  count: houseAccountOrders.length, dotColor: houseAccountOrders.filter(o => o.paymentStatus === "OPEN").length > 0 ? "bg-purple-400" : undefined },
+    { key: "space_rentals",  label: "Space Rentals",   count: spaceRentalOrders.length,  dotColor: spaceRentalUnpaid > 0 ? "bg-indigo-400" : undefined },
+    { key: "needs_review",   label: "Needs Review",    count: needsReviewOrders.length,  dotColor: needsReviewOrders.length > 0 ? "bg-yellow-400" : undefined },
   ];
 
   // ─── ORDER CARD ───────────────────────────────────────────────────────────
   const renderOrder = (order: CateringOrder) => {
     const isUnpaid       = order.paymentStatus === "OPEN";
     const isHouseAccount = order.isHouseAccount;
+    const isSpaceRental  = order.isSpaceRental;
     const isTodayOrder   = isToday(order.estimatedFulfillmentDate);
     const isTestOrder    = order.toastOrderGuid?.startsWith("MANUAL-");
     const isEdited       = order.isManuallyEdited && !isTestOrder;
 
+    // Extraer info del Space Rental del primer line item que lo contenga
+    const spaceRentalItem = isSpaceRental
+      ? order.items.find(i => (i.displayName || "").toLowerCase().includes("space rental"))
+      : null;
+
     return (
       <div key={order.id}
         className={`bg-white rounded-[2rem] border shadow-sm transition-all duration-300 overflow-hidden ${
-          isTestOrder    ? "border-fuchsia-300 ring-1 ring-fuchsia-200"
-          : isUnpaid     ? "border-orange-200 opacity-75"
-          : isTodayOrder ? "border-sky ring-1 ring-sky/30"
+          isTestOrder     ? "border-fuchsia-300 ring-1 ring-fuchsia-200"
+          : isSpaceRental ? "border-indigo-300 ring-1 ring-indigo-100"
+          : isUnpaid      ? "border-orange-200 opacity-75"
+          : isTodayOrder  ? "border-sky ring-1 ring-sky/30"
           : order.isUpcoming ? "border-tumbleweed"
           : "border-tumbleweed/30 opacity-80"
         }`}>
+
+        {/* Space Rental banner */}
+        {isSpaceRental && (
+          <div className="bg-indigo-600 px-6 py-2 flex items-center gap-2">
+            <Building2 size={13} className="text-white shrink-0" />
+            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-white">
+              Space Rental
+              {spaceRentalItem && ` — ${spaceRentalItem.displayName}`}
+            </span>
+          </div>
+        )}
 
         {isTestOrder && (
           <div className="bg-fuchsia-500 px-6 py-2 flex items-center gap-2">
@@ -285,14 +307,22 @@ export default function CateringOrdersList({
 
         {isUnpaid && (
           <div className={`border-b px-6 py-2 flex items-center gap-2 ${
-            isHouseAccount ? "bg-purple-50 border-purple-200" : "bg-orange-50 border-orange-200"
+            isHouseAccount  ? "bg-purple-50 border-purple-200"
+            : isSpaceRental ? "bg-indigo-50 border-indigo-200"
+            : "bg-orange-50 border-orange-200"
           }`}>
             {isHouseAccount
               ? <Receipt size={12} className="text-purple-500 shrink-0" />
+              : isSpaceRental
+              ? <Building2 size={12} className="text-indigo-500 shrink-0" />
               : <LockKeyhole size={12} className="text-orange-500 shrink-0" />}
-            <span className={`text-[10px] font-black uppercase tracking-widest ${isHouseAccount ? "text-purple-500" : "text-orange-500"}`}>
+            <span className={`text-[10px] font-black uppercase tracking-widest ${
+              isHouseAccount ? "text-purple-500" : isSpaceRental ? "text-indigo-500" : "text-orange-500"
+            }`}>
               {isHouseAccount
                 ? "House Account — Invoice pending. Override when client payment is confirmed."
+                : isSpaceRental
+                ? "Space Rental — Awaiting payment confirmation."
                 : "Awaiting Payment — PDF and Calendar locked until payment is confirmed"}
             </span>
           </div>
@@ -314,6 +344,9 @@ export default function CateringOrdersList({
               )}
               {isHouseAccount && (
                 <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-purple-100 text-purple-500 shrink-0">House Acct</span>
+              )}
+              {isSpaceRental && (
+                <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-600 shrink-0">Space Rental</span>
               )}
               {isTodayOrder && !isUnpaid && !isTestOrder && (
                 <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-sky/20 text-sky shrink-0">Today</span>
@@ -337,9 +370,13 @@ export default function CateringOrdersList({
           <span className={`text-[9px] font-black tracking-[0.15em] px-3 py-1.5 rounded-full uppercase shrink-0 ${
             isUnpaid && isHouseAccount
               ? "bg-purple-100 text-purple-600 border border-purple-200"
+              : isUnpaid && isSpaceRental
+              ? "bg-indigo-100 text-indigo-600 border border-indigo-200"
               : PAYMENT_STATUS_STYLES[order.paymentStatus] || PAYMENT_STATUS_STYLES.OPEN
           }`}>
-            {isHouseAccount && isUnpaid ? "House Account" : order.paymentStatusLabel}
+            {isHouseAccount && isUnpaid ? "House Account"
+             : isSpaceRental && isUnpaid ? "Space Rental"
+             : order.paymentStatusLabel}
           </span>
 
           {!isUnpaid && (
@@ -419,28 +456,36 @@ export default function CateringOrdersList({
               <div className="bg-white rounded-2xl p-4 border border-tumbleweed/20">
                 <p className="text-[9px] font-black text-night/30 uppercase tracking-widest mb-3">Order Items</p>
                 <div className="space-y-3">
-                  {order.items.map((item, idx) => (
-                    <div key={idx} className="border-b border-tumbleweed/10 last:border-0 pb-3 last:pb-0">
-                      <div className="flex justify-between items-start">
-                        <div className="flex items-start gap-2">
-                          <span className="text-[10px] font-black text-night/30 bg-bone px-2 py-0.5 rounded-lg shrink-0">×{item.quantity}</span>
-                          <span className="font-black text-night text-sm">{item.displayName}</span>
-                        </div>
-                        <span className="text-[11px] font-bold text-night/40 shrink-0 ml-2">${item.price.toFixed(2)}</span>
-                      </div>
-                      {item.modifiers.length > 0 && (
-                        <div className="ml-8 mt-1.5 flex flex-wrap gap-1.5">
-                          {item.modifiers
-                            .filter(m => m.displayName && !m.displayName.startsWith("NO,"))
-                            .map((mod, mIdx) => (
-                              <span key={mIdx} className="text-[9px] font-bold bg-bone text-night/50 px-2 py-0.5 rounded-lg">
-                                {mod.displayName}
+                  {order.items.map((item, idx) => {
+                    const isRentalItem = (item.displayName || "").toLowerCase().includes("space rental");
+                    return (
+                      <div key={idx} className={`border-b border-tumbleweed/10 last:border-0 pb-3 last:pb-0 ${isRentalItem ? "bg-indigo-50 -mx-1 px-1 rounded-xl" : ""}`}>
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-start gap-2">
+                            <span className="text-[10px] font-black text-night/30 bg-bone px-2 py-0.5 rounded-lg shrink-0">×{item.quantity}</span>
+                            <div>
+                              <span className={`font-black text-sm ${isRentalItem ? "text-indigo-700" : "text-night"}`}>
+                                {item.displayName}
+                                {isRentalItem && <Building2 size={11} className="inline ml-1.5 text-indigo-500" />}
                               </span>
-                            ))}
+                            </div>
+                          </div>
+                          <span className="text-[11px] font-bold text-night/40 shrink-0 ml-2">${item.price.toFixed(2)}</span>
                         </div>
-                      )}
-                    </div>
-                  ))}
+                        {item.modifiers.length > 0 && (
+                          <div className="ml-8 mt-1.5 flex flex-wrap gap-1.5">
+                            {item.modifiers
+                              .filter(m => m.displayName && !m.displayName.startsWith("NO,"))
+                              .map((mod, mIdx) => (
+                                <span key={mIdx} className="text-[9px] font-bold bg-bone text-night/50 px-2 py-0.5 rounded-lg">
+                                  {mod.displayName}
+                                </span>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
                 <div className="mt-4 pt-3 border-t border-tumbleweed/20 flex justify-between items-center">
                   <span className="text-[10px] font-black text-night/30 uppercase tracking-widest">Total</span>
@@ -478,20 +523,32 @@ export default function CateringOrdersList({
               {isUnpaid ? (
                 <div className="flex items-center gap-3 flex-wrap">
                   <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border ${
-                    isHouseAccount ? "bg-purple-50 border-purple-200" : "bg-orange-50 border-orange-200"
+                    isHouseAccount  ? "bg-purple-50 border-purple-200"
+                    : isSpaceRental ? "bg-indigo-50 border-indigo-200"
+                    : "bg-orange-50 border-orange-200"
                   }`}>
                     {isHouseAccount
                       ? <Receipt size={13} className="text-purple-500" />
+                      : isSpaceRental
+                      ? <Building2 size={13} className="text-indigo-500" />
                       : <LockKeyhole size={13} className="text-orange-500" />}
-                    <span className={`text-[10px] font-black uppercase tracking-widest ${isHouseAccount ? "text-purple-500" : "text-orange-500"}`}>
-                      {isHouseAccount ? "House Account — Invoice Pending" : "Locked — Awaiting Payment"}
+                    <span className={`text-[10px] font-black uppercase tracking-widest ${
+                      isHouseAccount ? "text-purple-500" : isSpaceRental ? "text-indigo-500" : "text-orange-500"
+                    }`}>
+                      {isHouseAccount ? "House Account — Invoice Pending"
+                       : isSpaceRental ? "Space Rental — Awaiting Payment"
+                       : "Locked — Awaiting Payment"}
                     </span>
                   </div>
                   <button onClick={() => handleOverridePayment(order.id)} disabled={isUpdating}
                     className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-white transition-all active:scale-95 disabled:opacity-50 ${
-                      isHouseAccount ? "bg-purple-500 hover:bg-purple-600" : "bg-orange-500 hover:bg-orange-600"
+                      isHouseAccount  ? "bg-purple-500 hover:bg-purple-600"
+                      : isSpaceRental ? "bg-indigo-500 hover:bg-indigo-600"
+                      : "bg-orange-500 hover:bg-orange-600"
                     }`}>
-                    {isHouseAccount ? "Confirm Invoice Paid" : "Override — Mark as Paid"}
+                    {isHouseAccount ? "Confirm Invoice Paid"
+                     : isSpaceRental ? "Confirm Space Rental Paid"
+                     : "Override — Mark as Paid"}
                   </button>
                 </div>
               ) : (
@@ -586,6 +643,7 @@ export default function CateringOrdersList({
             className={`relative flex items-center gap-2 px-5 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
               activeTab === tab.key ? "bg-white shadow-sm text-night" : "text-night/40 hover:text-night"
             }`}>
+            {tab.key === "space_rentals" && <Building2 size={12} className={activeTab === tab.key ? "text-indigo-600" : "text-night/30"} />}
             {tab.label}
             {tab.count > 0 && (
               <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${
@@ -594,11 +652,8 @@ export default function CateringOrdersList({
                 {tab.count}
               </span>
             )}
-            {tab.key === "needs_review" && tab.count > 0 && (
-              <span className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full" />
-            )}
-            {tab.key === "house_accounts" && houseAccountOrders.filter(o => o.paymentStatus === "OPEN").length > 0 && (
-              <span className="absolute -top-1 -right-1 w-2 h-2 bg-purple-400 rounded-full" />
+            {tab.dotColor && (
+              <span className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${tab.dotColor}`} />
             )}
           </button>
         ))}
@@ -704,6 +759,7 @@ export default function CateringOrdersList({
           <p className="font-black uppercase tracking-widest text-sm">
             {activeTab === "catering"       ? "No catering orders found"
            : activeTab === "house_accounts" ? "No house accounts found"
+           : activeTab === "space_rentals"  ? "No space rental orders found"
            : "No orders needing review"}
           </p>
         </div>

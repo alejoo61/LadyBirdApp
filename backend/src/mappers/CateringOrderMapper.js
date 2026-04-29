@@ -42,10 +42,10 @@ class CateringOrderMapper {
       updatedAt:                row.updated_at,
     });
 
-    entity.paymentStatus          = row.payment_status       || 'OPEN';
-    entity.isManuallyEdited       = row.is_manually_edited   || false;
-    entity.pdfVersion             = row.pdf_version          || 1;
-    entity.pdfNeedsUpdate         = row.pdf_needs_update     || false;
+    entity.paymentStatus          = row.payment_status        || 'OPEN';
+    entity.isManuallyEdited       = row.is_manually_edited    || false;
+    entity.pdfVersion             = row.pdf_version           || 1;
+    entity.pdfNeedsUpdate         = row.pdf_needs_update      || false;
     entity.calendarNeedsUpdate    = row.calendar_needs_update || false;
 
     return entity;
@@ -54,6 +54,13 @@ class CateringOrderMapper {
   static toDTO(order) {
     if (!order) return null;
     const entity = order instanceof CateringOrder ? order : this.toDomain(order);
+
+    const items = entity.parsedData?.items || [];
+
+    // Detectar Space Rental por line item
+    const isSpaceRental = items.some(i =>
+      (i.displayName || i.name || '').toLowerCase().includes('space rental')
+    );
 
     return {
       id:                       entity.id,
@@ -70,6 +77,7 @@ class CateringOrderMapper {
       paymentStatusLabel:       this._getPaymentStatusLabel(entity.paymentStatus),
       isPaid:                   ['PAID', 'CLOSED'].includes(entity.paymentStatus),
       isHouseAccount:           entity.parsedData?.isHouseAccount || false,
+      isSpaceRental,
       isManuallyEdited:         entity.isManuallyEdited || false,
       pdfVersion:               entity.pdfVersion || 1,
       pdfNeedsUpdate:           entity.pdfNeedsUpdate || false,
@@ -85,7 +93,7 @@ class CateringOrderMapper {
       deliveryAddress:          entity.deliveryAddress,
       deliveryNotes:            entity.deliveryNotes,
       driverName:               entity.driverName,
-      items:                    entity.parsedData?.items || [],
+      items,
       guestCount:               entity.guestCount,
       totalAmount:              entity.totalAmount,
       overrideData:             entity.overrideData,

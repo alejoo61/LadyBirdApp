@@ -45,9 +45,10 @@ export interface CateringOrder {
   paymentStatusLabel: string;
   isPaid: boolean;
   isHouseAccount: boolean;
+  isSpaceRental: boolean;
   isManuallyEdited: boolean;
-  pdfVersion:          number;
-  pdfNeedsUpdate:      boolean;
+  pdfVersion: number;
+  pdfNeedsUpdate: boolean;
   calendarNeedsUpdate: boolean;
 }
 
@@ -98,8 +99,7 @@ export const cateringApi = {
     apiClient.patch<CateringOrderResponse>(`/catering/orders/${id}/payment-status`, { paymentStatus }),
 
   syncCalendar: (id: string) =>
-  apiClient.post(`/catering/orders/${id}/sync-calendar`),
+    apiClient.post(`/catering/orders/${id}/sync-calendar`),
 };
-
 
 export default cateringApi;
