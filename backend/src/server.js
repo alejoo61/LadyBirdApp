@@ -1,91 +1,76 @@
-require("dotenv").config();
-const express = require("express");
-const cors    = require("cors");
-const pool    = require("./database/init");
-
-// ─── Toast Services ────────────────────────────────────────────────────────
-const ToastAuthService     = require("./services/ToastAuthService");
-const ToastApiClient       = require("./services/ToastApiClient");
-const ToastSyncService     = require("./services/ToastSyncService");
-const ToastMenuSyncService = require('./services/ToastMenuSyncService');
+require('dotenv').config();
+const express = require('express');
+const cors    = require('cors');
+const cron    = require('node-cron');
+const pool    = require('./database/init');
 
 // ─── Repositories ─────────────────────────────────────────────────────────
-const StoreRepository             = require("./repositories/StoreRepository");
-const EquipmentRepository         = require("./repositories/EquipmentRepository");
-const CateringOrderRepository     = require("./repositories/CateringOrderRepository");
-const IngredientFormulaRepository = require("./repositories/IngredientFormulaRepository");
+const StoreRepository             = require('./repositories/StoreRepository');
+const EquipmentRepository         = require('./repositories/EquipmentRepository');
+const CateringOrderRepository     = require('./repositories/CateringOrderRepository');
+const IngredientFormulaRepository = require('./repositories/IngredientFormulaRepository');
 const MenuItemRepository          = require('./repositories/MenuItemRepository');
 const AuditRepository             = require('./repositories/AuditRepository');
 
 // ─── Services ─────────────────────────────────────────────────────────────
-const StoreService             = require("./services/StoreService");
-const EquipmentService         = require("./services/EquipmentService");
-const CateringOrderService     = require("./services/CateringOrderService");
-const IngredientFormulaService = require("./services/IngredientFormulaService");
-const FulfillmentSheetCalculator = require("./services/FulfillmentSheetCalculator");
-const FulfillmentSheetGenerator  = require("./services/FulfillmentSheetGenerator");
-const GoogleCalendarService      = require("./services/GoogleCalendarService");
+const StoreService             = require('./services/StoreService');
+const EquipmentService         = require('./services/EquipmentService');
+const CateringOrderService     = require('./services/CateringOrderService');
+const IngredientFormulaService = require('./services/IngredientFormulaService');
+const FulfillmentSheetCalculator = require('./services/FulfillmentSheetCalculator');
+const FulfillmentSheetGenerator  = require('./services/FulfillmentSheetGenerator');
+const GoogleCalendarService      = require('./services/GoogleCalendarService');
 const AuditService               = require('./services/AuditService');
+const ToastAuthService           = require('./services/ToastAuthService');
+const ToastApiClient             = require('./services/ToastApiClient');
+const ToastSyncService           = require('./services/ToastSyncService');
+const ToastMenuSyncService       = require('./services/ToastMenuSyncService');
 
 // ─── Controllers ──────────────────────────────────────────────────────────
-const StoreController             = require("./controllers/StoreController");
-const EquipmentController         = require("./controllers/EquipmentController");
-const CateringOrderController     = require("./controllers/CateringOrderController");
-const IngredientFormulaController = require("./controllers/IngredientFormulaController");
+const StoreController             = require('./controllers/StoreController');
+const EquipmentController         = require('./controllers/EquipmentController');
+const CateringOrderController     = require('./controllers/CateringOrderController');
+const IngredientFormulaController = require('./controllers/IngredientFormulaController');
 const MenuItemController          = require('./controllers/MenuItemController');
 const AuditController             = require('./controllers/AuditController');
 
-// ─── Mappers ──────────────────────────────────────────────────────────────
-const CateringOrderMapper = require("./mappers/CateringOrderMapper");
-
-const app  = express();
-const PORT = process.env.PORT || 3001;
-const cron = require("node-cron");
-
-// ─── Middlewares ───────────────────────────────────────────────────────────
-app.use(cors());
-app.use(express.json());
+// ─── Routes ───────────────────────────────────────────────────────────────
+const authRoutes      = require('./routes/auth.routes');
+const storesRoutes    = require('./routes/stores.routes');
+const equipmentRoutes = require('./routes/equipment.routes');
+const toastRoutes     = require('./routes/toast.routes');
+const formulasRoutes  = require('./routes/formulas.routes');
+const menuRoutes      = require('./routes/menu.routes');
+const auditRoutes     = require('./routes/audit.routes');
+const cateringRoutes  = require('./routes/catering.routes');
 
 // ─── Dependency Injection ─────────────────────────────────────────────────
 
-// Toast
-const toastAuthService     = new ToastAuthService();
-const toastApiClient       = new ToastApiClient(toastAuthService);
-const toastMenuSyncService = new ToastMenuSyncService(toastApiClient, pool);
-
-// Audit
 const auditRepository = new AuditRepository(pool);
 const auditService    = new AuditService(auditRepository);
 const auditController = new AuditController(auditService);
 
-// Catering
 const cateringOrderRepository = new CateringOrderRepository(pool);
 const cateringOrderService    = new CateringOrderService(cateringOrderRepository);
 const cateringOrderController = new CateringOrderController(cateringOrderService, auditService);
 
-// Ingredients
 const ingredientFormulaRepository = new IngredientFormulaRepository(pool);
 const ingredientFormulaService    = new IngredientFormulaService(ingredientFormulaRepository);
 const ingredientFormulaController = new IngredientFormulaController(ingredientFormulaService);
 
-// Fulfillment
 const fulfillmentCalculator = new FulfillmentSheetCalculator(ingredientFormulaRepository, pool);
 const fulfillmentGenerator  = new FulfillmentSheetGenerator();
-
-// Google Calendar
 const googleCalendarService = new GoogleCalendarService();
 
-// Toast Sync (necesita fulfillment + calendar + audit)
-const toastSyncService = new ToastSyncService(
-  toastApiClient,
-  pool,
-  fulfillmentCalculator,
-  fulfillmentGenerator,
-  googleCalendarService,
-  auditService,   // ← inyectado para logear TOAST_SYNC y CALENDAR_SYNCED
+const toastAuthService     = new ToastAuthService();
+const toastApiClient       = new ToastApiClient(toastAuthService);
+const toastMenuSyncService = new ToastMenuSyncService(toastApiClient, pool);
+const toastSyncService     = new ToastSyncService(
+  toastApiClient, pool,
+  fulfillmentCalculator, fulfillmentGenerator,
+  googleCalendarService, auditService,
 );
 
-// Stores & Equipment
 const storeRepository     = new StoreRepository(pool);
 const equipmentRepository = new EquipmentRepository(pool);
 const storeService        = new StoreService(storeRepository);
@@ -93,384 +78,74 @@ const equipmentService    = new EquipmentService(equipmentRepository, storeRepos
 const storeController     = new StoreController(storeService);
 const equipmentController = new EquipmentController(equipmentService);
 
-// Menu Items
 const menuItemRepository = new MenuItemRepository(pool);
 const menuItemController = new MenuItemController(menuItemRepository);
 
-// ─── Health check ─────────────────────────────────────────────────────────
-app.get("/", (req, res) => {
-  res.json({
-    message:   "LadyBird API - Backend running with PostgreSQL",
-    timestamp: new Date().toISOString(),
-    version:   "1.0.0",
-  });
-});
+// ─── App ──────────────────────────────────────────────────────────────────
+const app  = express();
+const PORT = process.env.PORT || 3001;
 
-// ============= AUTHENTICATION ROUTES =============
+app.use(cors());
+app.use(express.json());
 
-app.post("/api/auth/registro", async (req, res) => {
-  const { usuario, contrasena } = req.body;
-  if (!usuario || !contrasena)
-    return res.status(400).json({ error: "Usuario y contraseña son requeridos" });
-  if (contrasena.length < 6)
-    return res.status(400).json({ error: "La contraseña debe tener al menos 6 caracteres" });
-  try {
-    const userExists = await pool.query("SELECT * FROM usuarios WHERE usuario = $1", [usuario]);
-    if (userExists.rows.length > 0)
-      return res.status(400).json({ error: "El usuario ya existe" });
-    const result = await pool.query(
-      "INSERT INTO usuarios (usuario, contrasena) VALUES ($1, $2) RETURNING id, usuario",
-      [usuario, contrasena]
-    );
-    res.status(201).json({ mensaje: "Usuario registrado exitosamente", usuario: result.rows[0] });
-  } catch (error) {
-    console.error("Error en registro:", error);
-    res.status(500).json({ error: "Error al crear usuario" });
-  }
-});
+// Health check
+app.get('/', (req, res) => res.json({
+  message:   'LadyBird API - Backend running with PostgreSQL',
+  timestamp: new Date().toISOString(),
+  version:   '1.0.0',
+}));
 
-app.post("/api/auth/login", async (req, res) => {
-  const { usuario, contrasena } = req.body;
-  if (!usuario || !contrasena)
-    return res.status(400).json({ error: "Usuario y contraseña son requeridos" });
-  try {
-    const result = await pool.query(
-      "SELECT * FROM usuarios WHERE usuario = $1 AND contrasena = $2",
-      [usuario, contrasena]
-    );
-    if (result.rows.length === 0)
-      return res.status(401).json({ error: "Usuario o contraseña incorrectos" });
-    const user = result.rows[0];
-    res.json({ mensaje: "Login exitoso", usuario: { id: user.id, usuario: user.usuario } });
-  } catch (error) {
-    console.error("Error en login:", error);
-    res.status(500).json({ error: "Error en el servidor" });
-  }
-});
+// ─── Routes ───────────────────────────────────────────────────────────────
+app.use('/api/auth',           authRoutes(pool));
+app.use('/api/stores',         storesRoutes(storeController));
+app.use('/api/equipment',      equipmentRoutes(equipmentController));
+app.use('/api/toast',          toastRoutes(pool, toastSyncService, toastMenuSyncService));
+app.use('/api/formulas',       formulasRoutes(ingredientFormulaController));
+app.use('/api/menu-items',     menuRoutes(menuItemController));
+app.use('/api/audit',          auditRoutes(auditController));
+app.use('/api/catering/orders', cateringRoutes(
+  pool,
+  cateringOrderController,
+  cateringOrderService,
+  auditService,
+  fulfillmentCalculator,
+  fulfillmentGenerator,
+  googleCalendarService,
+  toastSyncService,
+));
 
-// ============= STORE ROUTES =============
+// ─── Store equipment route (nested) ───────────────────────────────────────
+app.get('/api/stores/:storeId/equipment', (req, res) => equipmentController.getByStore(req, res));
 
-app.get("/api/stores",        (req, res) => storeController.getAll(req, res));
-app.get("/api/stores/:id",    (req, res) => storeController.getById(req, res));
-app.post("/api/stores",       (req, res) => storeController.create(req, res));
-app.put("/api/stores/:id",    (req, res) => storeController.update(req, res));
-app.delete("/api/stores/:id", (req, res) => storeController.delete(req, res));
-
-// ============= EQUIPMENT ROUTES =============
-
-app.get("/api/equipment",                        (req, res) => equipmentController.getAll(req, res));
-app.get("/api/equipment/types",                  (req, res) => equipmentController.getTypes(req, res));
-app.get("/api/equipment/:id",                    (req, res) => equipmentController.getById(req, res));
-app.get("/api/stores/:storeId/equipment",        (req, res) => equipmentController.getByStore(req, res));
-app.post("/api/equipment",                       (req, res) => equipmentController.create(req, res));
-app.put("/api/equipment/:id",                    (req, res) => equipmentController.update(req, res));
-app.delete("/api/equipment/:id",                 (req, res) => equipmentController.delete(req, res));
-app.patch("/api/equipment/:id/mark-down",        (req, res) => equipmentController.markAsDown(req, res));
-app.patch("/api/equipment/:id/mark-operational", (req, res) => equipmentController.markAsOperational(req, res));
-
-// ============= TOAST ROUTES =============
-
-app.post("/api/toast/sync", async (req, res) => {
-  try {
-    const { minutesBack = 30 } = req.body;
-    const results = await toastSyncService.syncAll({ minutesBack });
-    res.json({ success: true, data: results });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.post("/api/toast/sync/historical", async (req, res) => {
-  try {
-    const { daysBack = 7 } = req.body;
-    const results = await toastSyncService.syncAll({ historical: true, daysBack });
-    res.json({ success: true, data: results });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.post("/api/toast/sync/historical/:storeCode", async (req, res) => {
-  try {
-    const { storeCode } = req.params;
-    const { daysBack = 7 } = req.body;
-    const storeResult = await pool.query(
-      "SELECT * FROM stores WHERE code = $1 AND toast_restaurant_guid IS NOT NULL",
-      [storeCode.toUpperCase()]
-    );
-    if (storeResult.rows.length === 0)
-      return res.status(404).json({ success: false, error: `Store ${storeCode} not found` });
-    const result = await toastSyncService.syncStore(storeResult.rows[0], { historical: true, daysBack });
-    res.json({ success: true, data: result });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.get("/api/toast/orders", async (req, res) => {
-  try {
-    const { storeId, syncStatus, limit = 50 } = req.query;
-    let query = "SELECT * FROM toast_orders WHERE 1=1";
-    const params = [];
-    if (storeId)    { params.push(storeId);    query += ` AND store_id = $${params.length}`; }
-    if (syncStatus) { params.push(syncStatus); query += ` AND sync_status = $${params.length}`; }
-    params.push(parseInt(limit));
-    query += ` ORDER BY order_date DESC LIMIT $${params.length}`;
-    const result = await pool.query(query, params);
-    res.json({ success: true, data: result.rows, count: result.rows.length });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.post('/api/toast/sync/menu', async (req, res) => {
-  try {
-    const results = await toastMenuSyncService.syncMenusForAllStores();
-    res.json({ success: true, data: results });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// ============= CATERING ORDER ROUTES =============
-
-app.get("/api/catering/orders",      (req, res) => cateringOrderController.getAll(req, res));
-app.get("/api/catering/orders/:id",  (req, res) => cateringOrderController.getById(req, res));
-app.post("/api/catering/orders",     (req, res) => cateringOrderController.createManual(req, res));
-
-app.patch("/api/catering/orders/:id/status", (req, res) =>
-  cateringOrderController.updateStatus(req, res)
-);
-
-app.patch("/api/catering/orders/:id/override", (req, res) =>
-  cateringOrderController.updateOverride(req, res)
-);
-
-app.patch("/api/catering/orders/:id/payment-status", (req, res) =>
-  cateringOrderController.overridePaymentStatus(req, res)
-);
-
-// Manual edit — responde al usuario y dispara PDF+Calendar+Audit en background
-app.patch("/api/catering/orders/:id/manual", async (req, res) => {
-  try {
-    const actor  = req.headers['x-user'] || 'unknown';
-    const before = await cateringOrderService.getOrderById(req.params.id);
-    const order  = await cateringOrderService.updateManual(req.params.id, req.body);
-    const dto    = CateringOrderMapper.toDTO(order);
-
-    res.json({ success: true, data: dto, message: 'Order updated manually' });
-
-    setImmediate(async () => {
-      try {
-        // Audit log
-        await auditService.logManualEdit(req.params.id, actor, before, req.body);
-        // PDF + Calendar
-        await toastSyncService._autoPdfAndCalendar(order.id, dto.storeCode, dto.storeName);
-      } catch (err) {
-        console.error('❌ Post-edit background error:', err.message);
-      }
-    });
-  } catch (error) {
-    const code = error.message.includes('not found') ? 404 : 500;
-    res.status(code).json({ success: false, error: error.message });
-  }
-});
-
-// Sync Calendar manual
-app.post("/api/catering/orders/:id/sync-calendar", async (req, res) => {
-  try {
-    const actor = req.headers['x-user'] || 'unknown';
-    const order = await cateringOrderService.getOrderById(req.params.id);
-    const storeResult = await pool.query(
-      'SELECT name, code FROM stores WHERE id = $1', [order.storeId]
-    );
-    order.storeName = storeResult.rows[0]?.name || '';
-    order.storeCode = storeResult.rows[0]?.code || '';
-
-    res.json({ success: true, message: 'Calendar sync started' });
-
-    setImmediate(async () => {
-      try {
-        await toastSyncService._autoPdfAndCalendar(order.id, order.storeCode, order.storeName);
-        await auditService.logCalendarSynced(order.id, actor, order.googleEventId);
-      } catch (err) {
-        console.error('❌ Manual Calendar sync:', err.message);
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// ============= AUDIT ROUTES =============
-
-// GET /api/audit/orders/:orderId  — logs de una orden específica
-app.get('/api/audit/orders/:orderId', (req, res) => auditController.getByOrderId(req, res));
-
-// GET /api/audit?actor=alejandro&action=MANUAL_EDIT&limit=50
-app.get('/api/audit', (req, res) => auditController.getAll(req, res));
-
-// ============= INGREDIENT FORMULA ROUTES =============
-
-app.get("/api/formulas/aliases",         (req, res) => ingredientFormulaController.getAllAliases(req, res));
-app.post("/api/formulas/aliases",        (req, res) => ingredientFormulaController.createAlias(req, res));
-app.delete("/api/formulas/aliases/:id",  (req, res) => ingredientFormulaController.deleteAlias(req, res));
-app.get("/api/formulas/canonical-names", (req, res) => ingredientFormulaController.getCanonicalNames(req, res));
-app.get("/api/formulas",                 (req, res) => ingredientFormulaController.getAll(req, res));
-app.get("/api/formulas/:id",             (req, res) => ingredientFormulaController.getById(req, res));
-app.post("/api/formulas",                (req, res) => ingredientFormulaController.create(req, res));
-app.put("/api/formulas/:id",             (req, res) => ingredientFormulaController.update(req, res));
-app.delete("/api/formulas/:id",          (req, res) => ingredientFormulaController.delete(req, res));
-
-// ============= FULFILLMENT SHEET =============
-
-app.post('/api/catering/orders/:id/fulfillment-sheet', async (req, res) => {
-  try {
-    const actor = req.headers['x-user'] || 'unknown';
-    const order = await cateringOrderService.getOrderById(req.params.id);
-
-    const storeResult = await pool.query(
-      'SELECT name, code FROM stores WHERE id = $1', [order.storeId]
-    );
-    order.storeName = storeResult.rows[0]?.name || '';
-    order.storeCode = storeResult.rows[0]?.code || '';
-
-    if (!order.items || order.items.length === 0) {
-      order.items = order.parsedData?.items || [];
-    }
-
-    const newVersion = (order.pdfVersion || 1) + 1;
-    await pool.query(`
-      UPDATE catering_orders
-      SET pdf_version = $1, pdf_needs_update = false, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2
-    `, [newVersion, order.id]);
-    order.pdfVersion = newVersion;
-
-    const calculatedData = await fulfillmentCalculator.calculate(order);
-    calculatedData.header.isManuallyEdited = order.isManuallyEdited || false;
-    calculatedData.header.pdfVersion       = newVersion;
-
-    const pdf     = await fulfillmentGenerator.generate(calculatedData);
-    const pdfName = fulfillmentGenerator.buildFilename(order, order.storeCode);
-
-    res.set({
-      'Content-Type':        'application/pdf',
-      'Content-Disposition': `inline; filename="${pdfName}"`,
-      'Content-Length':      pdf.length,
-    });
-    res.send(pdf);
-
-    // PDF audit + Calendar sync en background
-    setImmediate(async () => {
-      try {
-        await auditService.logPdfGenerated(order.id, actor, newVersion);
-
-        const orderRow = await pool.query(
-          'SELECT google_event_id FROM catering_orders WHERE id = $1', [order.id]
-        );
-        const existingEventId = orderRow.rows[0]?.google_event_id;
-
-        let calResult;
-        if (existingEventId) {
-          calResult = await googleCalendarService.updateEvent(order, existingEventId, pdf, pdfName);
-        } else {
-          calResult = await googleCalendarService.createEvent(order, pdf, pdfName);
-        }
-
-        if (calResult?.eventId) {
-          await pool.query(`
-            UPDATE catering_orders
-            SET google_event_id = $1, calendar_needs_update = false, updated_at = CURRENT_TIMESTAMP
-            WHERE id = $2
-          `, [calResult.eventId, order.id]);
-          await auditService.logCalendarSynced(order.id, 'system', calResult.eventId);
-          console.log(`📅 Calendar synced for order ${order.displayNumber}`);
-        }
-      } catch (err) {
-        console.error('❌ Post-PDF background error:', err.message);
-      }
-    });
-  } catch (error) {
-    console.error('❌ Fulfillment sheet error:', error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Preview PDF en browser
-app.get('/api/catering/orders/:id/fulfillment-sheet/preview', async (req, res) => {
-  try {
-    const order = await cateringOrderService.getOrderById(req.params.id);
-    const storeResult = await pool.query(
-      'SELECT name, code FROM stores WHERE id = $1', [order.storeId]
-    );
-    order.storeName = storeResult.rows[0]?.name || '';
-    order.storeCode = storeResult.rows[0]?.code || '';
-
-    if (!order.items || order.items.length === 0) {
-      order.items = order.parsedData?.items || [];
-    }
-
-    const calculatedData = await fulfillmentCalculator.calculate(order);
-    calculatedData.header.isManuallyEdited = order.isManuallyEdited || false;
-    calculatedData.header.pdfVersion       = order.pdfVersion || 1;
-
-    const pdf = await fulfillmentGenerator.generate(calculatedData);
-    res.set({
-      'Content-Type':        'application/pdf',
-      'Content-Disposition': 'inline',
-      'Content-Length':      pdf.length,
-    });
-    res.end(pdf, 'binary');
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// ============= MENU ITEM ROUTES =============
-
-app.get('/api/menu-items',                           (req, res) => menuItemController.getAll(req, res));
-app.get('/api/menu-items/event/:eventType',          (req, res) => menuItemController.getByEventType(req, res));
-app.get('/api/menu-items/order-creation/:eventType', (req, res) => menuItemController.getForOrderCreation(req, res));
-app.post('/api/menu-items',                          (req, res) => menuItemController.create(req, res));
-app.put('/api/menu-items/:id',                       (req, res) => menuItemController.update(req, res));
-app.delete('/api/menu-items/:id',                    (req, res) => menuItemController.delete(req, res));
-
-// ─── Start server ──────────────────────────────────────────────────────────
-
+// ─── Start ────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`\n${"=".repeat(60)}`);
-  console.log(`🚀 LadyBird API Server`);
-  console.log(`${"=".repeat(60)}`);
-  console.log(`📡 Server:   http://localhost:${PORT}`);
-  console.log(`🐘 Database: PostgreSQL (${process.env.DB_NAME})`);
-  console.log(`${"=".repeat(60)}`);
-  console.log(`\n📋 Endpoints disponibles:\n`);
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`🚀 LadyBird API Server — http://localhost:${PORT}`);
+  console.log(`${'='.repeat(60)}`);
   console.log(`🔐 Auth:      POST /api/auth/registro | /api/auth/login`);
   console.log(`🏪 Stores:    GET/POST/PUT/DELETE /api/stores`);
   console.log(`🔧 Equipment: GET/POST/PUT/DELETE /api/equipment`);
   console.log(`🍞 Toast:     POST /api/toast/sync | /sync/historical | /sync/menu`);
   console.log(`🌮 Orders:    GET/POST/PATCH /api/catering/orders`);
   console.log(`📋 Formulas:  GET/POST/PUT/DELETE /api/formulas`);
-  console.log(`🔗 Aliases:   GET/POST/DELETE /api/formulas/aliases`);
   console.log(`📄 PDF:       POST /api/catering/orders/:id/fulfillment-sheet`);
   console.log(`🍽️  Menu:      GET/POST/PUT/DELETE /api/menu-items`);
   console.log(`📊 Audit:     GET /api/audit | /api/audit/orders/:orderId`);
-  console.log(`${"=".repeat(60)}\n`);
+  console.log(`${'='.repeat(60)}\n`);
 });
 
-// ============= POLLING AUTOMÁTICO =============
-cron.schedule("*/15 * * * *", async () => {
+// ─── Auto-sync polling ────────────────────────────────────────────────────
+cron.schedule('*/15 * * * *', async () => {
   console.log(`\n⏰ [${new Date().toISOString()}] Auto-sync iniciado...`);
   try {
     const results       = await toastSyncService.syncAll({ minutesBack: 30 });
     const totalCatering = results.reduce((sum, r) => sum + (r.catering || 0), 0);
     if (totalCatering > 0)
-      console.log(`🍽️  ${totalCatering} nuevas órdenes de catering detectadas`);
-    console.log(`✅ Auto-sync completo`);
+      console.log(`🍽️  ${totalCatering} nuevas órdenes detectadas`);
+    console.log('✅ Auto-sync completo');
   } catch (error) {
-    console.error(`❌ Auto-sync error:`, error.message);
+    console.error('❌ Auto-sync error:', error.message);
   }
 });
 
-console.log("⏰ Polling activo — sync cada 15 minutos");
+console.log('⏰ Polling activo — sync cada 15 minutos');
