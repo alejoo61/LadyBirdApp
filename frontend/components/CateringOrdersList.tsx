@@ -8,6 +8,7 @@ import { cateringApi } from "@/services/api/cateringApi";
 import type { CateringOrder, CateringOrdersParams } from "@/services/api/cateringApi";
 import { storesApi } from "@/services/api/storesApi";
 import type { Store } from "@/services/api/storesApi";
+import OrderAuditLog from '@/components/OrderAuditLog';
 import EditOrderModal from "@/components/EditOrderModal";
 import {
   Search, ChevronDown, ChevronUp, Clock, User, Phone, Mail, Package,
@@ -584,6 +585,7 @@ export default function CateringOrdersList({
                 </button>
               </div>
             </div>
+            <OrderAuditLog orderId={order.id} />
           </div>
         )}
       </div>

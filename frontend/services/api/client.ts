@@ -7,28 +7,31 @@ const apiClient = axios.create({
   },
 });
 
-// Request interceptor (para agregar tokens en el futuro)
+// Request interceptor
 apiClient.interceptors.request.use(
   (config) => {
-    // Aquí podrías agregar tokens de autenticación
-    // const token = localStorage.getItem('token');
-    // if (token) {
-    //   config.headers.Authorization = `Bearer ${token}`;
-    // }
+    // Inyectar usuario para auditoría
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('lb_user');
+      if (stored) {
+        try {
+          const user = JSON.parse(stored);
+          if (user?.usuario) {
+            config.headers['x-user'] = user.usuario;
+          }
+        } catch { /* ignore */ }
+      }
+    }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-// Response interceptor (para manejo de errores global)
+// Response interceptor
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Aquí podrías manejar errores globales
     if (error.response?.status === 401) {
-      // Redirigir al login si no está autenticado
       console.log('Unauthorized');
     }
     return Promise.reject(error);
