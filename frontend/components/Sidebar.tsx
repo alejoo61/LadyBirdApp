@@ -1,7 +1,12 @@
 'use client';
 
 import Image from 'next/image';
-import { LayoutDashboard, Store, HardDrive, Wrench, UtensilsCrossed, FlaskConical, LogOut } from 'lucide-react';
+import {
+  LayoutDashboard, Store, HardDrive, Wrench,
+  UtensilsCrossed, FlaskConical, LogOut, ClipboardList,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import type { AppTab } from '@/context/AppContext';
 
 interface Usuario {
   id: number;
@@ -9,19 +14,20 @@ interface Usuario {
 }
 
 interface SidebarProps {
-  activeTab: string;
-  onTabChange: (tab: string) => void;
-  usuario: Usuario;
-  onLogout: () => void;
+  activeTab:   AppTab;
+  onTabChange: (tab: AppTab) => void;
+  usuario:     Usuario;
+  onLogout:    () => void;
 }
 
-const NAV_ITEMS = [
-  { id: 'Dashboard',  icon: LayoutDashboard },
-  { id: 'Catering',   icon: UtensilsCrossed },
-  { id: 'Formulas',   icon: FlaskConical    },
-  { id: 'Stores',     icon: Store           },
-  { id: 'Equipments', icon: HardDrive       },
-  { id: 'Maintenance',icon: Wrench          },
+const NAV_ITEMS: { id: AppTab; icon: LucideIcon }[] = [
+  { id: 'Dashboard',   icon: LayoutDashboard },
+  { id: 'Catering',    icon: UtensilsCrossed },
+  { id: 'Formulas',    icon: FlaskConical    },
+  { id: 'Audit',       icon: ClipboardList   },
+  { id: 'Stores',      icon: Store           },
+  { id: 'Equipments',  icon: HardDrive       },
+  { id: 'Maintenance', icon: Wrench          },
 ];
 
 export default function Sidebar({ activeTab, onTabChange, usuario, onLogout }: SidebarProps) {
