@@ -31,26 +31,28 @@ export default function Home() {
   const [showNewOrder, setShowNewOrder]       = useState(false);
   const [stores, setStores]                   = useState<Store[]>([]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setMensaje('');
-    try {
-      if (isLogin) {
-        const res = await authApi.login({ usuario, contrasena });
-        setUsuarioLogueado(res.data.usuario);
-      } else {
-        await authApi.registro({ usuario, contrasena });
-        setIsLogin(true);
-        setMensaje('✅ Registration successful. Please login.');
-      }
-    } catch (err: unknown) {
-      const error = err as ApiError;
-      setMensaje(`❌ ${error.response?.data?.error || 'Connection error'}`);
+ const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setMensaje('');
+  try {
+    if (isLogin) {
+      const res = await authApi.login({ usuario, contrasena });
+      setUsuarioLogueado(res.data.usuario);
+      localStorage.setItem('lb_user', JSON.stringify(res.data.usuario));
+    } else {
+      await authApi.registro({ usuario, contrasena });
+      setIsLogin(true);
+      setMensaje('✅ Registration successful. Please login.');
     }
-  };
+  } catch (err: unknown) {
+    const error = err as ApiError;
+    setMensaje(`❌ ${error.response?.data?.error || 'Connection error'}`);
+  }
+};
 
   const handleLogout = () => {
     setUsuarioLogueado(null);
+    localStorage.removeItem('lb_user');
     setUsuario('');
     setContrasena('');
     setMensaje('');

@@ -1,89 +1,91 @@
 require("dotenv").config();
 const express = require("express");
-const cors = require("cors");
-const pool = require("./database/init");
+const cors    = require("cors");
+const pool    = require("./database/init");
 
-// Toast Services
-const ToastAuthService = require("./services/ToastAuthService");
-const ToastApiClient = require("./services/ToastApiClient");
-const ToastSyncService = require("./services/ToastSyncService");
-
-// Repositories
-const StoreRepository = require("./repositories/StoreRepository");
-const EquipmentRepository = require("./repositories/EquipmentRepository");
-
-// Services
-const StoreService = require("./services/StoreService");
-const EquipmentService = require("./services/EquipmentService");
-
-// Controllers
-const StoreController = require("./controllers/StoreController");
-const EquipmentController = require("./controllers/EquipmentController");
-
-// Toast DI
-const toastAuthService = new ToastAuthService();
-const toastApiClient   = new ToastApiClient(toastAuthService);
+// ─── Toast Services ────────────────────────────────────────────────────────
+const ToastAuthService     = require("./services/ToastAuthService");
+const ToastApiClient       = require("./services/ToastApiClient");
+const ToastSyncService     = require("./services/ToastSyncService");
 const ToastMenuSyncService = require('./services/ToastMenuSyncService');
-const toastMenuSyncService = new ToastMenuSyncService(toastApiClient, pool);
 
-// Catering Orders
-const CateringOrderRepository = require("./repositories/CateringOrderRepository");
-const CateringOrderService    = require("./services/CateringOrderService");
-const CateringOrderController = require("./controllers/CateringOrderController");
-const CateringOrderMapper     = require("./mappers/CateringOrderMapper");
-
-// Ingredients
+// ─── Repositories ─────────────────────────────────────────────────────────
+const StoreRepository             = require("./repositories/StoreRepository");
+const EquipmentRepository         = require("./repositories/EquipmentRepository");
+const CateringOrderRepository     = require("./repositories/CateringOrderRepository");
 const IngredientFormulaRepository = require("./repositories/IngredientFormulaRepository");
-const IngredientFormulaService = require("./services/IngredientFormulaService");
-const IngredientFormulaController = require("./controllers/IngredientFormulaController");
+const MenuItemRepository          = require('./repositories/MenuItemRepository');
+const AuditRepository             = require('./repositories/AuditRepository');
 
-// Fulfillment Sheet
+// ─── Services ─────────────────────────────────────────────────────────────
+const StoreService             = require("./services/StoreService");
+const EquipmentService         = require("./services/EquipmentService");
+const CateringOrderService     = require("./services/CateringOrderService");
+const IngredientFormulaService = require("./services/IngredientFormulaService");
 const FulfillmentSheetCalculator = require("./services/FulfillmentSheetCalculator");
 const FulfillmentSheetGenerator  = require("./services/FulfillmentSheetGenerator");
+const GoogleCalendarService      = require("./services/GoogleCalendarService");
+const AuditService               = require('./services/AuditService');
 
-// Google Calendar
-const GoogleCalendarService = require("./services/GoogleCalendarService");
-const googleCalendarService = new GoogleCalendarService();
+// ─── Controllers ──────────────────────────────────────────────────────────
+const StoreController             = require("./controllers/StoreController");
+const EquipmentController         = require("./controllers/EquipmentController");
+const CateringOrderController     = require("./controllers/CateringOrderController");
+const IngredientFormulaController = require("./controllers/IngredientFormulaController");
+const MenuItemController          = require('./controllers/MenuItemController');
+const AuditController             = require('./controllers/AuditController');
 
-// Menu Items
-const MenuItemRepository = require('./repositories/MenuItemRepository');
-const MenuItemController = require('./controllers/MenuItemController');
-const menuItemRepository = new MenuItemRepository(pool);
-const menuItemController = new MenuItemController(menuItemRepository);
+// ─── Mappers ──────────────────────────────────────────────────────────────
+const CateringOrderMapper = require("./mappers/CateringOrderMapper");
 
-const app = express();
+const app  = express();
 const PORT = process.env.PORT || 3001;
 const cron = require("node-cron");
 
-// Middlewares
+// ─── Middlewares ───────────────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
 
-// ─── Dependency Injection ──────────────────────────────────────────────────
+// ─── Dependency Injection ─────────────────────────────────────────────────
 
+// Toast
+const toastAuthService     = new ToastAuthService();
+const toastApiClient       = new ToastApiClient(toastAuthService);
+const toastMenuSyncService = new ToastMenuSyncService(toastApiClient, pool);
+
+// Audit
+const auditRepository = new AuditRepository(pool);
+const auditService    = new AuditService(auditRepository);
+const auditController = new AuditController(auditService);
+
+// Catering
 const cateringOrderRepository = new CateringOrderRepository(pool);
 const cateringOrderService    = new CateringOrderService(cateringOrderRepository);
-const cateringOrderController = new CateringOrderController(cateringOrderService);
+const cateringOrderController = new CateringOrderController(cateringOrderService, auditService);
 
+// Ingredients
 const ingredientFormulaRepository = new IngredientFormulaRepository(pool);
 const ingredientFormulaService    = new IngredientFormulaService(ingredientFormulaRepository);
 const ingredientFormulaController = new IngredientFormulaController(ingredientFormulaService);
 
-const fulfillmentCalculator = new FulfillmentSheetCalculator(
-  ingredientFormulaRepository,
-  pool,
-);
-const fulfillmentGenerator = new FulfillmentSheetGenerator();
+// Fulfillment
+const fulfillmentCalculator = new FulfillmentSheetCalculator(ingredientFormulaRepository, pool);
+const fulfillmentGenerator  = new FulfillmentSheetGenerator();
 
-// Toast Sync — necesita fulfillment y calendar para auto-generar PDF+Calendar
+// Google Calendar
+const googleCalendarService = new GoogleCalendarService();
+
+// Toast Sync (necesita fulfillment + calendar + audit)
 const toastSyncService = new ToastSyncService(
   toastApiClient,
   pool,
   fulfillmentCalculator,
   fulfillmentGenerator,
   googleCalendarService,
+  auditService,   // ← inyectado para logear TOAST_SYNC y CALENDAR_SYNCED
 );
 
+// Stores & Equipment
 const storeRepository     = new StoreRepository(pool);
 const equipmentRepository = new EquipmentRepository(pool);
 const storeService        = new StoreService(storeRepository);
@@ -91,8 +93,11 @@ const equipmentService    = new EquipmentService(equipmentRepository, storeRepos
 const storeController     = new StoreController(storeService);
 const equipmentController = new EquipmentController(equipmentService);
 
-// ─── Health check ──────────────────────────────────────────────────────────
+// Menu Items
+const menuItemRepository = new MenuItemRepository(pool);
+const menuItemController = new MenuItemController(menuItemRepository);
 
+// ─── Health check ─────────────────────────────────────────────────────────
 app.get("/", (req, res) => {
   res.json({
     message:   "LadyBird API - Backend running with PostgreSQL",
@@ -229,52 +234,83 @@ app.post('/api/toast/sync/menu', async (req, res) => {
 
 // ============= CATERING ORDER ROUTES =============
 
-app.get("/api/catering/orders",                      (req, res) => cateringOrderController.getAll(req, res));
-app.get("/api/catering/orders/:id",                  (req, res) => cateringOrderController.getById(req, res));
-app.post("/api/catering/orders",                     (req, res) => cateringOrderController.createManual(req, res));
-app.patch("/api/catering/orders/:id/status",         (req, res) => cateringOrderController.updateStatus(req, res));
-app.patch("/api/catering/orders/:id/override",       (req, res) => cateringOrderController.updateOverride(req, res));
-app.patch("/api/catering/orders/:id/payment-status", (req, res) => cateringOrderController.overridePaymentStatus(req, res));
+app.get("/api/catering/orders",      (req, res) => cateringOrderController.getAll(req, res));
+app.get("/api/catering/orders/:id",  (req, res) => cateringOrderController.getById(req, res));
+app.post("/api/catering/orders",     (req, res) => cateringOrderController.createManual(req, res));
 
-// Manual edit — responde al usuario y dispara PDF+Calendar en background
+app.patch("/api/catering/orders/:id/status", (req, res) =>
+  cateringOrderController.updateStatus(req, res)
+);
+
+app.patch("/api/catering/orders/:id/override", (req, res) =>
+  cateringOrderController.updateOverride(req, res)
+);
+
+app.patch("/api/catering/orders/:id/payment-status", (req, res) =>
+  cateringOrderController.overridePaymentStatus(req, res)
+);
+
+// Manual edit — responde al usuario y dispara PDF+Calendar+Audit en background
 app.patch("/api/catering/orders/:id/manual", async (req, res) => {
   try {
-    const order = await cateringOrderService.updateManual(req.params.id, req.body);
-    const dto   = CateringOrderMapper.toDTO(order);
+    const actor  = req.headers['x-user'] || 'unknown';
+    const before = await cateringOrderService.getOrderById(req.params.id);
+    const order  = await cateringOrderService.updateManual(req.params.id, req.body);
+    const dto    = CateringOrderMapper.toDTO(order);
+
     res.json({ success: true, data: dto, message: 'Order updated manually' });
 
-    // Auto-regenerar PDF y Calendar en background
-    setImmediate(() =>
-      toastSyncService._autoPdfAndCalendar(order.id, dto.storeCode, dto.storeName)
-        .catch(err => console.error('❌ Auto PDF/Calendar after edit:', err.message))
-    );
+    setImmediate(async () => {
+      try {
+        // Audit log
+        await auditService.logManualEdit(req.params.id, actor, before, req.body);
+        // PDF + Calendar
+        await toastSyncService._autoPdfAndCalendar(order.id, dto.storeCode, dto.storeName);
+      } catch (err) {
+        console.error('❌ Post-edit background error:', err.message);
+      }
+    });
   } catch (error) {
     const code = error.message.includes('not found') ? 404 : 500;
     res.status(code).json({ success: false, error: error.message });
   }
 });
 
-// Sync Calendar manual (fallback si el automático falla)
+// Sync Calendar manual
 app.post("/api/catering/orders/:id/sync-calendar", async (req, res) => {
   try {
+    const actor = req.headers['x-user'] || 'unknown';
     const order = await cateringOrderService.getOrderById(req.params.id);
     const storeResult = await pool.query(
       'SELECT name, code FROM stores WHERE id = $1', [order.storeId]
     );
     order.storeName = storeResult.rows[0]?.name || '';
     order.storeCode = storeResult.rows[0]?.code || '';
+
     res.json({ success: true, message: 'Calendar sync started' });
-    setImmediate(() =>
-      toastSyncService._autoPdfAndCalendar(order.id, order.storeCode, order.storeName)
-        .catch(err => console.error('❌ Manual Calendar sync:', err.message))
-    );
+
+    setImmediate(async () => {
+      try {
+        await toastSyncService._autoPdfAndCalendar(order.id, order.storeCode, order.storeName);
+        await auditService.logCalendarSynced(order.id, actor, order.googleEventId);
+      } catch (err) {
+        console.error('❌ Manual Calendar sync:', err.message);
+      }
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
+// ============= AUDIT ROUTES =============
+
+// GET /api/audit/orders/:orderId  — logs de una orden específica
+app.get('/api/audit/orders/:orderId', (req, res) => auditController.getByOrderId(req, res));
+
+// GET /api/audit?actor=alejandro&action=MANUAL_EDIT&limit=50
+app.get('/api/audit', (req, res) => auditController.getAll(req, res));
+
 // ============= INGREDIENT FORMULA ROUTES =============
-// Rutas específicas ANTES de /:id para evitar colisiones
 
 app.get("/api/formulas/aliases",         (req, res) => ingredientFormulaController.getAllAliases(req, res));
 app.post("/api/formulas/aliases",        (req, res) => ingredientFormulaController.createAlias(req, res));
@@ -290,11 +326,11 @@ app.delete("/api/formulas/:id",          (req, res) => ingredientFormulaControll
 
 app.post('/api/catering/orders/:id/fulfillment-sheet', async (req, res) => {
   try {
+    const actor = req.headers['x-user'] || 'unknown';
     const order = await cateringOrderService.getOrderById(req.params.id);
 
     const storeResult = await pool.query(
-      'SELECT name, code FROM stores WHERE id = $1',
-      [order.storeId]
+      'SELECT name, code FROM stores WHERE id = $1', [order.storeId]
     );
     order.storeName = storeResult.rows[0]?.name || '';
     order.storeCode = storeResult.rows[0]?.code || '';
@@ -303,13 +339,10 @@ app.post('/api/catering/orders/:id/fulfillment-sheet', async (req, res) => {
       order.items = order.parsedData?.items || [];
     }
 
-    // Incrementar versión y limpiar flag pdf_needs_update
     const newVersion = (order.pdfVersion || 1) + 1;
     await pool.query(`
       UPDATE catering_orders
-      SET pdf_version       = $1,
-          pdf_needs_update  = false,
-          updated_at        = CURRENT_TIMESTAMP
+      SET pdf_version = $1, pdf_needs_update = false, updated_at = CURRENT_TIMESTAMP
       WHERE id = $2
     `, [newVersion, order.id]);
     order.pdfVersion = newVersion;
@@ -321,48 +354,43 @@ app.post('/api/catering/orders/:id/fulfillment-sheet', async (req, res) => {
     const pdf     = await fulfillmentGenerator.generate(calculatedData);
     const pdfName = fulfillmentGenerator.buildFilename(order, order.storeCode);
 
-    // ── Google Calendar sync (async — no bloquea la respuesta al usuario) ──
-    setImmediate(async () => {
-      try {
-        // Obtener google_event_id actual
-        const orderRow = await pool.query(
-          'SELECT google_event_id FROM catering_orders WHERE id = $1',
-          [order.id]
-        );
-        const existingEventId = orderRow.rows[0]?.google_event_id;
-
-        let calResult;
-        if (existingEventId) {
-          // Actualizar evento existente con nuevo PDF
-          calResult = await googleCalendarService.updateEvent(
-            order, existingEventId, pdf, pdfName
-          );
-        } else {
-          // Crear evento nuevo
-          calResult = await googleCalendarService.createEvent(order, pdf, pdfName);
-        }
-
-        if (calResult?.eventId) {
-          await pool.query(`
-            UPDATE catering_orders
-            SET google_event_id       = $1,
-                calendar_needs_update = false,
-                updated_at            = CURRENT_TIMESTAMP
-            WHERE id = $2
-          `, [calResult.eventId, order.id]);
-          console.log(`📅 Calendar synced for order ${order.displayNumber}`);
-        }
-      } catch (calErr) {
-        console.error('❌ Calendar sync error:', calErr.message);
-      }
-    });
-
     res.set({
       'Content-Type':        'application/pdf',
       'Content-Disposition': `inline; filename="${pdfName}"`,
       'Content-Length':      pdf.length,
     });
     res.send(pdf);
+
+    // PDF audit + Calendar sync en background
+    setImmediate(async () => {
+      try {
+        await auditService.logPdfGenerated(order.id, actor, newVersion);
+
+        const orderRow = await pool.query(
+          'SELECT google_event_id FROM catering_orders WHERE id = $1', [order.id]
+        );
+        const existingEventId = orderRow.rows[0]?.google_event_id;
+
+        let calResult;
+        if (existingEventId) {
+          calResult = await googleCalendarService.updateEvent(order, existingEventId, pdf, pdfName);
+        } else {
+          calResult = await googleCalendarService.createEvent(order, pdf, pdfName);
+        }
+
+        if (calResult?.eventId) {
+          await pool.query(`
+            UPDATE catering_orders
+            SET google_event_id = $1, calendar_needs_update = false, updated_at = CURRENT_TIMESTAMP
+            WHERE id = $2
+          `, [calResult.eventId, order.id]);
+          await auditService.logCalendarSynced(order.id, 'system', calResult.eventId);
+          console.log(`📅 Calendar synced for order ${order.displayNumber}`);
+        }
+      } catch (err) {
+        console.error('❌ Post-PDF background error:', err.message);
+      }
+    });
   } catch (error) {
     console.error('❌ Fulfillment sheet error:', error.message);
     res.status(500).json({ success: false, error: error.message });
@@ -374,8 +402,7 @@ app.get('/api/catering/orders/:id/fulfillment-sheet/preview', async (req, res) =
   try {
     const order = await cateringOrderService.getOrderById(req.params.id);
     const storeResult = await pool.query(
-      'SELECT name, code FROM stores WHERE id = $1',
-      [order.storeId]
+      'SELECT name, code FROM stores WHERE id = $1', [order.storeId]
     );
     order.storeName = storeResult.rows[0]?.name || '';
     order.storeCode = storeResult.rows[0]?.code || '';
@@ -428,6 +455,7 @@ app.listen(PORT, () => {
   console.log(`🔗 Aliases:   GET/POST/DELETE /api/formulas/aliases`);
   console.log(`📄 PDF:       POST /api/catering/orders/:id/fulfillment-sheet`);
   console.log(`🍽️  Menu:      GET/POST/PUT/DELETE /api/menu-items`);
+  console.log(`📊 Audit:     GET /api/audit | /api/audit/orders/:orderId`);
   console.log(`${"=".repeat(60)}\n`);
 });
 

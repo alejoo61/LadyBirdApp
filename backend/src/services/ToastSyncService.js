@@ -3,7 +3,7 @@ const OrderClassifier = require('./OrderClassifier');
 const OrderParser     = require('./OrderParser');
 
 class ToastSyncService {
-  constructor(toastApiClient, pool, fulfillmentCalculator, fulfillmentGenerator, googleCalendarService) {
+  constructor(toastApiClient, pool, fulfillmentCalculator, fulfillmentGenerator, googleCalendarService, auditService) {
     this.toastApiClient         = toastApiClient;
     this.pool                   = pool;
     this.classifier             = new OrderClassifier();
@@ -11,6 +11,7 @@ class ToastSyncService {
     this.fulfillmentCalculator  = fulfillmentCalculator;
     this.fulfillmentGenerator   = fulfillmentGenerator;
     this.googleCalendarService  = googleCalendarService;
+    this.auditService           = auditService || null; // opcional — no rompe si no se inyecta
   }
 
   _sleep(ms) {
@@ -171,7 +172,14 @@ class ToastSyncService {
               updated_at            = CURRENT_TIMESTAMP
           WHERE id = $2
         `, [calResult.eventId, orderId]);
+
         console.log(`✅ Calendar synced for order ${order.displayNumber} — event: ${calResult.eventId}`);
+
+        // Audit log de calendar sync
+        if (this.auditService) {
+          await this.auditService.logCalendarSynced(orderId, 'system', calResult.eventId)
+            .catch(e => console.error('⚠️  Audit log error:', e.message));
+        }
       }
     } catch (err) {
       console.error(`❌ Auto PDF/Calendar error for order ${orderId}:`, err.message);
@@ -199,8 +207,17 @@ class ToastSyncService {
             );
             catering++;
 
-            if (isNew && this.fulfillmentCalculator && this.googleCalendarService) {
-              setImmediate(() => this._autoPdfAndCalendar(cateringOrderId, storeCode, storeName));
+            if (isNew) {
+              // Audit log de nueva orden desde Toast
+              if (this.auditService) {
+                this.auditService.logToastSync(cateringOrderId)
+                  .catch(e => console.error('⚠️  Audit log error:', e.message));
+              }
+
+              // Auto PDF + Calendar
+              if (this.fulfillmentCalculator && this.googleCalendarService) {
+                setImmediate(() => this._autoPdfAndCalendar(cateringOrderId, storeCode, storeName));
+              }
             }
           }
         }
