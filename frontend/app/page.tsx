@@ -10,6 +10,7 @@ import StoreList from '@/components/StoresList';
 import EquipmentList from '@/components/EquipmentList';
 import FormulaManager from '@/components/FormulaManager';
 import NewOrderWizard from '@/components/NewOrderWizard';
+import AuditPage from '@/components/AuditPage';
 import type { Store } from '@/services/api/storesApi';
 
 interface Usuario {
@@ -81,6 +82,7 @@ export default function Home() {
           )}
           {activeTab === 'Formulas'    && <FormulaManager />}
           {activeTab === 'Stores'      && <StoreList />}
+          {activeTab === 'Audit' && <AuditPage />}
           {activeTab === 'Equipments'  && <EquipmentList />}
           {activeTab === 'Maintenance' && <Dashboard usuario={usuarioLogueado.usuario} />}
         </main>
