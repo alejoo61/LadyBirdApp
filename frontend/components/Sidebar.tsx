@@ -5,6 +5,8 @@ import {
   LayoutDashboard, Store, HardDrive, Wrench,
   UtensilsCrossed, FlaskConical, LogOut, ClipboardList,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import type { AppTab } from '@/context/AppContext';
 
 interface Usuario {
   id: number;
@@ -12,13 +14,13 @@ interface Usuario {
 }
 
 interface SidebarProps {
-  activeTab:   string;
-  onTabChange: (tab: string) => void;
+  activeTab:   AppTab;
+  onTabChange: (tab: AppTab) => void;
   usuario:     Usuario;
   onLogout:    () => void;
 }
 
-const NAV_ITEMS = [
+const NAV_ITEMS: { id: AppTab; icon: LucideIcon }[] = [
   { id: 'Dashboard',   icon: LayoutDashboard },
   { id: 'Catering',    icon: UtensilsCrossed },
   { id: 'Formulas',    icon: FlaskConical    },
