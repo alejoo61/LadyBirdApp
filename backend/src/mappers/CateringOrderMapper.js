@@ -62,6 +62,10 @@ class CateringOrderMapper {
       (i.displayName || i.name || '').toLowerCase().includes('space rental')
     );
 
+    // Restar 10 minutos al fulfillment date para que cocina siempre llegue antes
+    // La fecha real se guarda en DB — esto es solo presentación
+    const estimatedFulfillmentDate = this._subtractMinutes(entity.estimatedFulfillmentDate, 10);
+
     return {
       id:                       entity.id,
       storeId:                  entity.storeId,
@@ -86,7 +90,7 @@ class CateringOrderMapper {
       clientEmail:              entity.clientEmail,
       clientPhone:              entity.clientPhone,
       orderDate:                entity.orderDate,
-      estimatedFulfillmentDate: entity.estimatedFulfillmentDate,
+      estimatedFulfillmentDate,                           // ← -10 min (solo UI)
       kitchenFinishTime:        entity.getKitchenFinishTime(),
       businessDate:             entity.businessDate,
       deliveryMethod:           entity.deliveryMethod,
@@ -106,6 +110,22 @@ class CateringOrderMapper {
   static toDTOList(orders) {
     if (!Array.isArray(orders)) return [];
     return orders.map(o => this.toDTO(o));
+  }
+
+  /**
+   * Resta N minutos a una fecha ISO string.
+   * Si la fecha es inválida o null, retorna null.
+   */
+  static _subtractMinutes(dateStr, minutes) {
+    if (!dateStr) return null;
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      d.setMinutes(d.getMinutes() - minutes);
+      return d.toISOString();
+    } catch {
+      return dateStr;
+    }
   }
 
   static _getPaymentStatusLabel(status) {
