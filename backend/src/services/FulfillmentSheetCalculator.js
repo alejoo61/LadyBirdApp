@@ -2,8 +2,9 @@
 
 const IngredientResolverService = require('./IngredientResolverService');
 
-// Keywords para detectar ensaladas desde el nombre del line item
-const SALAD_KEYWORDS = ['salad', 'city slicker', 'cowboy', 'farmer'];
+const SALAD_KEYWORDS    = ['salad', 'city slicker', 'cowboy', 'farmer'];
+const DRINK_KEYWORDS    = ['coffee', 'agua', 'limeade', 'drink', 'beverage', 'milk', 'water'];
+const SIDE_PACK_KEYWORD = 'side pack';
 
 class FulfillmentSheetCalculator {
   constructor(ingredientFormulaRepository, pool) {
@@ -80,24 +81,56 @@ class FulfillmentSheetCalculator {
     const delivery = parsedData?.delivery || {};
     const items    = parsedData?.items || [];
 
-    const boxes          = [];
-    const drinks         = [];
-    const manualSalsas   = [];
-    const drinkKeywords  = ['coffee', 'agua', 'limeade', 'drink', 'beverage', 'milk', 'water'];
+    const boxes        = [];
+    const sidePacks    = [];   // 'Bird Box Side Pack — nueva sección
+    const drinks       = [];
+    const manualSalsas = [];
 
     for (const item of items) {
       const itemNameLc   = (item.displayName || item.name || '').toLowerCase();
       const modifiers    = item.modifiers || [];
       const hasModifiers = modifiers.length > 0;
 
-      // ── Ensaladas — detectar ANTES que cualquier otra cosa ──
-      // Las ensaladas tienen modifiers de proteína pero NO son boxes
-      if (SALAD_KEYWORDS.some(k => itemNameLc.includes(k))) {
-        continue; // se procesan aparte con _extractSalads al final
+      // ── Ensaladas ──
+      if (SALAD_KEYWORDS.some(k => itemNameLc.includes(k))) continue;
+
+      // ── Bird Box Side Pack ──
+      if (itemNameLc.includes(SIDE_PACK_KEYWORD)) {
+        const qty = item.quantity || 1;
+
+        // Detectar salsa elegida por el cliente
+        const salsaMod = modifiers.find(m => {
+          const n = (m.displayName || '').toLowerCase();
+          return n.includes('roja') || n.includes('verde') ||
+                 n.includes('patron') || n.includes('patrón');
+        });
+
+        // Normalizar nombre de salsa
+        let salsaName = 'Salsa Roja'; // default
+        if (salsaMod) {
+          const sn = (salsaMod.displayName || '').toLowerCase();
+          if (sn.includes('verde'))           salsaName = 'Salsa Verde';
+          else if (sn.includes('patron') || sn.includes('patrón')) salsaName = 'Salsa Patrón';
+          else                                salsaName = 'Salsa Roja';
+        }
+
+        sidePacks.push({
+          name:      item.displayName || item.name,
+          quantity:  qty,
+          salsaName,
+          // Contenido fijo del pack × qty
+          contents: [
+            { item: 'Guacamole',   amount: `${32 * qty} oz`, packaging: `${qty}x 32 oz container`, utensil: 'Spoon',      tempType: 'cold' },
+            { item: 'Queso',       amount: `${32 * qty} oz`, packaging: `${qty}x 32 oz container`, utensil: 'Ladle',      tempType: 'hot'  },
+            { item: salsaName,     amount: `${32 * qty} oz`, packaging: `${qty}x 32 oz container`, utensil: 'Ladle',      tempType: 'cold' },
+            { item: 'Chips',       amount: `${qty} pan${qty > 1 ? 's' : ''}`, packaging: `${qty}x Full Pan`, utensil: 'Tongs Large', tempType: 'dry'  },
+          ],
+        });
+        continue;
       }
 
-      // ── Salsa Pack — tiene modifier de salsa elegida pero NO es un box ──
-      if (itemNameLc.includes('salsa pack')) {
+      // ── Salsa Pack standalone (distinto del Side Pack) ──
+      if (itemNameLc.includes('salsa pack') && !itemNameLc.includes(SIDE_PACK_KEYWORD)) {
         const salsaMod = modifiers.find(m => {
           const n = (m.displayName || '').toLowerCase();
           return n.includes('roja') || n.includes('verde') || n.includes('patron') || n.includes('patrón');
@@ -121,7 +154,7 @@ class FulfillmentSheetCalculator {
       }
 
       // ── Bebidas ──
-      if (drinkKeywords.some(k => itemNameLc.includes(k))) {
+      if (DRINK_KEYWORDS.some(k => itemNameLc.includes(k))) {
         const wantsCups = modifiers.some(m =>
           (m.displayName || '').toLowerCase().includes('yes, i want cups')
         );
@@ -134,7 +167,7 @@ class FulfillmentSheetCalculator {
         continue;
       }
 
-      // ── Items sin modifiers — salsas/ingredientes/addons agregados manualmente ──
+      // ── Items sin modifiers — addons/salsas manuales ──
       if (!hasModifiers) {
         const dn            = item.displayName || item.name || '';
         const canonicalName = await this.resolver.resolveCanonicalName(dn);
@@ -167,7 +200,7 @@ class FulfillmentSheetCalculator {
         continue;
       }
 
-      // ── Bird Box con modifiers ──
+      // ── Bird Box con tacos ──
       const sizeMod   = modifiers.find(m => this.resolver.isSizeModifier(m.displayName || ''));
       const tacoCount = sizeMod
         ? parseInt((sizeMod.displayName || '').match(/(\d+)\s*tacos?/i)?.[1] || 0)
@@ -206,7 +239,7 @@ class FulfillmentSheetCalculator {
       });
     }
 
-    // ── Calcular totales por combo + tortillas por combo ──
+    // ── Combos + tortillas ──
     const comboTotals = {};
     let totalTacos = 0;
 
@@ -226,7 +259,7 @@ class FulfillmentSheetCalculator {
           comboTotals[combo].flourTortillas += Math.ceil(qty / 2);
           comboTotals[combo].cornTortillas  += Math.floor(qty / 2);
         } else if ((box.tortilla || '').toLowerCase().includes('corn')) {
-          comboTotals[combo].cornTortillas  += qty;
+          comboTotals[combo].cornTortillas += qty;
         } else {
           comboTotals[combo].flourTortillas += qty;
         }
@@ -239,13 +272,11 @@ class FulfillmentSheetCalculator {
         tortillaLabel = `${data.flourTortillas}F / ${data.cornTortillas}C`;
       } else if (data.flourTortillas > 0) {
         tortillaLabel = `${data.flourTortillas} Flour`;
-      } else if (data.cornTortillas > 0) {
+      } else {
         tortillaLabel = `${data.cornTortillas} Corn`;
       }
       return {
-        name:           combo,
-        total:          data.total,
-        unit:           'tacos',
+        name: combo, total: data.total, unit: 'tacos',
         tortillaLabel,
         flourTortillas: data.flourTortillas,
         cornTortillas:  data.cornTortillas,
@@ -256,7 +287,7 @@ class FulfillmentSheetCalculator {
       };
     });
 
-    // ── Clasificar items manuales por categoría ──
+    // ── Clasificar manuales ──
     const manualSalsaItems = manualSalsas.filter(i => i.category === 'salsa');
     const addonItems       = manualSalsas.filter(i => i.category === 'addon');
     const manualOtherItems = manualSalsas.filter(i => !['salsa', 'addon'].includes(i.category));
@@ -284,12 +315,75 @@ class FulfillmentSheetCalculator {
       ? await this.resolver.calculatePaperGoods('BIRD_BOX', guestCount)
       : { included: false, items: [] };
 
-    // ── Ensaladas (pueden agregarse a Bird Box también) ──
+    // ── Ensaladas ──
     const salads = this._extractSalads(items);
+
+    // ── Summary items — una fila por line item ──
+    const summaryItems = [
+      // Boxes de tacos
+      ...boxes.map(box => ({
+        type:     'box',
+        name:     box.name,
+        quantity: box.quantity,
+        detail:   [
+          `${box.tacoCount * box.quantity} tacos`,
+          box.combos.length > 0 ? box.combos.join(' / ') : '—',
+          box.is5050 ? '50/50 Tortilla' : (box.tortilla || 'Flour'),
+        ].filter(Boolean).join(' · '),
+        chipsAndSalsa: box.wantsChips ? 'Yes' : 'No',
+        paper:         box.wantsPaper ? 'Yes' : 'No',
+      })),
+      // Side Packs
+      ...sidePacks.map(sp => ({
+        type:     'sidepack',
+        name:     sp.name,
+        quantity: sp.quantity,
+        detail:   `32oz Guac · 32oz Queso · 32oz ${sp.salsaName} · Chips`,
+        chipsAndSalsa: '—',
+        paper:         '—',
+      })),
+      // Addons
+      ...addonItems.map(a => ({
+        type:     'addon',
+        name:     a.name,
+        quantity: a.quantity || 1,
+        detail:   `${a.totalAmount} ${a.unit}`,
+        chipsAndSalsa: '—',
+        paper:         '—',
+      })),
+      // Salads
+      ...salads.map(s => ({
+        type:     'salad',
+        name:     `${s.saladType} Salad (${s.size})`,
+        quantity: s.quantity || 1,
+        detail:   [
+          s.protein
+            ? s.protein.toLowerCase().includes('without') || s.protein.toLowerCase().includes('no protein')
+              ? 'No protein'
+              : s.protein
+            : 'No protein',
+          `Serves ${(s.serves || (s.size === 'Large' ? 20 : 10)) * (s.quantity || 1)}`,
+          s.dressing || '',
+        ].filter(Boolean).join(' · '),
+        chipsAndSalsa: '—',
+        paper:         '—',
+      })),
+      // Drinks
+      ...drinks.map(d => ({
+        type:     'drink',
+        name:     d.name,
+        quantity: d.quantity,
+        detail:   d.wantsCups ? 'With cups & lids' : 'No cups',
+        chipsAndSalsa: '—',
+        paper:         '—',
+      })),
+    ];
 
     return {
       header:         this._buildHeader(cateringOrder, delivery),
-      boxes,
+      summaryItems,   // ← nuevo — reemplaza boxes en el Summary
+      boxes,          // ← se mantiene para lógica de chips/paper
+      sidePacks,      // ← nuevo
       tacoRows,
       chipsAndSalsa,
       salsas:         manualSalsaItems,
@@ -300,10 +394,11 @@ class FulfillmentSheetCalculator {
       paperGoods,
       totalTacos,
       salads,
-      hotItems:  [
+      hotItems: [
         ...tacoRows,
         ...drinks.filter(d => d.tempType === 'hot'),
         ...addonItems.filter(i => i.tempType === 'hot'),
+        ...sidePacks.flatMap(sp => sp.contents.filter(c => c.tempType === 'hot')),
       ],
       coldItems: [
         ...chipsAndSalsa.filter(i => i.tempType === 'cold'),
@@ -311,10 +406,12 @@ class FulfillmentSheetCalculator {
         ...manualSalsaItems,
         ...addonItems.filter(i => i.tempType === 'cold'),
         ...salads,
+        ...sidePacks.flatMap(sp => sp.contents.filter(c => c.tempType === 'cold')),
       ],
       dryItems: [
         ...chipsAndSalsa.filter(i => i.tempType === 'dry'),
         ...addonItems.filter(i => i.tempType === 'dry'),
+        ...sidePacks.flatMap(sp => sp.contents.filter(c => c.tempType === 'dry')),
       ],
       proteins: [], toppings: [], tortillas: [], snacks: [],
     };
@@ -331,17 +428,12 @@ class FulfillmentSheetCalculator {
 
     for (const item of items) {
       const modifiers = item.modifiers || [];
-
-      const combo    = modifiers.find(m => /^#\d+/i.test((m.displayName || '').trim()));
-      const tortilla = modifiers.find(m => {
+      const combo     = modifiers.find(m => /^#\d+/i.test((m.displayName || '').trim()));
+      const tortilla  = modifiers.find(m => {
         const n = (m.displayName || '').toLowerCase();
         return n.includes('flour') || n.includes('corn') || n.includes('50/50');
       });
-
-      if (modifiers.some(m => this.resolver.isPaperYes(m.displayName || ''))) {
-        wantsPaper = true;
-      }
-
+      if (modifiers.some(m => this.resolver.isPaperYes(m.displayName || ''))) wantsPaper = true;
       for (let i = 0; i < (item.quantity || 1); i++) {
         personalBoxes.push({
           combo:    combo?.displayName || item.displayName || item.name,
@@ -357,8 +449,7 @@ class FulfillmentSheetCalculator {
 
     return {
       header: this._buildHeader(cateringOrder, delivery),
-      personalBoxes,
-      paperGoods,
+      personalBoxes, paperGoods,
       proteins: [], toppings: [], salsas: [], tortillas: [], snacks: [],
       hotItems: [], coldItems: [], dryItems: [],
     };
@@ -400,39 +491,25 @@ class FulfillmentSheetCalculator {
 
   // ─── HELPERS ──────────────────────────────────────────────────────────────
 
-  /**
-   * Extrae ensaladas desde los line items de Toast.
-   * Funciona para TACO_BAR y BIRD_BOX.
-   * Las ensaladas tienen modifiers de proteína — se detectan por nombre, no por ausencia de modifiers.
-   */
   _extractSalads(items) {
     const salads = [];
-
     for (const item of items) {
       const itemNameLc = (item.displayName || item.name || '').toLowerCase();
-      const isSalad    = SALAD_KEYWORDS.some(k => itemNameLc.includes(k));
-      if (!isSalad) continue;
+      if (!SALAD_KEYWORDS.some(k => itemNameLc.includes(k))) continue;
 
-      const modifiers = item.modifiers || [];
-      const qty       = item.quantity || 1;
-
-      // Detectar proteína elegida desde los modifiers
+      const modifiers  = item.modifiers || [];
+      const qty        = item.quantity || 1;
       const proteinMod = modifiers.find(m => {
         const n = (m.displayName || '').toLowerCase();
         return n.includes('brisket') || n.includes('chicken') || n.includes('chorizo') ||
                n.includes('without protein') || n.includes('no protein');
       });
-      const protein = proteinMod?.displayName || null;
 
-      // Detectar serves desde el nombre (ej. "for 10", "for 20")
       const servesMatch = itemNameLc.match(/for\s+(\d+)/i);
       const serves      = servesMatch ? parseInt(servesMatch[1]) : null;
+      const isLarge     = itemNameLc.includes('large');
+      const size        = isLarge ? 'Large' : 'Small';
 
-      // Size
-      const isLarge = itemNameLc.includes('large');
-      const size    = isLarge ? 'Large' : 'Small';
-
-      // Tipo de ensalada
       let saladType = 'Salad';
       if (itemNameLc.includes('city slicker')) saladType = 'City Slicker';
       else if (itemNameLc.includes('cowboy'))  saladType = 'The Cowboy';
@@ -440,18 +517,15 @@ class FulfillmentSheetCalculator {
 
       salads.push({
         name:      item.displayName || item.name,
-        saladType,
-        size,
-        protein,
-        serves,
-        quantity:  qty,
+        saladType, size,
+        protein:   proteinMod?.displayName || null,
+        serves, quantity: qty,
         packaging: isLarge ? '1 full pan' : '1 half pan',
         utensil:   'Tongs / Spoon',
         tempType:  'cold',
         dressing:  this._getSaladDressing(saladType),
       });
     }
-
     return salads;
   }
 
@@ -464,9 +538,6 @@ class FulfillmentSheetCalculator {
     return map[saladType] || 'Dressing on the side';
   }
 
-  /**
-   * Retorna la cantidad fija para addon packs (no escalados por guest count).
-   */
   _getFixedPackAmount(canonicalName, qty) {
     const fixedAmounts = {
       'Chips & Queso':     32,
@@ -474,8 +545,7 @@ class FulfillmentSheetCalculator {
       'Chips & Salsa':     32,
       'Bunuelos':           1,
     };
-    const base = fixedAmounts[canonicalName] ?? 1;
-    return base * qty;
+    return (fixedAmounts[canonicalName] ?? 1) * qty;
   }
 
   _buildHeader(order, delivery) {
@@ -510,29 +580,21 @@ class FulfillmentSheetCalculator {
       const packaging = this.resolver.getPackaging(flourItem.formula, guestCount);
       result.push({
         name:         is5050 ? 'Flour Tortillas (50/50)' : 'Flour Tortillas',
-        total,
-        unit:         flourItem.formula.unit,
-        packaging:    packaging.package,
-        packagingQty: packaging.qty,
-        utensil:      flourItem.formula.utensil,
-        tempType:     'hot',
+        total, unit:  flourItem.formula.unit,
+        packaging:    packaging.package, packagingQty: packaging.qty,
+        utensil:      flourItem.formula.utensil, tempType: 'hot',
       });
     }
-
     if (cornItem) {
       const total     = this.resolver.calculateAmount(cornItem.formula, guestCount);
       const packaging = this.resolver.getPackaging(cornItem.formula, guestCount);
       result.push({
         name:         is5050 ? 'Corn Tortillas (50/50)' : 'Corn Tortillas',
-        total,
-        unit:         cornItem.formula.unit,
-        packaging:    packaging.package,
-        packagingQty: packaging.qty,
-        utensil:      cornItem.formula.utensil,
-        tempType:     'hot',
+        total, unit:  cornItem.formula.unit,
+        packaging:    packaging.package, packagingQty: packaging.qty,
+        utensil:      cornItem.formula.utensil, tempType: 'hot',
       });
     }
-
     return result;
   }
 
