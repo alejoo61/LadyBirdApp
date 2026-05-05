@@ -1,12 +1,12 @@
 // src/services/FulfillmentSheetGenerator.js
-const puppeteer          = require('puppeteer');
-const path               = require('path');
-const fs                 = require('fs');
-const os                 = require('os');
-const TacoBarGenerator   = require('./generators/TacoBarGenerator');
-const BirdBoxGenerator   = require('./generators/BirdBoxGenerator');
+const puppeteer            = require('puppeteer');
+const path                 = require('path');
+const fs                   = require('fs');
+const os                   = require('os');
+const TacoBarGenerator     = require('./generators/TacoBarGenerator');
+const BirdBoxGenerator     = require('./generators/BirdBoxGenerator');
 const PersonalBoxGenerator = require('./generators/PersonalBoxGenerator');
-const FoodaGenerator     = require('./generators/FoodaGenerator');
+const FoodaGenerator       = require('./generators/FoodaGenerator');
 
 const GENERATORS = {
   TACO_BAR:     new TacoBarGenerator(),
@@ -25,18 +25,30 @@ class FulfillmentSheetGenerator {
     const tmpPath = path.join(os.tmpdir(), `fulfillment-${Date.now()}.pdf`);
     const browser = await puppeteer.launch({
       headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+      ],
     });
 
     try {
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
+
+      // domcontentloaded es suficiente — el HTML es local, no necesita red
+      await page.setContent(html, {
+        waitUntil: 'domcontentloaded',
+        timeout:   10000,
+      });
+
       await page.pdf({
         path:            tmpPath,
         format:          'Letter',
         printBackground: true,
         margin:          { top: '0.4in', right: '0.4in', bottom: '0.4in', left: '0.4in' },
       });
+
       return fs.readFileSync(tmpPath);
     } finally {
       await browser.close();
