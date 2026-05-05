@@ -6,7 +6,7 @@ class BirdBoxGenerator extends BaseGenerator {
   build(data) {
     const {
       header, summaryItems, boxes, tacoRows, chipsAndSalsa,
-      salsas, hasManuasSalsas, drinks, paperGoods,
+      chipsBreakdown, salsas, hasManuasSalsas, drinks, paperGoods,
       hotItems, coldItems, dryItems, addons, salads, sidePacks,
     } = data;
 
@@ -21,7 +21,7 @@ class BirdBoxGenerator extends BaseGenerator {
         ${this._renderTacosByCombo(tacoRows || [])}
         ${this._renderSidePacks(sidePacks || [])}
         ${this._renderSalsas(salsas || [])}
-        ${this._renderChipsAndSalsa(chipsAndSalsa || [], boxes || [], hasManuasSalsas)}
+        ${this._renderChipsTotal(chipsBreakdown || [], chipsAndSalsa || [], boxes || [], hasManuasSalsas)}
         ${this._renderAddons(addons || [])}
         ${this._renderSalads(salads || [])}
       </div>
@@ -46,7 +46,7 @@ class BirdBoxGenerator extends BaseGenerator {
     </body></html>`;
   }
 
-  // ─── SUMMARY genérico ─────────────────────────────────────────────────────
+  // ─── SUMMARY ──────────────────────────────────────────────────────────────
   _renderSummary(summaryItems) {
     if (!summaryItems || summaryItems.length === 0) return '';
 
@@ -107,22 +107,20 @@ class BirdBoxGenerator extends BaseGenerator {
     </div>`;
   }
 
-  // ─── BIRD BOX SIDE PACK ───────────────────────────────────────────────────
+  // ─── SIDE PACK ────────────────────────────────────────────────────────────
   _renderSidePacks(sidePacks) {
     if (!sidePacks || sidePacks.length === 0) return '';
 
     const contentRows = sidePacks.map((sp, idx) => {
-      const qty = sp.quantity || 1;
-
-      // Sub-header solo si hay múltiples side packs para diferenciarlos
       const subHeader = sidePacks.length > 1
         ? `<tr style="background:#ede9fe">
              <td colspan="6" style="font-size:8px; font-weight:900; color:#7b2d8b; text-transform:uppercase; letter-spacing:0.08em; padding:3px 8px">
-               Pack ${idx + 1} — ${sp.salsaName}${qty > 1 ? ` ×${qty}` : ''}
+               Pack ${idx + 1} — ${sp.salsaName}${sp.quantity > 1 ? ` ×${sp.quantity}` : ''}
              </td>
            </tr>`
         : '';
 
+      // Contenido sin los chips — chips van en sección consolidada
       const rows = sp.contents.map(c => `
         <tr>
           <td><strong>${c.item}</strong></td>
@@ -147,6 +145,53 @@ class BirdBoxGenerator extends BaseGenerator {
           </tr>
         </thead>
         <tbody>${contentRows}</tbody>
+      </table>
+    </div>`;
+  }
+
+  // ─── CHIPS CONSOLIDADO ────────────────────────────────────────────────────
+  // Una sola sección con todos los chips de la orden con contexto claro
+  _renderChipsTotal(chipsBreakdown, chipsAndSalsa, boxes, hasManuasSalsas) {
+    if (!chipsBreakdown || chipsBreakdown.length === 0) return '';
+
+    const totalPans = chipsBreakdown.reduce((sum, c) => {
+      const match = (c.amount || '').match(/^(\d+)/);
+      return sum + (match ? parseInt(match[1]) : 1);
+    }, 0);
+
+    const rows = chipsBreakdown.map(c => `
+      <tr>
+        <td style="font-size:8px; color:#555">${c.label}</td>
+        <td><strong>${c.amount}</strong></td>
+        <td>${c.packaging}</td>
+        <td>${c.utensil}</td>
+        <td class="checkbox-cell"><span class="checkbox"></span></td>
+        <td class="checkbox-cell"><span class="checkbox"></span></td>
+      </tr>`).join('');
+
+    const totalRow = chipsBreakdown.length > 1 ? `
+      <tr style="background:#fef3c7; border-top:2px solid #784212">
+        <td style="font-weight:900; font-size:9px; text-transform:uppercase; letter-spacing:0.08em; color:#784212">
+          TOTAL
+        </td>
+        <td style="font-weight:900; color:#784212">${totalPans} Full Pan${totalPans > 1 ? 's' : ''}</td>
+        <td colspan="4"></td>
+      </tr>` : '';
+
+    return `
+    <div class="section">
+      <div class="section-header" style="background:#784212">Chips</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Descripción</th><th>Cantidad</th><th>Packaging</th>
+            <th>Utensil</th><th>Packed?</th><th>Loaded?</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+          ${totalRow}
+        </tbody>
       </table>
     </div>`;
   }
@@ -181,7 +226,7 @@ class BirdBoxGenerator extends BaseGenerator {
     </div>`;
   }
 
-  // ─── SALSAS manuales ──────────────────────────────────────────────────────
+  // ─── SALSAS ───────────────────────────────────────────────────────────────
   _renderSalsas(salsas) {
     if (!salsas || salsas.length === 0) return '';
     return `
@@ -196,32 +241,6 @@ class BirdBoxGenerator extends BaseGenerator {
               <td>${item.totalAmount || '—'} ${item.unit || ''}</td>
               <td>${item.utensil || '—'}</td>
               <td>${item.packagingQty ? `${item.packagingQty}x ${item.packaging}` : (item.packaging || '—')}</td>
-              <td class="checkbox-cell"><span class="checkbox"></span></td>
-              <td class="checkbox-cell"><span class="checkbox"></span></td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>`;
-  }
-
-  // ─── CHIPS & SALSA de los boxes ───────────────────────────────────────────
-  _renderChipsAndSalsa(chipsAndSalsa, boxes, hasManuasSalsas = false) {
-    const wantsChips    = boxes.some(b => b.wantsChips);
-    const chipsFiltered = chipsAndSalsa.filter(i => i.included === 'Yes');
-    if (!wantsChips || chipsFiltered.length === 0) return '';
-    const title = hasManuasSalsas ? 'Chips' : 'Chips & Salsa';
-    return `
-    <div class="section">
-      <div class="section-header" style="background:#784212">${title}</div>
-      <table>
-        <thead><tr><th>Item</th><th>Amount</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th></tr></thead>
-        <tbody>
-          ${chipsFiltered.map(item => `
-            <tr>
-              <td>${item.name}</td>
-              <td>${item.total ? `${item.total} ${item.unit || ''}` : '—'}</td>
-              <td>${item.packagingQty ? `${item.packagingQty}x ${item.packaging}` : '—'}</td>
               <td class="checkbox-cell"><span class="checkbox"></span></td>
               <td class="checkbox-cell"><span class="checkbox"></span></td>
             </tr>
