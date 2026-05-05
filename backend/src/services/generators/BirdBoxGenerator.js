@@ -46,29 +46,29 @@ class BirdBoxGenerator extends BaseGenerator {
     </body></html>`;
   }
 
-  // ─── SUMMARY genérico — una fila por line item ────────────────────────────
+  // ─── SUMMARY genérico ─────────────────────────────────────────────────────
   _renderSummary(summaryItems) {
     if (!summaryItems || summaryItems.length === 0) return '';
 
+    const TYPE_BADGE = {
+      box:      { label: 'Box',       color: '#457b9d' },
+      sidepack: { label: 'Side Pack', color: '#7b2d8b' },
+      salad:    { label: 'Salad',     color: '#2e7d32' },
+      addon:    { label: 'Add-on',    color: '#6b21a8' },
+      salsa:    { label: 'Salsa',     color: '#7d5a00' },
+      drink:    { label: 'Drink',     color: '#1565c0' },
+    };
+
     const rows = summaryItems.map(item => {
-      const showBadge = item.chipsAndSalsa !== '—' || item.paper !== '—';
+      const badge = TYPE_BADGE[item.type] || { label: 'Item', color: '#555' };
 
       const chipsCell = item.chipsAndSalsa === '—'
-        ? `<td style="text-align:center; color:#999">—</td>`
+        ? `<td style="text-align:center; color:#bbb; font-size:10px">—</td>`
         : `<td class="checkbox-cell"><span class="yes-no ${item.chipsAndSalsa === 'Yes' ? 'yes' : 'no'}">${item.chipsAndSalsa}</span></td>`;
 
       const paperCell = item.paper === '—'
-        ? `<td style="text-align:center; color:#999">—</td>`
+        ? `<td style="text-align:center; color:#bbb; font-size:10px">—</td>`
         : `<td class="checkbox-cell"><span class="yes-no ${item.paper === 'Yes' ? 'yes' : 'no'}">${item.paper}</span></td>`;
-
-      // Badge de tipo para identificar visualmente
-      const typeBadge = {
-        box:      { label: 'Box',      color: '#457b9d' },
-        sidepack: { label: 'Side Pack',color: '#7b2d8b' },
-        salad:    { label: 'Salad',    color: '#2e7d32' },
-        addon:    { label: 'Add-on',   color: '#6b21a8' },
-        drink:    { label: 'Drink',    color: '#1565c0' },
-      }[item.type] || { label: 'Item', color: '#555' };
 
       return `
         <tr>
@@ -77,9 +77,9 @@ class BirdBoxGenerator extends BaseGenerator {
               display:inline-block; margin-right:5px;
               padding:1px 5px; border-radius:3px; font-size:7px;
               font-weight:900; letter-spacing:0.06em; text-transform:uppercase;
-              background:${typeBadge.color}20; color:${typeBadge.color};
-              border:1px solid ${typeBadge.color}50;
-            ">${typeBadge.label}</span>
+              background:${badge.color}20; color:${badge.color};
+              border:1px solid ${badge.color}50;
+            ">${badge.label}</span>
             <strong>${item.name}</strong>
           </td>
           <td style="text-align:center; font-weight:700">${item.quantity}</td>
@@ -107,13 +107,21 @@ class BirdBoxGenerator extends BaseGenerator {
     </div>`;
   }
 
-  // ─── BIRD BOX SIDE PACK — sección detallada ───────────────────────────────
+  // ─── BIRD BOX SIDE PACK ───────────────────────────────────────────────────
   _renderSidePacks(sidePacks) {
     if (!sidePacks || sidePacks.length === 0) return '';
 
-    const sections = sidePacks.map((sp, idx) => {
-      const qty      = sp.quantity || 1;
-      const label    = qty > 1 ? `${sp.name} ×${qty}` : sp.name;
+    const contentRows = sidePacks.map((sp, idx) => {
+      const qty = sp.quantity || 1;
+
+      // Sub-header solo si hay múltiples side packs para diferenciarlos
+      const subHeader = sidePacks.length > 1
+        ? `<tr style="background:#ede9fe">
+             <td colspan="6" style="font-size:8px; font-weight:900; color:#7b2d8b; text-transform:uppercase; letter-spacing:0.08em; padding:3px 8px">
+               Pack ${idx + 1} — ${sp.salsaName}${qty > 1 ? ` ×${qty}` : ''}
+             </td>
+           </tr>`
+        : '';
 
       const rows = sp.contents.map(c => `
         <tr>
@@ -125,35 +133,21 @@ class BirdBoxGenerator extends BaseGenerator {
           <td class="checkbox-cell"><span class="checkbox"></span></td>
         </tr>`).join('');
 
-      return `
-        ${idx > 0 ? '<div style="margin-top:6px"></div>' : ''}
-        <div style="
-          background:#f3e8ff; border:1.5px solid #c084fc;
-          border-radius:4px; margin-bottom:4px; overflow:hidden;
-        ">
-          <div style="
-            background:#7b2d8b; color:white; padding:4px 10px;
-            font-size:9px; font-weight:900; letter-spacing:0.1em;
-            text-transform:uppercase;
-          ">
-            🎁 ${label}
-          </div>
-          <table style="margin:0">
-            <thead>
-              <tr>
-                <th>Item</th><th>Amount</th><th>Packaging</th>
-                <th>Utensil</th><th>Packed?</th><th>Loaded?</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>`;
+      return subHeader + rows;
     }).join('');
 
     return `
     <div class="section">
       <div class="section-header" style="background:#7b2d8b">'Bird Box Side Pack</div>
-      ${sections}
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th><th>Amount</th><th>Packaging</th>
+            <th>Utensil</th><th>Packed?</th><th>Loaded?</th>
+          </tr>
+        </thead>
+        <tbody>${contentRows}</tbody>
+      </table>
     </div>`;
   }
 
@@ -211,7 +205,7 @@ class BirdBoxGenerator extends BaseGenerator {
     </div>`;
   }
 
-  // ─── CHIPS & SALSA ────────────────────────────────────────────────────────
+  // ─── CHIPS & SALSA de los boxes ───────────────────────────────────────────
   _renderChipsAndSalsa(chipsAndSalsa, boxes, hasManuasSalsas = false) {
     const wantsChips    = boxes.some(b => b.wantsChips);
     const chipsFiltered = chipsAndSalsa.filter(i => i.included === 'Yes');
@@ -240,7 +234,6 @@ class BirdBoxGenerator extends BaseGenerator {
   // ─── ADD-ONS ──────────────────────────────────────────────────────────────
   _renderAddons(addons) {
     if (!addons || addons.length === 0) return '';
-
     const rows = addons.map(addon => {
       const qty       = addon.quantity || 1;
       const isChurro  = addon.unit === 'pan';
@@ -251,7 +244,6 @@ class BirdBoxGenerator extends BaseGenerator {
       const servesStr = addon.servesCount
         ? `Serves ${addon.servesCount}`
         : (isChurro ? 'Serves 8–10' : `Serves ${20 * qty}`);
-
       return `
         <tr>
           <td>
@@ -269,7 +261,6 @@ class BirdBoxGenerator extends BaseGenerator {
           <td class="checkbox-cell"><span class="checkbox"></span></td>
         </tr>`;
     }).join('');
-
     return `
     <div class="section">
       <div class="section-header" style="background:#6b21a8">Add-on Packs</div>
@@ -288,22 +279,18 @@ class BirdBoxGenerator extends BaseGenerator {
   // ─── SALADS ───────────────────────────────────────────────────────────────
   _renderSalads(salads) {
     if (!salads || salads.length === 0) return '';
-
     const rows = salads.map(salad => {
       const qty         = salad.quantity || 1;
       const isNoProtein = !salad.protein ||
         salad.protein.toLowerCase().includes('without') ||
         salad.protein.toLowerCase().includes('no protein');
-
       const proteinColor   = isNoProtein ? '#888888' : '#c0392b';
       const proteinDisplay = isNoProtein
         ? 'NO PROTEIN'
         : (salad.protein || '').replace(/^(small|large)\s+with\s+/i, '').toUpperCase();
-
       const servesTotal = salad.serves
         ? salad.serves * qty
         : (salad.size === 'Large' ? 20 : 10) * qty;
-
       return `
         <tr>
           <td>
@@ -328,23 +315,16 @@ class BirdBoxGenerator extends BaseGenerator {
           <td class="checkbox-cell"><span class="checkbox"></span></td>
         </tr>`;
     }).join('');
-
     const dressings = [...new Set(salads.map(s => s.dressing).filter(Boolean))];
-
     return `
     <div class="section">
       <div class="section-header" style="background:#2e7d32">Salads</div>
       <table>
         <thead>
           <tr>
-            <th>Salad</th>
-            <th style="text-align:center">Protein</th>
-            <th style="text-align:center">Serves</th>
-            <th>Dressing</th>
-            <th>Packaging</th>
-            <th>Utensil</th>
-            <th>Packed?</th>
-            <th>Loaded?</th>
+            <th>Salad</th><th style="text-align:center">Protein</th>
+            <th style="text-align:center">Serves</th><th>Dressing</th>
+            <th>Packaging</th><th>Utensil</th><th>Packed?</th><th>Loaded?</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
