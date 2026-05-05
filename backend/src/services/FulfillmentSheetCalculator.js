@@ -116,15 +116,12 @@ class FulfillmentSheetCalculator {
             { item: 'Guacamole', amount: `${32 * qty} oz`, packaging: `${qty}x 32 oz container`, utensil: 'Spoon',      tempType: 'cold' },
             { item: 'Queso',     amount: `${32 * qty} oz`, packaging: `${qty}x 32 oz container`, utensil: 'Ladle',      tempType: 'hot'  },
             { item: salsaName,   amount: `${32 * qty} oz`, packaging: `${qty}x 32 oz container`, utensil: 'Ladle',      tempType: 'cold' },
-            { item: 'Chips',     amount: `${qty} pan${qty > 1 ? 's' : ''}`, packaging: `${qty}x Full Pan`, utensil: 'Tongs Large', tempType: 'dry' },
           ],
         });
         continue;
       }
 
-      // ── Chips & Salsa standalone (line item separado de Toast) ──
-      // Es una salsa adicional pagada por separado.
-      // Los chips ya están incluidos en el box — NO duplicar.
+      // ── Chips & Salsa standalone ──
       if (itemNameLc.startsWith('chips & salsa') || itemNameLc === 'chips & salsa') {
         const qty      = item.quantity || 1;
         const salsaMod = modifiers.find(m => {
@@ -138,7 +135,7 @@ class FulfillmentSheetCalculator {
           if (sn.includes('verde'))                                 salsaName = 'Salsa Verde';
           else if (sn.includes('patron') || sn.includes('patrón')) salsaName = 'Salsa Patrón';
         }
-        // Solo la salsa — chips ya incluidos en el box
+        // Solo la salsa — chips se consolidan en chipsBreakdown
         manualSalsas.push({
           name:         salsaName,
           category:     'salsa',
@@ -173,7 +170,6 @@ class FulfillmentSheetCalculator {
           included:     'Yes',
           quantity:     qty,
           servesCount:  20 * qty,
-          chipsQty:     qty,
         });
         continue;
       }
@@ -217,7 +213,6 @@ class FulfillmentSheetCalculator {
               included:     'Yes',
               quantity:     qty,
               servesCount:  isFixedPack ? 20 * qty : null,
-              chipsQty:     isFixedPack ? qty : null,
             });
             continue;
           }
@@ -334,6 +329,27 @@ class FulfillmentSheetCalculator {
       }] : []),
     ] : [{ name: 'Chips & Salsa', included: 'No', tempType: 'dry' }];
 
+    // ── Chips breakdown consolidado ──
+    // Una sola sección con todos los chips de la orden y su contexto
+    const chipsBreakdown = [];
+    if (anyWantsChips) {
+      chipsBreakdown.push({
+        label:      'Chips para tacos (incluido en box)',
+        amount:     '1 Full Pan',
+        packaging:  '1x Full Pan',
+        utensil:    'Tongs Large',
+      });
+    }
+    for (const sp of sidePacks) {
+      const qty = sp.quantity || 1;
+      chipsBreakdown.push({
+        label:      `Chips para Side Pack${qty > 1 ? ` ×${qty}` : ''} (Guac / Queso / ${sp.salsaName})`,
+        amount:     `${qty} Full Pan${qty > 1 ? 's' : ''}`,
+        packaging:  `${qty}x Full Pan`,
+        utensil:    'Tongs Large',
+      });
+    }
+
     // ── Paper goods ──
     const anyWantsPaper = boxes.some(b => b.wantsPaper);
     const paperGoods    = anyWantsPaper
@@ -413,6 +429,7 @@ class FulfillmentSheetCalculator {
       sidePacks,
       tacoRows,
       chipsAndSalsa,
+      chipsBreakdown, // ← nuevo — consolidado con contexto
       salsas:         manualSalsaItems,
       addons:         addonItems,
       extras:         manualOtherItems,
@@ -600,20 +617,20 @@ class FulfillmentSheetCalculator {
       const total     = this.resolver.calculateAmount(flourItem.formula, guestCount);
       const packaging = this.resolver.getPackaging(flourItem.formula, guestCount);
       result.push({
-        name:         is5050 ? 'Flour Tortillas (50/50)' : 'Flour Tortillas',
-        total, unit:  flourItem.formula.unit,
-        packaging:    packaging.package, packagingQty: packaging.qty,
-        utensil:      flourItem.formula.utensil, tempType: 'hot',
+        name: is5050 ? 'Flour Tortillas (50/50)' : 'Flour Tortillas',
+        total, unit: flourItem.formula.unit,
+        packaging: packaging.package, packagingQty: packaging.qty,
+        utensil: flourItem.formula.utensil, tempType: 'hot',
       });
     }
     if (cornItem) {
       const total     = this.resolver.calculateAmount(cornItem.formula, guestCount);
       const packaging = this.resolver.getPackaging(cornItem.formula, guestCount);
       result.push({
-        name:         is5050 ? 'Corn Tortillas (50/50)' : 'Corn Tortillas',
-        total, unit:  cornItem.formula.unit,
-        packaging:    packaging.package, packagingQty: packaging.qty,
-        utensil:      cornItem.formula.utensil, tempType: 'hot',
+        name: is5050 ? 'Corn Tortillas (50/50)' : 'Corn Tortillas',
+        total, unit: cornItem.formula.unit,
+        packaging: packaging.package, packagingQty: packaging.qty,
+        utensil: cornItem.formula.utensil, tempType: 'hot',
       });
     }
     return result;
