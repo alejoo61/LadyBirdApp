@@ -11,7 +11,7 @@ class ToastSyncService {
     this.fulfillmentCalculator  = fulfillmentCalculator;
     this.fulfillmentGenerator   = fulfillmentGenerator;
     this.googleCalendarService  = googleCalendarService;
-    this.auditService           = auditService || null; // opcional — no rompe si no se inyecta
+    this.auditService           = auditService || null;
   }
 
   _sleep(ms) {
@@ -140,7 +140,6 @@ class ToastSyncService {
         googleEventId:            row.google_event_id,
       };
 
-      // Generar PDF
       const calculatedData = await this.fulfillmentCalculator.calculate(order);
       calculatedData.header.isManuallyEdited = order.isManuallyEdited;
       calculatedData.header.pdfVersion       = order.pdfVersion;
@@ -150,7 +149,6 @@ class ToastSyncService {
 
       console.log(`📄 Auto-generated PDF: ${pdfName}`);
 
-      // Crear o actualizar evento en Calendar
       let calResult;
       if (order.googleEventId) {
         console.log(`📅 Updating existing event: ${order.googleEventId}`);
@@ -162,7 +160,6 @@ class ToastSyncService {
         calResult = await this.googleCalendarService.createEvent(order, pdf, pdfName);
       }
 
-      // Guardar google_event_id y limpiar flags
       if (calResult?.eventId) {
         await this.pool.query(`
           UPDATE catering_orders
@@ -175,7 +172,6 @@ class ToastSyncService {
 
         console.log(`✅ Calendar synced for order ${order.displayNumber} — event: ${calResult.eventId}`);
 
-        // Audit log de calendar sync
         if (this.auditService) {
           await this.auditService.logCalendarSynced(orderId, 'system', calResult.eventId)
             .catch(e => console.error('⚠️  Audit log error:', e.message));
@@ -195,7 +191,10 @@ class ToastSyncService {
     for (const order of orders) {
       if (!order.guid) continue;
       try {
-        const orderDate    = order.estimatedFulfillmentDate || order.openedDate || order.createdDate;
+        // Extraer fecha como string ISO — evita que PostgreSQL lo interprete como JSONB
+        const rawDate   = order.estimatedFulfillmentDate || order.openedDate || order.createdDate;
+        const orderDate = rawDate ? new Date(rawDate).toISOString() : null;
+
         const toastOrderId = await this._upsertRawOrder(storeId, order.guid, order, orderDate);
         const eventType    = this.classifier.classify(order);
 
@@ -208,13 +207,11 @@ class ToastSyncService {
             catering++;
 
             if (isNew) {
-              // Audit log de nueva orden desde Toast
               if (this.auditService) {
                 this.auditService.logToastSync(cateringOrderId)
                   .catch(e => console.error('⚠️  Audit log error:', e.message));
               }
 
-              // Auto PDF + Calendar
               if (this.fulfillmentCalculator && this.googleCalendarService) {
                 setImmediate(() => this._autoPdfAndCalendar(cateringOrderId, storeCode, storeName));
               }
@@ -230,7 +227,7 @@ class ToastSyncService {
     return { synced, catering };
   }
 
-  // ─── MODO 1: Polling en producción ────────────────────────────────────────
+  // ─── MODO 1: Polling ──────────────────────────────────────────────────────
   async syncRecent(store, minutesBack = 30) {
     const now       = new Date();
     const startDate = new Date(now.getTime() - minutesBack * 60 * 1000);
