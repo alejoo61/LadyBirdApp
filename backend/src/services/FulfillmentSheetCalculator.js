@@ -123,7 +123,8 @@ class FulfillmentSheetCalculator {
       }
 
       // ── Chips & Salsa standalone (line item separado de Toast) ──
-      // Ej: cliente agrega "Chips & Salsa" con modifier de salsa elegida
+      // Es una salsa adicional pagada por separado.
+      // Los chips ya están incluidos en el box — NO duplicar.
       if (itemNameLc.startsWith('chips & salsa') || itemNameLc === 'chips & salsa') {
         const qty      = item.quantity || 1;
         const salsaMod = modifiers.find(m => {
@@ -137,28 +138,15 @@ class FulfillmentSheetCalculator {
           if (sn.includes('verde'))                                 salsaName = 'Salsa Verde';
           else if (sn.includes('patron') || sn.includes('patrón')) salsaName = 'Salsa Patrón';
         }
-        // Agregar como salsa manual con su salsa elegida
+        // Solo la salsa — chips ya incluidos en el box
         manualSalsas.push({
-          name:         `${salsaName} (standalone)`,
+          name:         salsaName,
           category:     'salsa',
           tempType:     'cold',
           unit:         'oz',
           utensil:      'Ladle',
           totalAmount:  32 * qty,
           packaging:    '32 oz container',
-          packagingQty: qty,
-          included:     'Yes',
-          quantity:     qty,
-        });
-        // También los chips
-        manualSalsas.push({
-          name:         'Chips (standalone)',
-          category:     'dry',
-          tempType:     'dry',
-          unit:         'pan',
-          utensil:      'Tongs Large',
-          totalAmount:  qty,
-          packaging:    'Full Pan',
           packagingQty: qty,
           included:     'Yes',
           quantity:     qty,
@@ -327,8 +315,7 @@ class FulfillmentSheetCalculator {
     // ── Clasificar manuales ──
     const manualSalsaItems = manualSalsas.filter(i => i.category === 'salsa');
     const addonItems       = manualSalsas.filter(i => i.category === 'addon');
-    const dryStandalones   = manualSalsas.filter(i => i.category === 'dry');
-    const manualOtherItems = manualSalsas.filter(i => !['salsa', 'addon', 'dry'].includes(i.category));
+    const manualOtherItems = manualSalsas.filter(i => !['salsa', 'addon'].includes(i.category));
 
     // ── Chips & Salsa de los boxes ──
     const anyWantsChips   = boxes.some(b => b.wantsChips);
@@ -451,7 +438,6 @@ class FulfillmentSheetCalculator {
       dryItems: [
         ...chipsAndSalsa.filter(i => i.tempType === 'dry'),
         ...addonItems.filter(i => i.tempType === 'dry'),
-        ...dryStandalones,
         ...sidePacks.flatMap(sp => sp.contents.filter(c => c.tempType === 'dry')),
       ],
       proteins: [], toppings: [], tortillas: [], snacks: [],
