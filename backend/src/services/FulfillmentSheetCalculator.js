@@ -9,6 +9,10 @@ const SIDE_PACK_KEYWORD = 'side pack';
 // A partir de este guest count se mandan las 3 salsas en Bird Box
 const THREE_SALSAS_THRESHOLD = 30;
 
+// Reglas de packaging para tacos (doc oficial)
+// Half Pan: max 16-18 tacos | Full Pan: más de 18
+const TACO_HALF_PAN_MAX = 18;
+
 class FulfillmentSheetCalculator {
   constructor(ingredientFormulaRepository, pool) {
     this.formulaRepo = ingredientFormulaRepository;
@@ -176,17 +180,67 @@ class FulfillmentSheetCalculator {
         continue;
       }
 
-      // ── Bebidas ──
+      // ── Bebidas (June Drip Coffee, leches, etc.) ──
       if (DRINK_KEYWORDS.some(k => itemNameLc.includes(k))) {
-        const wantsCups = modifiers.some(m =>
-          (m.displayName || '').toLowerCase().includes('yes, i want cups')
-        );
-        drinks.push({
-          name:      item.displayName || item.name,
-          quantity:  item.quantity || 1,
-          wantsCups,
-          tempType:  itemNameLc.includes('coffee') ? 'hot' : 'cold',
-        });
+        const qty = item.quantity || 1;
+
+        // Café
+        if (itemNameLc.includes('coffee')) {
+          // Modifiers de leche/crema → extraer cada uno
+          const creamers = modifiers
+            .filter(m => {
+              const n = (m.displayName || '').toLowerCase();
+              return n.includes('milk') || n.includes('oat') || n.includes('cream') ||
+                     n.includes('whole') || n.includes('skim') || n.includes('half');
+            })
+            .map(m => ({
+              name:     m.displayName,
+              quantity: m.quantity || qty,
+            }));
+
+          const wantsCups = modifiers.some(m =>
+            (m.displayName || '').toLowerCase().includes('cups and lids') ||
+            (m.displayName || '').toLowerCase().includes('cups & lids')
+          );
+
+          // Calcular oz de cada creamer: qty del modifier × 32oz por unidad
+          // Si total > 32oz → ½ gal jug (64oz), sino → 32oz deli cup
+          const creamerItems = creamers.map(cr => {
+            const totalOz   = cr.quantity * 32;
+            const packaging = totalOz > 32 ? '½ Gallon Jug' : '32 oz deli cup';
+            return {
+              name:     cr.name,
+              totalOz,
+              packaging,
+              tempType: 'cold',
+            };
+          });
+
+          drinks.push({
+            name:         item.displayName || item.name,
+            quantity:     qty,
+            // Cada June Drip Coffee = 96oz coffee
+            totalOz:      qty * 96,
+            packaging:    '96 oz coffee',
+            packagingQty: qty,
+            utensil:      '—',
+            tempType:     'hot',
+            wantsCups,
+            creamers:     creamerItems,
+          });
+        } else {
+          // Otras bebidas (agua, limeade, housemade drinks)
+          const wantsCups = modifiers.some(m =>
+            (m.displayName || '').toLowerCase().includes('yes, i want cups')
+          );
+          drinks.push({
+            name:      item.displayName || item.name,
+            quantity:  qty,
+            tempType:  'cold',
+            wantsCups,
+            creamers:  [],
+          });
+        }
         continue;
       }
 
@@ -288,6 +342,9 @@ class FulfillmentSheetCalculator {
       }
     }
 
+    // Packaging de tacos según doc:
+    // ≤ 18 tacos → Half Pan (1x)
+    // > 18 tacos → Full Pan (1x)
     const tacoRows = Object.entries(comboTotals).map(([combo, data]) => {
       let tortillaLabel = '';
       if (data.flourTortillas > 0 && data.cornTortillas > 0) {
@@ -297,44 +354,63 @@ class FulfillmentSheetCalculator {
       } else {
         tortillaLabel = `${data.cornTortillas} Corn`;
       }
+      const useFullPan = data.total > TACO_HALF_PAN_MAX;
       return {
         name: combo, total: data.total, unit: 'tacos',
         tortillaLabel,
         flourTortillas: data.flourTortillas,
         cornTortillas:  data.cornTortillas,
-        packaging:      'Half Pan',
-        packagingQty:   Math.ceil(data.total / 50),
+        packaging:      useFullPan ? 'Full Pan' : 'Half Pan',
+        packagingQty:   1,
         utensil:        'Tongs Small',
         tempType:       'hot',
       };
     });
+
+    // ── Salsas incluidas en Bird Box ──
+    // Siempre se incluyen cuando el box tiene chips (independiente de manualSalsas)
+    // < 30 guests → solo Salsa Roja
+    // ≥ 30 guests → Salsa Roja + Salsa Verde + Patrón
+    // Cálculo: guestCount × 0.5 oz por salsa
+    // Packaging: ≤ 32oz → 1x 32oz deli cup | > 32oz → 2x 32oz deli cup
+    // Utensil: Ladle C/U
+    const anyWantsChips = boxes.some(b => b.wantsChips);
+
+    const _buildIncludedSalsa = (name) => {
+      const totalOz    = Math.ceil(guestCount * 0.5);
+      const needsTwoCups = totalOz > 32;
+      const packagingQty = needsTwoCups ? 2 : 1;
+      return {
+        name,
+        totalAmount:  totalOz,
+        unit:         'oz',
+        utensil:      'Ladle C/U',
+        packaging:    '32 oz deli cup',
+        packagingQty,
+        tempType:     'cold',
+        included:     'Yes',
+      };
+    };
+
+    const includedSalsas = anyWantsChips
+      ? guestCount >= THREE_SALSAS_THRESHOLD
+        ? [
+            _buildIncludedSalsa('Salsa Roja'),
+            _buildIncludedSalsa('Salsa Verde'),
+            _buildIncludedSalsa('Salsa Patrón'),
+          ]
+        : [
+            _buildIncludedSalsa('Salsa Roja'),
+          ]
+      : [];
 
     // ── Clasificar manuales ──
     const manualSalsaItems = manualSalsas.filter(i => i.category === 'salsa');
     const addonItems       = manualSalsas.filter(i => i.category === 'addon');
     const manualOtherItems = manualSalsas.filter(i => !['salsa', 'addon'].includes(i.category));
 
-    // ── Chips & Salsa incluidos en los boxes ──
-    const anyWantsChips   = boxes.some(b => b.wantsChips);
-    const hasManuasSalsas = manualSalsaItems.length > 0;
-
-    // Contar cuántos boxes piden chips (cada box = 1 Full Pan)
+    // chipsAndSalsa mantiene su estructura para compatibilidad con el resto del código
     const chipsBoxCount = boxes.filter(b => b.wantsChips).length;
-
-    // Salsas incluidas en boxes según guest count
-    // < 30 guests → solo Salsa Roja
-    // ≥ 30 guests → Salsa Roja + Salsa Verde + Patrón
-    const includedSalsas = anyWantsChips && !hasManuasSalsas
-      ? guestCount >= THREE_SALSAS_THRESHOLD
-        ? [
-            { name: 'Salsa Roja',  total: Math.ceil(guestCount / 12), unit: '6 oz cups', packaging: '6 oz cup', packagingQty: Math.ceil(guestCount / 12), utensil: 'Ladle', tempType: 'cold', included: 'Yes' },
-            { name: 'Salsa Verde', total: Math.ceil(guestCount / 12), unit: '6 oz cups', packaging: '6 oz cup', packagingQty: Math.ceil(guestCount / 12), utensil: 'Ladle', tempType: 'cold', included: 'Yes' },
-            { name: 'Patrón',      total: Math.ceil(guestCount / 12), unit: '6 oz cups', packaging: '6 oz cup', packagingQty: Math.ceil(guestCount / 12), utensil: 'Ladle', tempType: 'cold', included: 'Yes' },
-          ]
-        : [
-            { name: 'Salsa Roja',  total: Math.ceil(guestCount / 12), unit: '6 oz cups', packaging: '6 oz cup', packagingQty: Math.ceil(guestCount / 12), utensil: 'Ladle', tempType: 'cold', included: 'Yes' },
-          ]
-      : [];
 
     const chipsAndSalsa = anyWantsChips
       ? [
@@ -347,11 +423,33 @@ class FulfillmentSheetCalculator {
         ]
       : [{ name: 'Chips & Salsa', included: 'No', tempType: 'dry' }];
 
+    // hasManuasSalsas se mantiene para compatibilidad con el generator
+    const hasManuasSalsas = manualSalsaItems.length > 0;
+
     // ── Paper goods ──
+    // Forks = Taco Boats = guests + 10 (redondeado a 5 o 10 más)
+    // Napkins = 40% del pack (redondeado al paquete de 100)
+    // Taco Boats = guests + 10
     const anyWantsPaper = boxes.some(b => b.wantsPaper);
-    const paperGoods    = anyWantsPaper
-      ? await this.resolver.calculatePaperGoods('BIRD_BOX', guestCount)
-      : { included: false, items: [] };
+    let paperGoods      = { included: false, items: [] };
+
+    if (anyWantsPaper) {
+      const base          = await this.resolver.calculatePaperGoods('BIRD_BOX', guestCount);
+      const tacoBoatCount = guestCount + 10;
+      const forkCount     = tacoBoatCount;
+      const napkinCount   = Math.ceil((guestCount * 0.4) / 10) * 10; // redondeo a decena
+
+      // Reemplazar las cantidades con las nuevas reglas
+      const updatedItems = (base.items || []).map(pg => {
+        const nameLc = (pg.name || '').toLowerCase();
+        if (nameLc.includes('taco boat')) return { ...pg, qty: tacoBoatCount };
+        if (nameLc.includes('fork'))      return { ...pg, qty: forkCount };
+        if (nameLc.includes('napkin'))    return { ...pg, qty: napkinCount };
+        return pg;
+      });
+
+      paperGoods = { ...base, items: updatedItems };
+    }
 
     // ── Ensaladas ──
     const salads = this._extractSalads(items);
@@ -435,7 +533,7 @@ class FulfillmentSheetCalculator {
         type:          'drink',
         name:          d.name,
         quantity:      d.quantity,
-        detail:        d.wantsCups ? 'With cups & lids' : 'No cups',
+        detail:        d.wantsCups ? 'With cups & lids' : '',
         chipsAndSalsa: '—',
         paper:         '—',
       })),
@@ -449,7 +547,7 @@ class FulfillmentSheetCalculator {
       tacoRows,
       chipsAndSalsa,
       chipsBreakdown,
-      salsas:         manualSalsaItems,
+      salsas:         [...includedSalsas, ...manualSalsaItems],
       addons:         addonItems,
       extras:         manualOtherItems,
       hasManuasSalsas,
@@ -464,12 +562,13 @@ class FulfillmentSheetCalculator {
         ...sidePacks.flatMap(sp => sp.contents.filter(c => c.tempType === 'hot')),
       ],
       coldItems: [
-        ...chipsAndSalsa.filter(i => i.tempType === 'cold'),
+        ...includedSalsas,
         ...drinks.filter(d => d.tempType === 'cold'),
         ...manualSalsaItems,
         ...addonItems.filter(i => i.tempType === 'cold'),
         ...salads,
         ...sidePacks.flatMap(sp => sp.contents.filter(c => c.tempType === 'cold')),
+        ...drinks.flatMap(d => (d.creamers || []).map(cr => ({ ...cr, tempType: 'cold' }))),
       ],
       dryItems: [
         ...chipsAndSalsa.filter(i => i.tempType === 'dry'),
