@@ -2,10 +2,11 @@
 
 class OrderParser {
   parse(rawOrder, eventType) {
-    const check = rawOrder.checks?.[0];
+    const check     = rawOrder.checks?.[0];
     if (!check) return null;
 
-    const items = this._parseItems(check.selections || []);
+    const items     = this._parseItems(check.selections || []);
+    const isEZCater = this._isEZCater(rawOrder);
 
     return {
       toastOrderGuid:           rawOrder.guid,
@@ -20,12 +21,22 @@ class OrderParser {
       client:                   this._parseClient(check),
       delivery:                 this._parseDelivery(rawOrder),
       items,
-      guestCount:               rawOrder.numberOfGuests || this._inferGuestCount(check.selections, eventType),
+      guestCount: (rawOrder.numberOfGuests > 1 ? rawOrder.numberOfGuests : null)
+                  || this._inferGuestCount(check.selections, eventType),
       totalAmount:              check.totalAmount,
       source:                   rawOrder.source,
       voided:                   rawOrder.voided,
       approvalStatus:           rawOrder.approvalStatus,
+      isEZCater,
     };
+  }
+
+  // Detectado por el descuento "3pd EZ Cater Fees/Promos" en appliedDiscounts
+  _isEZCater(rawOrder) {
+    const discounts = rawOrder.appliedDiscounts || [];
+    return discounts.some(d =>
+      (d.name || '').toLowerCase().includes('ez cater')
+    );
   }
 
   _isHouseAccount(check) {
@@ -89,50 +100,43 @@ class OrderParser {
       }));
   }
 
-  /**
-   * Calcula el guest count real desde los items.
-   *
-   * Bird Box: el guest count real = total tacos ÷ 2
-   *   El taco count viene del modifier con el patrón "X Tacos" (ej. "Bird Box - 40 Tacos")
-   *   multiplicado por la quantity del item (cuántas cajas de ese tipo pidieron).
-   *
-   * Personal Box: cada item es 1 persona.
-   *
-   * Taco Bar / Fooda: fallback al quantity del item principal.
-   */
   _inferGuestCount(selections, eventType) {
     if (!selections || selections.length === 0) return 1;
 
     if (eventType === 'BIRD_BOX') {
       let totalTacos = 0;
-
       for (const sel of selections) {
         if (sel.voided) continue;
         const modifiers = sel.modifiers || [];
-
-        // Buscar el modifier de tamaño: ej. "Lunch 'Bird Box - 40 Tacos", "BYO 'Bird Box - 30 Tacos"
         const sizeMod = modifiers.find(m => {
           const name = (m.displayName || '').toLowerCase();
           return name.includes('tacos') && /\d+\s*tacos?/i.test(name);
         });
-
         if (sizeMod) {
           const match = (sizeMod.displayName || '').match(/(\d+)\s*tacos?/i);
           if (match) {
-            const tacosPerBox = parseInt(match[1]);
-            const boxQty      = sel.quantity || 1;
-            totalTacos       += tacosPerBox * boxQty;
+            totalTacos += parseInt(match[1]) * (sel.quantity || 1);
           }
         }
       }
-
-      // 2 tacos por persona
       if (totalTacos > 0) return Math.round(totalTacos / 2);
       return 1;
     }
 
+    if (eventType === 'TACO_BAR') {
+      const tacoBarItem = selections.find(s =>
+        !s.voided &&
+        (s.displayName || '').toLowerCase().includes('taco bar') &&
+        s.modifiers && s.modifiers.length > 0
+      );
+      if (tacoBarItem) {
+        const firstMod = tacoBarItem.modifiers.find(m => (m.quantity || 0) > 1);
+        if (firstMod && firstMod.quantity > 1) return firstMod.quantity;
+        if (tacoBarItem.quantity > 1) return tacoBarItem.quantity;
+      }
+    }
+
     if (eventType === 'PERSONAL_BOX') {
-      // Cada Personal Box = 1 persona, sumar quantities
       const personalItems = selections.filter(s =>
         !s.voided && (s.displayName || '').toLowerCase().includes('personal')
       );
@@ -141,7 +145,6 @@ class OrderParser {
       }
     }
 
-    // Fallback: quantity del item con más tacos o el primero con qty > 1
     const mainItem = selections.find(s => !s.voided && s.quantity > 1);
     return mainItem ? mainItem.quantity : 1;
   }

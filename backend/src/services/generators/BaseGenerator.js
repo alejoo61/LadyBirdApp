@@ -62,6 +62,11 @@ class BaseGenerator {
       text-transform: uppercase; letter-spacing: 0.12em;
       background: white; color: ${badgeColor}; border: 2px solid white;
     }
+    .ezcater-badge {
+      padding: 3px 8px; border-radius: 3px; font-size: 8px; font-weight: 900;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      background: #ff6b00; color: white; border: 2px solid #ff8c00;
+    }
     .edited-badge {
       padding: 3px 8px; border-radius: 3px; font-size: 8px; font-weight: 900;
       text-transform: uppercase; letter-spacing: 0.1em;
@@ -99,6 +104,11 @@ class BaseGenerator {
       background: #fef3c7; border: 1px solid #f59e0b; border-top: none;
       padding: 4px 12px; font-size: 8px; font-weight: 900;
       text-transform: uppercase; letter-spacing: 0.1em; color: #92400e;
+    }
+    .ezcater-banner {
+      background: #fff3e0; border: 1px solid #ff8c00; border-top: none;
+      padding: 4px 12px; font-size: 8px; font-weight: 900;
+      text-transform: uppercase; letter-spacing: 0.1em; color: #e65100;
     }
 
     .main-grid { display: grid; grid-template-columns: 1fr 260px; gap: 8px; margin-top: 8px; }
@@ -162,20 +172,28 @@ class BaseGenerator {
     const isTest   = (header.toastOrderGuid || '').startsWith('MANUAL-');
     const version  = header.pdfVersion || 1;
 
+    // Método de entrega con EZCater
+    let methodLabel = isPickup ? '🏪 Pickup' : '🚗 Delivery';
+    if (header.isEZCater) {
+      methodLabel = isPickup ? '🏪 EZ Pickup' : '🚗 EZ Delivery';
+    }
+
     return `
     <div class="doc-header">
       <h1>Ladybird Taco &mdash; Fulfillment Sheet</h1>
       <div class="header-right">
         ${isTest ? '<span class="test-badge">TEST</span>' : ''}
         ${header.isManuallyEdited ? '<span class="edited-badge">⚠ Edited</span>' : ''}
+        ${header.isEZCater ? '<span class="ezcater-badge">EZ Cater</span>' : ''}
         <span class="version-badge">V${version}</span>
         <span class="method-pill ${isPickup ? 'pickup' : 'delivery'}">
-          ${isPickup ? '🏪 Pickup' : '🚗 Delivery'}
+          ${methodLabel}
         </span>
         <span class="event-badge">${badge.label}</span>
       </div>
     </div>
     ${header.isManuallyEdited ? '<div class="edited-banner">⚠ This order was manually edited — not synced with Toast</div>' : ''}
+    ${header.isEZCater ? '<div class="ezcater-banner">📦 EZCater Order — verify guest count and delivery details with EZCater confirmation</div>' : ''}
     <div class="order-info">
       <div class="info-left">
         <div class="info-row"><span class="info-label">Client</span><span class="info-value">${header.clientName || '—'}</span></div>
@@ -307,7 +325,7 @@ class BaseGenerator {
     </div>`;
   }
 
-  // ─── ABSTRACT — cada subclase implementa esto ─────────────────────────────
+  // ─── ABSTRACT ─────────────────────────────────────────────────────────────
   build(data) {
     throw new Error('build() must be implemented by subclass');
   }

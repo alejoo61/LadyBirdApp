@@ -377,7 +377,7 @@ class FulfillmentSheetCalculator {
     const anyWantsChips = boxes.some(b => b.wantsChips);
 
     const _buildIncludedSalsa = (name) => {
-      const totalOz    = Math.ceil(guestCount * 0.5);
+      const totalOz    = Math.ceil(guestCount * 1);
       const needsTwoCups = totalOz > 32;
       const packagingQty = needsTwoCups ? 2 : 1;
       return {
@@ -427,19 +427,18 @@ class FulfillmentSheetCalculator {
     const hasManuasSalsas = manualSalsaItems.length > 0;
 
     // ── Paper goods ──
-    // Forks = Taco Boats = guests + 10 (redondeado a 5 o 10 más)
-    // Napkins = 40% del pack (redondeado al paquete de 100)
-    // Taco Boats = guests + 10
+    // Taco Boats = totalTacos / 2 + 10 (redondeado a decena superior)
+    // Forks = igual que Taco Boats
+    // Napkins = 40% de guests (redondeado a decena)
     const anyWantsPaper = boxes.some(b => b.wantsPaper);
     let paperGoods      = { included: false, items: [] };
 
     if (anyWantsPaper) {
       const base          = await this.resolver.calculatePaperGoods('BIRD_BOX', guestCount);
-      const tacoBoatCount = guestCount + 10;
+      const tacoBoatCount = Math.ceil((totalTacos / 2 + 10) / 10) * 10;
       const forkCount     = tacoBoatCount;
-      const napkinCount   = Math.ceil((guestCount * 0.4) / 10) * 10; // redondeo a decena
+      const napkinCount   = Math.ceil((guestCount * 0.4) / 10) * 10;
 
-      // Reemplazar las cantidades con las nuevas reglas
       const updatedItems = (base.items || []).map(pg => {
         const nameLc = (pg.name || '').toLowerCase();
         if (nameLc.includes('taco boat')) return { ...pg, qty: tacoBoatCount };
@@ -721,6 +720,7 @@ class FulfillmentSheetCalculator {
       storeName:                order.storeName,
       storeCode:                order.storeCode,
       isManuallyEdited:         order.isManuallyEdited,
+      isEZCater:                order.isEZCater || false,
       toastOrderGuid:           order.toastOrderGuid,
       pdfVersion:               order.pdfVersion || 1,
     };
@@ -731,9 +731,14 @@ class FulfillmentSheetCalculator {
     const flourItem = ingredients.find(i => i.canonicalName === 'Flour Tortillas');
     const cornItem  = ingredients.find(i => i.canonicalName === 'Corn Tortillas');
     const is5050    = flourItem && cornItem;
+
+    // Para 50/50 cada tipo recibe la mitad de los guests
+    const flourGuests = is5050 ? Math.ceil(guestCount / 2)  : guestCount;
+    const cornGuests  = is5050 ? Math.floor(guestCount / 2) : guestCount;
+
     if (flourItem) {
-      const total     = this.resolver.calculateAmount(flourItem.formula, guestCount);
-      const packaging = this.resolver.getPackaging(flourItem.formula, guestCount);
+      const total     = this.resolver.calculateAmount(flourItem.formula, flourGuests);
+      const packaging = this.resolver.getPackaging(flourItem.formula, flourGuests);
       result.push({
         name: is5050 ? 'Flour Tortillas (50/50)' : 'Flour Tortillas',
         total, unit: flourItem.formula.unit,
@@ -742,8 +747,8 @@ class FulfillmentSheetCalculator {
       });
     }
     if (cornItem) {
-      const total     = this.resolver.calculateAmount(cornItem.formula, guestCount);
-      const packaging = this.resolver.getPackaging(cornItem.formula, guestCount);
+      const total     = this.resolver.calculateAmount(cornItem.formula, cornGuests);
+      const packaging = this.resolver.getPackaging(cornItem.formula, cornGuests);
       result.push({
         name: is5050 ? 'Corn Tortillas (50/50)' : 'Corn Tortillas',
         total, unit: cornItem.formula.unit,
