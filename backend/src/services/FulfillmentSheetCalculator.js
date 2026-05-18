@@ -720,6 +720,7 @@ class FulfillmentSheetCalculator {
       storeName:                order.storeName,
       storeCode:                order.storeCode,
       isManuallyEdited:         order.isManuallyEdited,
+      isEZCater:                order.isEZCater || false,
       toastOrderGuid:           order.toastOrderGuid,
       pdfVersion:               order.pdfVersion || 1,
     };
@@ -730,9 +731,14 @@ class FulfillmentSheetCalculator {
     const flourItem = ingredients.find(i => i.canonicalName === 'Flour Tortillas');
     const cornItem  = ingredients.find(i => i.canonicalName === 'Corn Tortillas');
     const is5050    = flourItem && cornItem;
+
+    // Para 50/50 cada tipo recibe la mitad de los guests
+    const flourGuests = is5050 ? Math.ceil(guestCount / 2)  : guestCount;
+    const cornGuests  = is5050 ? Math.floor(guestCount / 2) : guestCount;
+
     if (flourItem) {
-      const total     = this.resolver.calculateAmount(flourItem.formula, guestCount);
-      const packaging = this.resolver.getPackaging(flourItem.formula, guestCount);
+      const total     = this.resolver.calculateAmount(flourItem.formula, flourGuests);
+      const packaging = this.resolver.getPackaging(flourItem.formula, flourGuests);
       result.push({
         name: is5050 ? 'Flour Tortillas (50/50)' : 'Flour Tortillas',
         total, unit: flourItem.formula.unit,
@@ -741,8 +747,8 @@ class FulfillmentSheetCalculator {
       });
     }
     if (cornItem) {
-      const total     = this.resolver.calculateAmount(cornItem.formula, guestCount);
-      const packaging = this.resolver.getPackaging(cornItem.formula, guestCount);
+      const total     = this.resolver.calculateAmount(cornItem.formula, cornGuests);
+      const packaging = this.resolver.getPackaging(cornItem.formula, cornGuests);
       result.push({
         name: is5050 ? 'Corn Tortillas (50/50)' : 'Corn Tortillas',
         total, unit: cornItem.formula.unit,

@@ -51,10 +51,10 @@ class ToastSyncService {
         client_name, client_email, client_phone,
         order_date, estimated_fulfillment_date, business_date,
         delivery_method, delivery_address, delivery_notes,
-        parsed_data, guest_count, total_amount
+        parsed_data, guest_count, total_amount, is_ez_cater
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-        $11, $12, $13, $14, $15, $16, $17, $18, $19
+        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
       )
       ON CONFLICT (toast_order_guid)
       DO UPDATE SET
@@ -71,6 +71,7 @@ class ToastSyncService {
         parsed_data                = EXCLUDED.parsed_data,
         guest_count                = EXCLUDED.guest_count,
         total_amount               = EXCLUDED.total_amount,
+        is_ez_cater                = EXCLUDED.is_ez_cater,
         updated_at                 = CURRENT_TIMESTAMP
       RETURNING id, (xmax = 0) AS is_new
     `, [
@@ -82,7 +83,8 @@ class ToastSyncService {
       parsed.client.name, parsed.client.email, parsed.client.phone,
       parsed.orderDate, parsed.estimatedFulfillmentDate, parsed.businessDate,
       parsed.delivery.method, parsed.delivery.address, parsed.delivery.notes,
-      JSON.stringify(parsed), parsed.guestCount, parsed.totalAmount
+      JSON.stringify(parsed), parsed.guestCount, parsed.totalAmount,
+      parsed.isEZCater || false,
     ]);
     return {
       id:    result.rows[0].id,
@@ -136,12 +138,14 @@ class ToastSyncService {
         guestCount:               row.guest_count,
         totalAmount:              row.total_amount,
         isManuallyEdited:         row.is_manually_edited || false,
+        isEZCater:                row.is_ez_cater || false,
         pdfVersion:               row.pdf_version || 1,
         googleEventId:            row.google_event_id,
       };
 
       const calculatedData = await this.fulfillmentCalculator.calculate(order);
       calculatedData.header.isManuallyEdited = order.isManuallyEdited;
+      calculatedData.header.isEZCater        = order.isEZCater;
       calculatedData.header.pdfVersion       = order.pdfVersion;
 
       const pdf     = await this.fulfillmentGenerator.generate(calculatedData);
@@ -191,7 +195,6 @@ class ToastSyncService {
     for (const order of orders) {
       if (!order.guid) continue;
       try {
-        // Extraer fecha como string ISO — evita que PostgreSQL lo interprete como JSONB
         const rawDate   = order.estimatedFulfillmentDate || order.openedDate || order.createdDate;
         const orderDate = rawDate ? new Date(rawDate).toISOString() : null;
 

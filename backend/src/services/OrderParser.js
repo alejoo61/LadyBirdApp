@@ -2,10 +2,11 @@
 
 class OrderParser {
   parse(rawOrder, eventType) {
-    const check = rawOrder.checks?.[0];
+    const check     = rawOrder.checks?.[0];
     if (!check) return null;
 
-    const items = this._parseItems(check.selections || []);
+    const items     = this._parseItems(check.selections || []);
+    const isEZCater = this._isEZCater(rawOrder);
 
     return {
       toastOrderGuid:           rawOrder.guid,
@@ -20,14 +21,22 @@ class OrderParser {
       client:                   this._parseClient(check),
       delivery:                 this._parseDelivery(rawOrder),
       items,
-      // Si numberOfGuests <= 1 (staff no lo ingresó), inferir desde los modifiers
       guestCount: (rawOrder.numberOfGuests > 1 ? rawOrder.numberOfGuests : null)
                   || this._inferGuestCount(check.selections, eventType),
       totalAmount:              check.totalAmount,
       source:                   rawOrder.source,
       voided:                   rawOrder.voided,
       approvalStatus:           rawOrder.approvalStatus,
+      isEZCater,
     };
+  }
+
+  // Detectado por el descuento "3pd EZ Cater Fees/Promos" en appliedDiscounts
+  _isEZCater(rawOrder) {
+    const discounts = rawOrder.appliedDiscounts || [];
+    return discounts.some(d =>
+      (d.name || '').toLowerCase().includes('ez cater')
+    );
   }
 
   _isHouseAccount(check) {
@@ -91,21 +100,6 @@ class OrderParser {
       }));
   }
 
-  /**
-   * Infiere el guest count desde los items cuando numberOfGuests viene <= 1.
-   *
-   * Bird Box: totalTacos / 2
-   *   Busca el modifier con patrón "X Tacos" × quantity del item.
-   *
-   * Taco Bar (staff): la quantity del modifier principal = guest count.
-   *   El staff crea la orden directo en Toast y no ingresa numberOfGuests.
-   *   Los modifiers vienen con quantity = guests (ej: 70 flour tortillas → 70 guests).
-   *   Tomamos la quantity del primer modifier del item principal del Taco Bar.
-   *
-   * Personal Box: suma de quantities de items "personal".
-   *
-   * Fallback: quantity del item con qty > 1.
-   */
   _inferGuestCount(selections, eventType) {
     if (!selections || selections.length === 0) return 1;
 
@@ -130,17 +124,14 @@ class OrderParser {
     }
 
     if (eventType === 'TACO_BAR') {
-      // Buscar el item principal del Taco Bar (tiene modifiers)
       const tacoBarItem = selections.find(s =>
         !s.voided &&
         (s.displayName || '').toLowerCase().includes('taco bar') &&
         s.modifiers && s.modifiers.length > 0
       );
       if (tacoBarItem) {
-        // La quantity del primer modifier = guests
         const firstMod = tacoBarItem.modifiers.find(m => (m.quantity || 0) > 1);
         if (firstMod && firstMod.quantity > 1) return firstMod.quantity;
-        // Fallback: quantity del item mismo si > 1
         if (tacoBarItem.quantity > 1) return tacoBarItem.quantity;
       }
     }
@@ -154,7 +145,6 @@ class OrderParser {
       }
     }
 
-    // Fallback general: quantity del item con más qty
     const mainItem = selections.find(s => !s.voided && s.quantity > 1);
     return mainItem ? mainItem.quantity : 1;
   }
