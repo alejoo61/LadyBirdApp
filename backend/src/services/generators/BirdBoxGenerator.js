@@ -27,7 +27,7 @@ class BirdBoxGenerator extends BaseGenerator {
       </div>
       <div class="right-col">
         ${this._renderPaperGoods(paperGoods)}
-        ${this._renderDrinksChecklist(drinks)}
+        ${this._renderDrinks(drinks || [], header.guestCount)}
       </div>
     </div>
     ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
@@ -150,7 +150,6 @@ class BirdBoxGenerator extends BaseGenerator {
   }
 
   // ─── CHIPS CONSOLIDADO ────────────────────────────────────────────────────
-  // Una sola sección con todos los chips de la orden con contexto claro
   _renderChipsTotal(chipsBreakdown, chipsAndSalsa, boxes, hasManuasSalsas) {
     if (!chipsBreakdown || chipsBreakdown.length === 0) return '';
 
@@ -235,17 +234,88 @@ class BirdBoxGenerator extends BaseGenerator {
       <table>
         <thead><tr><th>Item</th><th>Amount</th><th>Utensil</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th></tr></thead>
         <tbody>
-          ${salsas.map(item => `
+          ${salsas.map(item => {
+            const pkgStr = item.packagingQty && item.packagingQty > 1
+              ? `${item.packagingQty}x ${item.packaging}`
+              : (item.packaging || '—');
+            return `
             <tr>
               <td>${item.name}</td>
               <td>${item.totalAmount || '—'} ${item.unit || ''}</td>
               <td>${item.utensil || '—'}</td>
-              <td>${item.packagingQty ? `${item.packagingQty}x ${item.packaging}` : (item.packaging || '—')}</td>
+              <td>${pkgStr}</td>
               <td class="checkbox-cell"><span class="checkbox"></span></td>
               <td class="checkbox-cell"><span class="checkbox"></span></td>
-            </tr>
-          `).join('')}
+            </tr>`;
+          }).join('')}
         </tbody>
+      </table>
+    </div>`;
+  }
+
+  // ─── DRINKS & ADD-ONS ─────────────────────────────────────────────────────
+  // Sección completa con Cantidad / Packaging / Utensil / Packed? / Loaded?
+  _renderDrinks(drinks, guestCount) {
+    if (!drinks || drinks.length === 0) return '';
+
+    const rows = [];
+
+    for (const drink of drinks) {
+      // Fila principal del café/bebida
+      const pkgStr = drink.packaging
+        ? `${drink.packagingQty ? `${drink.packagingQty}x ` : ''}${drink.packaging}`
+        : `${drink.quantity}x each`;
+
+      rows.push(`
+        <tr>
+          <td><strong>${drink.name}</strong>${drink.quantity > 1 ? ` <span style="color:#1565c0; font-weight:900">×${drink.quantity}</span>` : ''}</td>
+          <td style="font-size:8px; color:#555">${drink.totalOz ? `${drink.totalOz} oz` : `${drink.quantity} each`}</td>
+          <td>${pkgStr}</td>
+          <td>—</td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+        </tr>`);
+
+      // Filas de creamers/leches
+      if (drink.creamers && drink.creamers.length > 0) {
+        for (const cr of drink.creamers) {
+          rows.push(`
+            <tr style="background:#f0f4ff">
+              <td style="padding-left:16px; font-size:8px; color:#555">↳ ${cr.name}</td>
+              <td style="font-size:8px; color:#555">${cr.totalOz} oz</td>
+              <td style="font-size:8px">${cr.packaging}</td>
+              <td style="font-size:8px">—</td>
+              <td class="checkbox-cell"><span class="checkbox"></span></td>
+              <td class="checkbox-cell"><span class="checkbox"></span></td>
+            </tr>`);
+        }
+      }
+
+      // Fila cups & lids si aplica (8oz hot cup/lids × guest count)
+      if (drink.wantsCups && guestCount) {
+        rows.push(`
+          <tr style="background:#f0f4ff">
+            <td style="padding-left:16px; font-size:8px; color:#555">↳ 8 oz Hot Cup/Lids</td>
+            <td style="font-size:8px; color:#555">${guestCount} each</td>
+            <td style="font-size:8px">8 oz hot cup/lids</td>
+            <td style="font-size:8px">—</td>
+            <td class="checkbox-cell"><span class="checkbox"></span></td>
+            <td class="checkbox-cell"><span class="checkbox"></span></td>
+          </tr>`);
+      }
+    }
+
+    return `
+    <div class="section">
+      <div class="section-header" style="background:#1565c0">Drinks &amp; Add-ons</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th><th>Amount</th><th>Packaging</th>
+            <th>Utensil</th><th>Packed?</th><th>Loaded?</th>
+          </tr>
+        </thead>
+        <tbody>${rows.join('')}</tbody>
       </table>
     </div>`;
   }
