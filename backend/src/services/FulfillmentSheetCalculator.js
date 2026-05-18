@@ -377,7 +377,7 @@ class FulfillmentSheetCalculator {
     const anyWantsChips = boxes.some(b => b.wantsChips);
 
     const _buildIncludedSalsa = (name) => {
-      const totalOz    = Math.ceil(guestCount * 0.5);
+      const totalOz    = Math.ceil(guestCount * 1);
       const needsTwoCups = totalOz > 32;
       const packagingQty = needsTwoCups ? 2 : 1;
       return {
@@ -427,19 +427,18 @@ class FulfillmentSheetCalculator {
     const hasManuasSalsas = manualSalsaItems.length > 0;
 
     // ── Paper goods ──
-    // Forks = Taco Boats = guests + 10 (redondeado a 5 o 10 más)
-    // Napkins = 40% del pack (redondeado al paquete de 100)
-    // Taco Boats = guests + 10
+    // Taco Boats = totalTacos / 2 + 10 (redondeado a decena superior)
+    // Forks = igual que Taco Boats
+    // Napkins = 40% de guests (redondeado a decena)
     const anyWantsPaper = boxes.some(b => b.wantsPaper);
     let paperGoods      = { included: false, items: [] };
 
     if (anyWantsPaper) {
       const base          = await this.resolver.calculatePaperGoods('BIRD_BOX', guestCount);
-      const tacoBoatCount = guestCount + 10;
+      const tacoBoatCount = Math.ceil((totalTacos / 2 + 10) / 10) * 10;
       const forkCount     = tacoBoatCount;
-      const napkinCount   = Math.ceil((guestCount * 0.4) / 10) * 10; // redondeo a decena
+      const napkinCount   = Math.ceil((guestCount * 0.4) / 10) * 10;
 
-      // Reemplazar las cantidades con las nuevas reglas
       const updatedItems = (base.items || []).map(pg => {
         const nameLc = (pg.name || '').toLowerCase();
         if (nameLc.includes('taco boat')) return { ...pg, qty: tacoBoatCount };
