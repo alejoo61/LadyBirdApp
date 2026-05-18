@@ -27,9 +27,9 @@ class BirdBoxGenerator extends BaseGenerator {
       </div>
       <div class="right-col">
         ${this._renderPaperGoods(paperGoods)}
-        ${this._renderDrinks(drinks || [], header.guestCount)}
       </div>
     </div>
+    ${this._renderDrinks(drinks || [], header.guestCount)}
     ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
     ${this._renderQC([
       'All taco combos counted and packed correctly',
@@ -254,51 +254,53 @@ class BirdBoxGenerator extends BaseGenerator {
   }
 
   // ─── DRINKS & ADD-ONS ─────────────────────────────────────────────────────
-  // Sección completa con Cantidad / Packaging / Utensil / Packed? / Loaded?
   _renderDrinks(drinks, guestCount) {
     if (!drinks || drinks.length === 0) return '';
 
     const rows = [];
 
     for (const drink of drinks) {
-      // Fila principal del café/bebida
-      const pkgStr = drink.packaging
+      const amountStr  = drink.totalOz ? `${drink.totalOz} oz` : `${drink.quantity} each`;
+      const pkgStr     = drink.packaging
         ? `${drink.packagingQty ? `${drink.packagingQty}x ` : ''}${drink.packaging}`
         : `${drink.quantity}x each`;
 
       rows.push(`
         <tr>
-          <td><strong>${drink.name}</strong>${drink.quantity > 1 ? ` <span style="color:#1565c0; font-weight:900">×${drink.quantity}</span>` : ''}</td>
-          <td style="font-size:8px; color:#555">${drink.totalOz ? `${drink.totalOz} oz` : `${drink.quantity} each`}</td>
+          <td style="white-space:nowrap">
+            <strong>${drink.name}</strong>
+            ${drink.quantity > 1 ? `<span style="color:#1565c0; font-weight:900; margin-left:4px">×${drink.quantity}</span>` : ''}
+          </td>
+          <td>${amountStr}</td>
           <td>${pkgStr}</td>
           <td>—</td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
         </tr>`);
 
-      // Filas de creamers/leches
+      // Creamers/leches
       if (drink.creamers && drink.creamers.length > 0) {
         for (const cr of drink.creamers) {
           rows.push(`
             <tr style="background:#f0f4ff">
-              <td style="padding-left:16px; font-size:8px; color:#555">↳ ${cr.name}</td>
-              <td style="font-size:8px; color:#555">${cr.totalOz} oz</td>
-              <td style="font-size:8px">${cr.packaging}</td>
-              <td style="font-size:8px">—</td>
+              <td style="padding-left:20px; color:#444">↳ ${cr.name}</td>
+              <td>${cr.totalOz} oz</td>
+              <td>${cr.packaging}</td>
+              <td>—</td>
               <td class="checkbox-cell"><span class="checkbox"></span></td>
               <td class="checkbox-cell"><span class="checkbox"></span></td>
             </tr>`);
         }
       }
 
-      // Fila cups & lids si aplica (8oz hot cup/lids × guest count)
+      // 8oz hot cup/lids × guest count
       if (drink.wantsCups && guestCount) {
         rows.push(`
           <tr style="background:#f0f4ff">
-            <td style="padding-left:16px; font-size:8px; color:#555">↳ 8 oz Hot Cup/Lids</td>
-            <td style="font-size:8px; color:#555">${guestCount} each</td>
-            <td style="font-size:8px">8 oz hot cup/lids</td>
-            <td style="font-size:8px">—</td>
+            <td style="padding-left:20px; color:#444">↳ 8 oz Hot Cup / Lids</td>
+            <td>${guestCount} each</td>
+            <td>${guestCount}x 8 oz hot cup/lids</td>
+            <td>—</td>
             <td class="checkbox-cell"><span class="checkbox"></span></td>
             <td class="checkbox-cell"><span class="checkbox"></span></td>
           </tr>`);
@@ -306,13 +308,17 @@ class BirdBoxGenerator extends BaseGenerator {
     }
 
     return `
-    <div class="section">
+    <div class="section" style="margin-top:8px">
       <div class="section-header" style="background:#1565c0">Drinks &amp; Add-ons</div>
       <table>
         <thead>
           <tr>
-            <th>Item</th><th>Amount</th><th>Packaging</th>
-            <th>Utensil</th><th>Packed?</th><th>Loaded?</th>
+            <th>Item</th>
+            <th>Amount</th>
+            <th>Packaging</th>
+            <th>Utensil</th>
+            <th>Packed?</th>
+            <th>Loaded?</th>
           </tr>
         </thead>
         <tbody>${rows.join('')}</tbody>
