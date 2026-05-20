@@ -44,6 +44,7 @@ class CateringOrderMapper {
 
     entity.paymentStatus          = row.payment_status        || 'OPEN';
     entity.isManuallyEdited       = row.is_manually_edited    || false;
+    entity.isEZCater              = row.is_ez_cater           || false;
     entity.pdfVersion             = row.pdf_version           || 1;
     entity.pdfNeedsUpdate         = row.pdf_needs_update      || false;
     entity.calendarNeedsUpdate    = row.calendar_needs_update || false;
@@ -63,7 +64,6 @@ class CateringOrderMapper {
     );
 
     // Restar 10 minutos al fulfillment date para que cocina siempre llegue antes
-    // La fecha real se guarda en DB — esto es solo presentación
     const estimatedFulfillmentDate = this._subtractMinutes(entity.estimatedFulfillmentDate, 10);
 
     return {
@@ -83,6 +83,7 @@ class CateringOrderMapper {
       isHouseAccount:           entity.parsedData?.isHouseAccount || false,
       isSpaceRental,
       isManuallyEdited:         entity.isManuallyEdited || false,
+      isEZCater:                entity.isEZCater        || false,
       pdfVersion:               entity.pdfVersion || 1,
       pdfNeedsUpdate:           entity.pdfNeedsUpdate || false,
       calendarNeedsUpdate:      entity.calendarNeedsUpdate || false,
@@ -90,7 +91,7 @@ class CateringOrderMapper {
       clientEmail:              entity.clientEmail,
       clientPhone:              entity.clientPhone,
       orderDate:                entity.orderDate,
-      estimatedFulfillmentDate,                           // ← -10 min (solo UI)
+      estimatedFulfillmentDate,
       kitchenFinishTime:        entity.getKitchenFinishTime(),
       businessDate:             entity.businessDate,
       deliveryMethod:           entity.deliveryMethod,
@@ -112,10 +113,6 @@ class CateringOrderMapper {
     return orders.map(o => this.toDTO(o));
   }
 
-  /**
-   * Resta N minutos a una fecha ISO string.
-   * Si la fecha es inválida o null, retorna null.
-   */
   static _subtractMinutes(dateStr, minutes) {
     if (!dateStr) return null;
     try {

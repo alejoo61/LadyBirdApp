@@ -95,6 +95,7 @@ module.exports = (
 
       const calculatedData = await fulfillmentCalculator.calculate(order);
       calculatedData.header.isManuallyEdited = order.isManuallyEdited || false;
+      calculatedData.header.isEZCater        = order.isEZCater        || false;
       calculatedData.header.pdfVersion       = newVersion;
 
       const pdf     = await fulfillmentGenerator.generate(calculatedData);
@@ -153,6 +154,7 @@ module.exports = (
 
       const calculatedData = await fulfillmentCalculator.calculate(order);
       calculatedData.header.isManuallyEdited = order.isManuallyEdited || false;
+      calculatedData.header.isEZCater        = order.isEZCater        || false;
       calculatedData.header.pdfVersion       = order.pdfVersion || 1;
 
       const pdf = await fulfillmentGenerator.generate(calculatedData);
