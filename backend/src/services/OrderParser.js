@@ -33,8 +33,10 @@ class OrderParser {
 
   // Detectado por el descuento "3pd EZ Cater Fees/Promos" en appliedDiscounts
   _isEZCater(rawOrder) {
-    const discounts = rawOrder.appliedDiscounts || [];
-    return discounts.some(d =>
+    const rootDiscounts  = rawOrder.appliedDiscounts || [];
+    const checkDiscounts = rawOrder.checks?.[0]?.appliedDiscounts || [];
+    const allDiscounts   = [...rootDiscounts, ...checkDiscounts];
+    return allDiscounts.some(d =>
       (d.name || '').toLowerCase().includes('ez cater')
     );
   }
