@@ -1,18 +1,20 @@
 // src/services/FulfillmentSheetGenerator.js
-const puppeteer            = require('puppeteer');
-const path                 = require('path');
-const fs                   = require('fs');
-const os                   = require('os');
-const TacoBarGenerator     = require('./generators/TacoBarGenerator');
-const BirdBoxGenerator     = require('./generators/BirdBoxGenerator');
-const PersonalBoxGenerator = require('./generators/PersonalBoxGenerator');
-const FoodaGenerator       = require('./generators/FoodaGenerator');
+const puppeteer              = require('puppeteer');
+const path                   = require('path');
+const fs                     = require('fs');
+const os                     = require('os');
+const TacoBarGenerator       = require('./generators/TacoBarGenerator');
+const BirdBoxGenerator       = require('./generators/BirdBoxGenerator');
+const PersonalBoxGenerator   = require('./generators/PersonalBoxGenerator');
+const FoodaGenerator         = require('./generators/FoodaGenerator');
+const SpaceRentalGenerator   = require('./generators/SpaceRentalGenerator');
 
 const GENERATORS = {
   TACO_BAR:     new TacoBarGenerator(),
   BIRD_BOX:     new BirdBoxGenerator(),
   PERSONAL_BOX: new PersonalBoxGenerator(),
   FOODA:        new FoodaGenerator(),
+  SPACE_RENTAL: new SpaceRentalGenerator(),
 };
 
 class FulfillmentSheetGenerator {
@@ -36,7 +38,6 @@ class FulfillmentSheetGenerator {
     try {
       const page = await browser.newPage();
 
-      // domcontentloaded es suficiente — el HTML es local, no necesita red
       await page.setContent(html, {
         waitUntil: 'domcontentloaded',
         timeout:   10000,
@@ -62,6 +63,7 @@ class FulfillmentSheetGenerator {
       BIRD_BOX:     'BirdBox',
       PERSONAL_BOX: 'PersonalBox',
       FOODA:        'Fooda',
+      SPACE_RENTAL: 'SpaceRental',
       NEEDS_REVIEW: 'NeedsReview',
     }[order.eventType] || order.eventType || 'Unknown';
 

@@ -25,10 +25,11 @@ class BaseGenerator {
 
   _eventTypeBadge(eventType) {
     const map = {
-      TACO_BAR:     { color: '#c0392b', label: 'TACO BAR'     },
-      BIRD_BOX:     { color: '#457b9d', label: "'BIRD BOX"    },
-      PERSONAL_BOX: { color: '#b7791f', label: 'PERSONAL BOX' },
-      FOODA:        { color: '#2d3748', label: 'FOODA'         },
+      TACO_BAR:     { color: '#c0392b', label: 'TACO BAR'      },
+      BIRD_BOX:     { color: '#457b9d', label: "'BIRD BOX"     },
+      PERSONAL_BOX: { color: '#b7791f', label: 'PERSONAL BOX'  },
+      FOODA:        { color: '#2d3748', label: 'FOODA'          },
+      SPACE_RENTAL: { color: '#7b2d8b', label: 'SPACE RENTAL'  },
       NEEDS_REVIEW: { color: '#f4a261', label: 'NEEDS REVIEW'  },
     };
     return map[eventType] || { color: '#2d3748', label: eventType };
