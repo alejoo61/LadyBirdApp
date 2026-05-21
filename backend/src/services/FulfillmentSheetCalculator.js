@@ -377,13 +377,17 @@ class FulfillmentSheetCalculator {
     // Utensil: Ladle C/U
     const anyWantsChips = boxes.some(b => b.wantsChips);
 
+    // Total salsa = guestCount × 1oz, dividido entre el número de salsas
+    const numSalsas = guestCount >= THREE_SALSAS_THRESHOLD ? 3 : 1;
+    const totalSalsaOz = guestCount; // 1oz per person
+    const ozPerSalsa = Math.ceil(totalSalsaOz / numSalsas);
+
     const _buildIncludedSalsa = (name) => {
-      const totalOz    = Math.ceil(guestCount * 1);
-      const needsTwoCups = totalOz > 32;
+      const needsTwoCups = ozPerSalsa > 32;
       const packagingQty = needsTwoCups ? 2 : 1;
       return {
         name,
-        totalAmount:  totalOz,
+        totalAmount:  ozPerSalsa,
         unit:         'oz',
         utensil:      'Ladle C/U',
         packaging:    '32 oz deli cup',
