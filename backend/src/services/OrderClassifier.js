@@ -14,6 +14,8 @@ const EVENT_TYPE_KEYWORDS = {
   FOODA:        ['fooda'],
 };
 
+const SPACE_RENTAL_KEYWORDS = ['space rental'];
+
 class OrderClassifier {
 
   isCatering(rawOrder) {
@@ -27,7 +29,17 @@ class OrderClassifier {
     return isCateringDiningOption || isCateringSource;
   }
 
+  // Space Rental siempre tiene prioridad — si hay un item de Space Rental
+  // en la orden, el event type es SPACE_RENTAL independientemente del resto
+  _hasSpaceRental(rawOrder) {
+    const allText = this._extractAllText(rawOrder).toLowerCase();
+    return SPACE_RENTAL_KEYWORDS.some(kw => allText.includes(kw));
+  }
+
   classifyEventType(rawOrder) {
+    // Space Rental tiene prioridad máxima
+    if (this._hasSpaceRental(rawOrder)) return 'SPACE_RENTAL';
+
     const allText = this._extractAllText(rawOrder).toLowerCase();
     for (const [eventType, keywords] of Object.entries(EVENT_TYPE_KEYWORDS)) {
       if (keywords.some(kw => allText.includes(kw))) return eventType;
