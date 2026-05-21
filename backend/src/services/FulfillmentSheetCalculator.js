@@ -733,13 +733,12 @@ class FulfillmentSheetCalculator {
     const cornItem  = ingredients.find(i => i.canonicalName === 'Corn Tortillas');
     const is5050    = flourItem && cornItem;
 
-    // Para 50/50 cada tipo recibe la mitad de los guests
-    const flourGuests = is5050 ? Math.ceil(guestCount / 2)  : guestCount;
-    const cornGuests  = is5050 ? Math.floor(guestCount / 2) : guestCount;
-
     if (flourItem) {
-      const total     = this.resolver.calculateAmount(flourItem.formula, flourGuests);
-      const packaging = this.resolver.getPackaging(flourItem.formula, flourGuests);
+      // Para 50/50: total tacos / 2 por tipo → 15 guests × 2 = 30 → 15 Flour + 15 Corn
+      const total     = is5050
+        ? Math.round(this.resolver.calculateAmount(flourItem.formula, guestCount) / 2)
+        : this.resolver.calculateAmount(flourItem.formula, guestCount);
+      const packaging = this.resolver.getPackaging(flourItem.formula, guestCount);
       result.push({
         name: is5050 ? 'Flour Tortillas (50/50)' : 'Flour Tortillas',
         total, unit: flourItem.formula.unit,
@@ -748,8 +747,10 @@ class FulfillmentSheetCalculator {
       });
     }
     if (cornItem) {
-      const total     = this.resolver.calculateAmount(cornItem.formula, cornGuests);
-      const packaging = this.resolver.getPackaging(cornItem.formula, cornGuests);
+      const total     = is5050
+        ? Math.round(this.resolver.calculateAmount(cornItem.formula, guestCount) / 2)
+        : this.resolver.calculateAmount(cornItem.formula, guestCount);
+      const packaging = this.resolver.getPackaging(cornItem.formula, guestCount);
       result.push({
         name: is5050 ? 'Corn Tortillas (50/50)' : 'Corn Tortillas',
         total, unit: cornItem.formula.unit,
