@@ -157,11 +157,11 @@ class ToastSyncService {
       if (order.googleEventId) {
         console.log(`📅 Updating existing event: ${order.googleEventId}`);
         calResult = await this.googleCalendarService.updateEvent(
-          order, order.googleEventId, pdf, pdfName
+          order, order.googleEventId, pdf, pdfName, calculatedData
         );
       } else {
         console.log(`📅 Creating new calendar event...`);
-        calResult = await this.googleCalendarService.createEvent(order, pdf, pdfName);
+        calResult = await this.googleCalendarService.createEvent(order, pdf, pdfName, calculatedData);
       }
 
       if (calResult?.eventId) {

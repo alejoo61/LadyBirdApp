@@ -26,6 +26,7 @@ class FulfillmentSheetCalculator {
       case 'BIRD_BOX':     return this._calculateBirdBox(cateringOrder);
       case 'PERSONAL_BOX': return this._calculatePersonalBox(cateringOrder);
       case 'FOODA':        return this._calculateFooda(cateringOrder);
+      case 'SPACE_RENTAL':  return this._calculateSpaceRental(cateringOrder);
       default:             return this._calculateTacoBar(cateringOrder);
     }
   }
@@ -767,6 +768,119 @@ class FulfillmentSheetCalculator {
       return acc;
     }, {});
   }
+
+  // ─── SPACE RENTAL ─────────────────────────────────────────────────────────
+  async _calculateSpaceRental(cateringOrder) {
+    const { parsedData } = cateringOrder;
+    const delivery = parsedData?.delivery || {};
+    const items    = parsedData?.items    || [];
+
+    // Buscar el item de Space Rental
+    const rentalItem = items.find(i =>
+      (i.displayName || i.name || '').toLowerCase().includes('space rental')
+    );
+
+    // El modifier contiene el horario: "5:30 pm to 7:30 pm"
+    const timeMod = rentalItem?.modifiers?.[0];
+    const timeStr = timeMod?.displayName || '';
+
+    // Parsear horario de inicio y fin
+    const timeRange = this._parseSpaceRentalTime(timeStr, cateringOrder.estimatedFulfillmentDate);
+
+    // Detectar si tiene comida además del rental
+    const hasFood = items.some(i => {
+      const n = (i.displayName || i.name || '').toLowerCase();
+      return !n.includes('space rental') && !n.includes('ez cater') && !n.includes('open tax');
+    });
+
+    const spaceRental = {
+      rentalType:   rentalItem?.displayName || 'Space Rental',
+      timeStr,
+      eventTime:    timeRange.eventTimeLabel,
+      readyBy:      timeRange.readyByLabel,
+      startISO:     timeRange.startISO,
+      endISO:       timeRange.endISO,
+      readyByISO:   timeRange.readyByISO,
+      duration:     timeRange.duration,
+      totalAmount:  rentalItem?.price || cateringOrder.totalAmount,
+      hasFood,
+    };
+
+    return {
+      header:      this._buildHeader(cateringOrder, delivery),
+      spaceRental,
+      hotItems:    [],
+      coldItems:   [],
+      dryItems:    [],
+      paperGoods:  { included: false, items: [] },
+    };
+  }
+
+  // Parsea "5:30 pm to 7:30 pm" y calcula readyBy (25 min antes)
+  _parseSpaceRentalTime(timeStr, baseDateISO) {
+    const READY_BEFORE_MINUTES = 25;
+
+    if (!timeStr || !baseDateISO) {
+      return {
+        eventTimeLabel: timeStr || '—',
+        readyByLabel:   '—',
+        startISO:       baseDateISO,
+        endISO:         null,
+        readyByISO:     null,
+        duration:       '—',
+      };
+    }
+
+    // Intentar parsear "H:MM am/pm to H:MM am/pm"
+    const match = timeStr.match(/(\d+:\d+\s*(?:am|pm))\s+to\s+(\d+:\d+\s*(?:am|pm))/i);
+    if (!match) {
+      return {
+        eventTimeLabel: timeStr,
+        readyByLabel:   '—',
+        startISO:       baseDateISO,
+        endISO:         null,
+        readyByISO:     null,
+        duration:       timeStr,
+      };
+    }
+
+    const baseDate  = new Date(baseDateISO);
+    const dateStr   = baseDate.toISOString().slice(0, 10);
+
+    const parseTime = (t) => {
+      const [time, meridiem] = t.trim().split(/\s+/);
+      let [h, m] = time.split(':').map(Number);
+      if (meridiem?.toLowerCase() === 'pm' && h !== 12) h += 12;
+      if (meridiem?.toLowerCase() === 'am' && h === 12) h = 0;
+      const d = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`);
+      return d;
+    };
+
+    const startDate  = parseTime(match[1]);
+    const endDate    = parseTime(match[2]);
+    const readyByDate = new Date(startDate.getTime() - READY_BEFORE_MINUTES * 60 * 1000);
+
+    const fmt = (d) => d.toLocaleTimeString('en-US', {
+      hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Chicago'
+    });
+
+    const diffMs  = endDate - startDate;
+    const diffHrs = Math.floor(diffMs / 3600000);
+    const diffMin = Math.floor((diffMs % 3600000) / 60000);
+    const duration = diffHrs > 0
+      ? `${diffHrs}h${diffMin > 0 ? ` ${diffMin}min` : ''}`
+      : `${diffMin}min`;
+
+    return {
+      eventTimeLabel: `${fmt(startDate)} – ${fmt(endDate)}`,
+      readyByLabel:   fmt(readyByDate),
+      startISO:       startDate.toISOString(),
+      endISO:         endDate.toISOString(),
+      readyByISO:     readyByDate.toISOString(),
+      duration,
+    };
+  }
+
 }
 
 module.exports = FulfillmentSheetCalculator;

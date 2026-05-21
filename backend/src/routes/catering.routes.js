@@ -117,9 +117,9 @@ module.exports = (
           const existingEventId = orderRow.rows[0]?.google_event_id;
           let calResult;
           if (existingEventId) {
-            calResult = await googleCalendarService.updateEvent(order, existingEventId, pdf, pdfName);
+            calResult = await googleCalendarService.updateEvent(order, existingEventId, pdf, pdfName, calculatedData);
           } else {
-            calResult = await googleCalendarService.createEvent(order, pdf, pdfName);
+            calResult = await googleCalendarService.createEvent(order, pdf, pdfName, calculatedData);
           }
           if (calResult?.eventId) {
             await pool.query(`

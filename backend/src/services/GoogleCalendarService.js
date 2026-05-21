@@ -7,7 +7,6 @@ const os         = require('os');
 // Calendar IDs por store code
 const STORE_CALENDARS = {
   '002': 'c_5180aeb27d1682079c6843eb35a504b01f692ef32de39acf7274f4a93ec7414b@group.calendar.google.com',
-  // Agregar otros stores cuando estén listos:
   // '001': 'xxx@group.calendar.google.com',
   // '003': 'xxx@group.calendar.google.com',
   // '004': 'xxx@group.calendar.google.com',
@@ -64,13 +63,24 @@ class GoogleCalendarService {
     return STORE_CALENDARS[storeCode] || null;
   }
 
-  // ─── BUILD EVENT ──────────────────────────────────────────────────────────
+  // ─── BUILD EVENT TITLE ────────────────────────────────────────────────────
+  // Space Rental siempre tiene prioridad en el título del evento
 
   _buildEventTitle(order) {
     const status = (order.status || 'pending').toUpperCase();
-    const method = order.deliveryMethod === 'DELIVERY' ? 'Delivery' : 'Pickup';
     const name   = order.clientName || 'Unknown';
     const prefix = IS_TEST_MODE ? '[TEST] ' : '';
+
+    const isSpaceRental = order.eventType === 'SPACE_RENTAL' ||
+      (order.parsedData?.items || order.items || []).some(i =>
+        (i.displayName || i.name || '').toLowerCase().includes('space rental')
+      );
+
+    if (isSpaceRental) {
+      return `${prefix}${status}, Space Rental: ${name}`;
+    }
+
+    const method = order.deliveryMethod === 'DELIVERY' ? 'Delivery' : 'Pickup';
     return `${prefix}${status}, ${method}: ${name}`;
   }
 
@@ -119,9 +129,22 @@ class GoogleCalendarService {
     ].filter(l => l !== null).join('\n');
   }
 
-  _buildEventDates(order) {
+  // ─── BUILD EVENT DATES ────────────────────────────────────────────────────
+  // Para Space Rental usa el horario del modifier (startISO/endISO calculado)
+  // Para el resto usa estimatedFulfillmentDate + 1 hora
+
+  _buildEventDates(order, calculatedData) {
+    // Space Rental: usar horario parseado del modifier
+    if (order.eventType === 'SPACE_RENTAL' && calculatedData?.spaceRental?.startISO) {
+      const sr = calculatedData.spaceRental;
+      return {
+        start: { dateTime: sr.startISO, timeZone: 'America/Chicago' },
+        end:   { dateTime: sr.endISO || new Date(new Date(sr.startISO).getTime() + 3600000).toISOString(), timeZone: 'America/Chicago' },
+      };
+    }
+
     const start = new Date(order.estimatedFulfillmentDate);
-    const end   = new Date(start.getTime() + 60 * 60 * 1000); // +1 hora
+    const end   = new Date(start.getTime() + 60 * 60 * 1000);
     return {
       start: { dateTime: start.toISOString(), timeZone: 'America/Chicago' },
       end:   { dateTime: end.toISOString(),   timeZone: 'America/Chicago' },
@@ -149,7 +172,6 @@ class GoogleCalendarService {
         supportsAllDrives: true,
       });
 
-      // Hacer el archivo accesible para cualquiera con el link
       await drive.permissions.create({
         fileId:      response.data.id,
         requestBody: { role: 'reader', type: 'anyone' },
@@ -167,7 +189,7 @@ class GoogleCalendarService {
 
   // ─── CALENDAR: CREATE EVENT ───────────────────────────────────────────────
 
-  async createEvent(order, pdfBuffer, pdfFilename) {
+  async createEvent(order, pdfBuffer, pdfFilename, calculatedData) {
     const calendarId = this._getCalendarId(order.storeCode);
     if (!calendarId) {
       console.log(`⚠️  No calendar configured for store ${order.storeCode} — skipping`);
@@ -175,9 +197,8 @@ class GoogleCalendarService {
     }
 
     const cal   = await this._getCal();
-    const dates = this._buildEventDates(order);
+    const dates = this._buildEventDates(order, calculatedData);
 
-    // 1. Subir PDF a Drive
     let driveFile = null;
     if (pdfBuffer && pdfFilename) {
       try {
@@ -188,7 +209,6 @@ class GoogleCalendarService {
       }
     }
 
-    // 2. Crear evento
     const eventBody = {
       summary:     this._buildEventTitle(order),
       description: this._buildDescription(order),
@@ -218,14 +238,13 @@ class GoogleCalendarService {
 
   // ─── CALENDAR: UPDATE EVENT ───────────────────────────────────────────────
 
-  async updateEvent(order, googleEventId, pdfBuffer, pdfFilename) {
+  async updateEvent(order, googleEventId, pdfBuffer, pdfFilename, calculatedData) {
     const calendarId = this._getCalendarId(order.storeCode);
     if (!calendarId || !googleEventId) return null;
 
     const cal   = await this._getCal();
-    const dates = this._buildEventDates(order);
+    const dates = this._buildEventDates(order, calculatedData);
 
-    // Subir nuevo PDF si viene
     let driveFile = null;
     if (pdfBuffer && pdfFilename) {
       try {
@@ -235,7 +254,6 @@ class GoogleCalendarService {
       }
     }
 
-    // Obtener attachments existentes
     const existing = await cal.events.get({ calendarId, eventId: googleEventId });
     const existingAttachments = existing.data.attachments || [];
 
