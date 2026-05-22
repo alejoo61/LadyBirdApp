@@ -134,18 +134,34 @@ app.listen(PORT, () => {
   console.log(`${'='.repeat(60)}\n`);
 });
 
-// ─── Auto-sync polling ────────────────────────────────────────────────────
+// ─── Polling 1: Sync reciente (cada 15 min) ───────────────────────────────
+// Trae órdenes de los últimos 30 min — detecta nuevas Y cambios recientes
 cron.schedule('*/15 * * * *', async () => {
   console.log(`\n⏰ [${new Date().toISOString()}] Auto-sync iniciado...`);
   try {
     const results       = await toastSyncService.syncAll({ minutesBack: 30 });
     const totalCatering = results.reduce((sum, r) => sum + (r.catering || 0), 0);
-    if (totalCatering > 0)
-      console.log(`🍽️  ${totalCatering} nuevas órdenes detectadas`);
+    const totalUpdated  = results.reduce((sum, r) => sum + (r.updated || 0), 0);
+    if (totalCatering > 0) console.log(`🍽️  ${totalCatering} nuevas órdenes detectadas`);
+    if (totalUpdated  > 0) console.log(`🔄 ${totalUpdated} órdenes actualizadas`);
     console.log('✅ Auto-sync completo');
   } catch (error) {
     console.error('❌ Auto-sync error:', error.message);
   }
 });
 
-console.log('⏰ Polling activo — sync cada 15 minutos');
+// ─── Polling 2: Sync de órdenes futuras (diario a las 2am) ───────────────
+// Verifica cambios en todas las órdenes pending/confirmed con fecha futura
+// Garantiza que cualquier cambio en Toast (pagos, modificaciones) se refleje
+// antes del día del evento, incluso si ocurrió fuera de la ventana de 30 min
+cron.schedule('0 2 * * *', async () => {
+  console.log(`\n🌙 [${new Date().toISOString()}] Upcoming orders sync iniciado...`);
+  try {
+    const result = await toastSyncService.syncUpcoming();
+    console.log(`✅ Upcoming sync completo — ${result.checked} verificadas — ${result.updated} actualizadas`);
+  } catch (error) {
+    console.error('❌ Upcoming sync error:', error.message);
+  }
+});
+
+console.log('⏰ Polling activo — sync cada 15 min + diario a las 2am');
