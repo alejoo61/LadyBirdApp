@@ -1,6 +1,7 @@
 // src/services/ToastSyncService.js
 const OrderClassifier = require('./OrderClassifier');
 const OrderParser     = require('./OrderParser');
+const crypto          = require('crypto');
 
 class ToastSyncService {
   constructor(toastApiClient, pool, fulfillmentCalculator, fulfillmentGenerator, googleCalendarService, auditService) {
@@ -18,6 +19,33 @@ class ToastSyncService {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  // ─── HASH ─────────────────────────────────────────────────────────────────
+  // Genera un hash MD5 de los campos relevantes del payload
+  // Solo los campos que nos importan — ignoramos timestamps internos de Toast
+  _computeHash(rawOrder) {
+    const relevant = {
+      paymentStatus: rawOrder.checks?.[0]?.paymentStatus,
+      totalAmount:   rawOrder.checks?.[0]?.totalAmount,
+      voided:        rawOrder.voided,
+      approvalStatus: rawOrder.approvalStatus,
+      estimatedFulfillmentDate: rawOrder.estimatedFulfillmentDate,
+      deliveryInfo:  rawOrder.deliveryInfo,
+      selections:    rawOrder.checks?.[0]?.selections?.map(s => ({
+        guid:        s.guid,
+        displayName: s.displayName,
+        quantity:    s.quantity,
+        price:       s.price,
+        voided:      s.voided,
+        modifiers:   s.modifiers?.map(m => ({
+          displayName: m.displayName,
+          quantity:    m.quantity,
+          price:       m.price,
+        })),
+      })),
+    };
+    return crypto.createHash('md5').update(JSON.stringify(relevant)).digest('hex');
+  }
+
   async _getActiveStores() {
     const result = await this.pool.query(`
       SELECT id, code, name, timezone, toast_restaurant_guid
@@ -28,19 +56,35 @@ class ToastSyncService {
     return result.rows;
   }
 
+  // ─── UPSERT RAW ORDER con hash ────────────────────────────────────────────
+  // Retorna { id, changed } — changed = true si el payload cambió
   async _upsertRawOrder(storeId, toastOrderGuid, rawPayload, orderDate) {
+    const newHash = this._computeHash(rawPayload);
+
     const result = await this.pool.query(`
       INSERT INTO toast_orders
-        (store_id, toast_order_guid, raw_payload, order_date, sync_status)
-      VALUES ($1, $2, $3, $4, 'pending')
+        (store_id, toast_order_guid, raw_payload, order_date, sync_status, payload_hash)
+      VALUES ($1, $2, $3, $4, 'pending', $5)
       ON CONFLICT (toast_order_guid)
       DO UPDATE SET
-        raw_payload = EXCLUDED.raw_payload,
-        order_date  = EXCLUDED.order_date,
-        updated_at  = CURRENT_TIMESTAMP
-      RETURNING id
-    `, [storeId, toastOrderGuid, JSON.stringify(rawPayload), orderDate]);
-    return result.rows[0].id;
+        raw_payload  = EXCLUDED.raw_payload,
+        order_date   = EXCLUDED.order_date,
+        payload_hash = EXCLUDED.payload_hash,
+        updated_at   = CURRENT_TIMESTAMP
+      WHERE toast_orders.payload_hash IS DISTINCT FROM EXCLUDED.payload_hash
+      RETURNING id, (xmax <> 0) AS was_updated
+    `, [storeId, toastOrderGuid, JSON.stringify(rawPayload), orderDate, newHash]);
+
+    if (result.rows.length > 0) {
+      return { id: result.rows[0].id, changed: result.rows[0].was_updated };
+    }
+
+    // No rows returned = hash igual, no hubo update — buscar el id existente
+    const existing = await this.pool.query(
+      `SELECT id FROM toast_orders WHERE toast_order_guid = $1`,
+      [toastOrderGuid]
+    );
+    return { id: existing.rows[0].id, changed: false };
   }
 
   async _upsertCateringOrder(storeId, toastOrderId, parsed) {
@@ -51,10 +95,12 @@ class ToastSyncService {
         client_name, client_email, client_phone,
         order_date, estimated_fulfillment_date, business_date,
         delivery_method, delivery_address, delivery_notes,
-        parsed_data, guest_count, total_amount, is_ez_cater
+        parsed_data, guest_count, total_amount, is_ez_cater,
+        last_synced_at
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+        CURRENT_TIMESTAMP
       )
       ON CONFLICT (toast_order_guid)
       DO UPDATE SET
@@ -72,6 +118,7 @@ class ToastSyncService {
         guest_count                = EXCLUDED.guest_count,
         total_amount               = EXCLUDED.total_amount,
         is_ez_cater                = EXCLUDED.is_ez_cater,
+        last_synced_at             = CURRENT_TIMESTAMP,
         updated_at                 = CURRENT_TIMESTAMP
       RETURNING id, (xmax = 0) AS is_new
     `, [
@@ -155,12 +202,10 @@ class ToastSyncService {
 
       let calResult;
       if (order.googleEventId) {
-        console.log(`📅 Updating existing event: ${order.googleEventId}`);
         calResult = await this.googleCalendarService.updateEvent(
           order, order.googleEventId, pdf, pdfName, calculatedData
         );
       } else {
-        console.log(`📅 Creating new calendar event...`);
         calResult = await this.googleCalendarService.createEvent(order, pdf, pdfName, calculatedData);
       }
 
@@ -187,10 +232,13 @@ class ToastSyncService {
   }
 
   // ─── PROCESS ORDERS ───────────────────────────────────────────────────────
+  // Procesa tanto órdenes nuevas como órdenes existentes que cambiaron
+  // isManuallyEdited = true → se actualiza la DB pero NO se regenera PDF/Calendar
 
   async _processOrders(orders, storeId, storeCode, storeName) {
     let synced   = 0;
     let catering = 0;
+    let updated  = 0;
 
     for (const order of orders) {
       if (!order.guid) continue;
@@ -198,39 +246,66 @@ class ToastSyncService {
         const rawDate   = order.estimatedFulfillmentDate || order.openedDate || order.createdDate;
         const orderDate = rawDate ? new Date(rawDate).toISOString() : null;
 
-        const toastOrderId = await this._upsertRawOrder(storeId, order.guid, order, orderDate);
-        const eventType    = this.classifier.classify(order);
+        const { id: toastOrderId, changed } = await this._upsertRawOrder(
+          storeId, order.guid, order, orderDate
+        );
 
-        if (eventType) {
-          const parsed = this.parser.parse(order, eventType);
-          if (parsed) {
-            const { id: cateringOrderId, isNew } = await this._upsertCateringOrder(
-              storeId, toastOrderId, parsed
-            );
-            catering++;
+        const eventType = this.classifier.classify(order);
+        if (!eventType) { synced++; continue; }
 
-            if (isNew) {
-              if (this.auditService) {
-                this.auditService.logToastSync(cateringOrderId)
-                  .catch(e => console.error('⚠️  Audit log error:', e.message));
-              }
+        const parsed = this.parser.parse(order, eventType);
+        if (!parsed) { synced++; continue; }
 
-              if (this.fulfillmentCalculator && this.googleCalendarService) {
-                setImmediate(() => this._autoPdfAndCalendar(cateringOrderId, storeCode, storeName));
-              }
-            }
+        const { id: cateringOrderId, isNew } = await this._upsertCateringOrder(
+          storeId, toastOrderId, parsed
+        );
+        catering++;
+
+        if (isNew) {
+          // Orden nueva → audit log + PDF + Calendar
+          console.log(`🆕 Nueva orden catering: ${parsed.client?.name} (${eventType})`);
+          if (this.auditService) {
+            this.auditService.logToastSync(cateringOrderId)
+              .catch(e => console.error('⚠️  Audit log error:', e.message));
+          }
+          if (this.fulfillmentCalculator && this.googleCalendarService) {
+            setImmediate(() => this._autoPdfAndCalendar(cateringOrderId, storeCode, storeName));
+          }
+        } else if (changed) {
+          // Orden existente que cambió en Toast
+          updated++;
+          console.log(`🔄 Orden actualizada: ${parsed.client?.name} — payment: ${parsed.paymentStatus}`);
+
+          // Verificar si fue editada manualmente — si es así, NO regenerar PDF/Calendar
+          const manualCheck = await this.pool.query(
+            `SELECT is_manually_edited FROM catering_orders WHERE id = $1`,
+            [cateringOrderId]
+          );
+          const isManual = manualCheck.rows[0]?.is_manually_edited || false;
+
+          if (!isManual && this.fulfillmentCalculator && this.googleCalendarService) {
+            setImmediate(() => this._autoPdfAndCalendar(cateringOrderId, storeCode, storeName));
+          } else if (isManual) {
+            console.log(`⚠️  Orden ${cateringOrderId} editada manualmente — PDF/Calendar no regenerado`);
+          }
+
+          if (this.auditService) {
+            this.auditService.logToastSync(cateringOrderId)
+              .catch(e => console.error('⚠️  Audit log error:', e.message));
           }
         }
+
         synced++;
       } catch (error) {
         console.error(`   ❌ Error processing ${order.guid}:`, error.message);
       }
     }
 
-    return { synced, catering };
+    return { synced, catering, updated };
   }
 
-  // ─── MODO 1: Polling ──────────────────────────────────────────────────────
+  // ─── MODO 1: Polling reciente (cada 15 min) ───────────────────────────────
+  // Trae órdenes de los últimos N minutos — procesa nuevas Y detecta cambios
   async syncRecent(store, minutesBack = 30) {
     const now       = new Date();
     const startDate = new Date(now.getTime() - minutesBack * 60 * 1000);
@@ -242,17 +317,15 @@ class ToastSyncService {
       1
     );
 
-    if (!orders || orders.length === 0) return { store: store.code, synced: 0, catering: 0 };
+    if (!orders || orders.length === 0) return { store: store.code, synced: 0, catering: 0, updated: 0 };
 
-    const guids     = orders.map(o => o.guid).filter(Boolean);
-    const existing  = await this._getExistingGuids(guids);
-    const newOrders = orders.filter(o => o.guid && !existing.has(o.guid));
+    // Ya no filtramos solo nuevas — procesamos todas para detectar cambios
+    const { synced, catering, updated } = await this._processOrders(
+      orders, store.id, store.code, store.name
+    );
 
-    if (newOrders.length === 0) return { store: store.code, synced: 0, catering: 0 };
-
-    const { synced, catering } = await this._processOrders(newOrders, store.id, store.code, store.name);
-    console.log(`   ✅ ${store.code}: ${synced} new — ${catering} catering`);
-    return { store: store.code, synced, catering };
+    if (synced > 0) console.log(`   ✅ ${store.code}: ${synced} procesadas — ${catering} catering — ${updated} actualizadas`);
+    return { store: store.code, synced, catering, updated };
   }
 
   // ─── MODO 2: Sync histórico ───────────────────────────────────────────────
@@ -261,6 +334,7 @@ class ToastSyncService {
 
     let totalSynced   = 0;
     let totalCatering = 0;
+    let totalUpdated  = 0;
 
     for (let i = 0; i < daysBack; i++) {
       const date = new Date();
@@ -285,16 +359,14 @@ class ToastSyncService {
 
         if (!orders || orders.length === 0) { hasMore = false; break; }
 
-        const guids     = orders.map(o => o.guid).filter(Boolean);
-        const existing  = await this._getExistingGuids(guids);
-        const newOrders = orders.filter(o => o.guid && !existing.has(o.guid));
+        const { synced, catering, updated } = await this._processOrders(
+          orders, store.id, store.code, store.name
+        );
+        totalSynced   += synced;
+        totalCatering += catering;
+        totalUpdated  += updated;
 
-        if (newOrders.length > 0) {
-          const { synced, catering } = await this._processOrders(newOrders, store.id, store.code, store.name);
-          totalSynced   += synced;
-          totalCatering += catering;
-          console.log(`   📅 ${businessDate} p${page}: ${synced} new — ${catering} catering`);
-        }
+        if (synced > 0) console.log(`   📅 ${businessDate} p${page}: ${synced} procesadas — ${updated} actualizadas`);
 
         hasMore = orders.length === 100;
         page++;
@@ -304,8 +376,102 @@ class ToastSyncService {
       await this._sleep(1000);
     }
 
-    console.log(`✅ ${store.code} historical done — ${totalSynced} total — ${totalCatering} catering`);
-    return { store: store.code, synced: totalSynced, catering: totalCatering };
+    console.log(`✅ ${store.code} historical done — ${totalSynced} total — ${totalCatering} catering — ${totalUpdated} actualizadas`);
+    return { store: store.code, synced: totalSynced, catering: totalCatering, updated: totalUpdated };
+  }
+
+  // ─── MODO 3: Sync de órdenes futuras (diario, 2am) ───────────────────────
+  // Recorre todas las órdenes pending/confirmed con fulfillment date futuro
+  // y verifica si cambiaron en Toast — garantiza sincronía antes del evento
+  async syncUpcoming() {
+    console.log(`\n🔍 Upcoming orders sync — verificando cambios en órdenes futuras...`);
+
+    const stores = await this._getActiveStores();
+    let totalChecked = 0;
+    let totalUpdated = 0;
+
+    // Traer todas las órdenes futuras activas de la DB
+    const upcomingResult = await this.pool.query(`
+      SELECT co.toast_order_guid, co.id, s.toast_restaurant_guid, s.code, s.name, s.id as store_id
+      FROM catering_orders co
+      JOIN stores s ON s.id = co.store_id
+      WHERE co.estimated_fulfillment_date > NOW()
+        AND co.status IN ('pending', 'confirmed')
+        AND co.toast_order_guid IS NOT NULL
+        AND co.toast_order_guid NOT LIKE 'MANUAL-%'
+      ORDER BY co.estimated_fulfillment_date ASC
+    `);
+
+    if (upcomingResult.rows.length === 0) {
+      console.log(`✅ No hay órdenes futuras para verificar`);
+      return { checked: 0, updated: 0 };
+    }
+
+    console.log(`📋 ${upcomingResult.rows.length} órdenes futuras a verificar`);
+
+    // Agrupar por store para minimizar llamadas a la API
+    const byStore = upcomingResult.rows.reduce((acc, row) => {
+      if (!acc[row.toast_restaurant_guid]) {
+        acc[row.toast_restaurant_guid] = {
+          storeId:   row.store_id,
+          storeCode: row.code,
+          storeName: row.name,
+          guids:     [],
+        };
+      }
+      acc[row.toast_restaurant_guid].guids.push(row.toast_order_guid);
+      return acc;
+    }, {});
+
+    for (const [restaurantGuid, storeData] of Object.entries(byStore)) {
+      try {
+        // Toast API no tiene endpoint de "get by GUIDs" en bulk directo
+        // Usamos una ventana amplia: desde 90 días atrás hasta 90 días adelante
+        const start = new Date();
+        start.setDate(start.getDate() - 90);
+        const end = new Date();
+        end.setDate(end.getDate() + 90);
+
+        let page    = 1;
+        let hasMore = true;
+
+        while (hasMore) {
+          const orders = await this.toastApiClient.getOrdersBulk(
+            restaurantGuid,
+            start.toISOString(),
+            end.toISOString(),
+            page
+          );
+
+          if (!orders || orders.length === 0) { hasMore = false; break; }
+
+          // Filtrar solo las que están en nuestra lista de upcoming
+          const relevantOrders = orders.filter(o =>
+            storeData.guids.includes(o.guid)
+          );
+
+          if (relevantOrders.length > 0) {
+            const { updated } = await this._processOrders(
+              relevantOrders, storeData.storeId, storeData.storeCode, storeData.storeName
+            );
+            totalChecked += relevantOrders.length;
+            totalUpdated += updated;
+          }
+
+          // Si ya encontramos todas las de esta store, no seguir paginando
+          hasMore = orders.length === 100 && totalChecked < storeData.guids.length;
+          page++;
+          await this._sleep(300);
+        }
+      } catch (err) {
+        console.error(`❌ Error en syncUpcoming para store ${storeData.storeCode}:`, err.message);
+      }
+
+      await this._sleep(500);
+    }
+
+    console.log(`✅ Upcoming sync completo — ${totalChecked} verificadas — ${totalUpdated} actualizadas`);
+    return { checked: totalChecked, updated: totalUpdated };
   }
 
   // ─── syncStore ────────────────────────────────────────────────────────────
@@ -327,7 +493,7 @@ class ToastSyncService {
         results.push(result);
       } catch (error) {
         console.error(`❌ Error syncing ${store.code}:`, error.message);
-        results.push({ store: store.code, synced: 0, catering: 0, error: error.message });
+        results.push({ store: store.code, synced: 0, catering: 0, updated: 0, error: error.message });
       }
     }
 
