@@ -20,8 +20,7 @@ class ToastSyncService {
   }
 
   // ─── HASH ─────────────────────────────────────────────────────────────────
-  // Genera un hash MD5 de los campos relevantes del payload
-  // Solo los campos que nos importan — ignoramos timestamps internos de Toast
+  // Solo hashea campos relevantes — ignora timestamps internos de Toast
   _computeHash(rawOrder) {
     const relevant = {
       paymentStatus: rawOrder.checks?.[0]?.paymentStatus,
@@ -57,34 +56,48 @@ class ToastSyncService {
   }
 
   // ─── UPSERT RAW ORDER con hash ────────────────────────────────────────────
-  // Retorna { id, changed } — changed = true si el payload cambió
+  // Compara hash ANTES del upsert para evitar falsos positivos
+  // Retorna { id, changed } — changed = true solo si el payload realmente cambió
   async _upsertRawOrder(storeId, toastOrderGuid, rawPayload, orderDate) {
     const newHash = this._computeHash(rawPayload);
 
+    // Verificar si existe y comparar hash
+    const existing = await this.pool.query(
+      `SELECT id, payload_hash FROM toast_orders WHERE toast_order_guid = $1`,
+      [toastOrderGuid]
+    );
+
+    if (existing.rows.length > 0) {
+      const currentHash = existing.rows[0].payload_hash;
+      const id          = existing.rows[0].id;
+
+      // Hash igual → sin cambios, no hacer nada
+      if (currentHash === newHash) {
+        return { id, changed: false };
+      }
+
+      // Hash diferente → actualizar
+      await this.pool.query(`
+        UPDATE toast_orders SET
+          raw_payload  = $1,
+          order_date   = $2,
+          payload_hash = $3,
+          updated_at   = CURRENT_TIMESTAMP
+        WHERE toast_order_guid = $4
+      `, [JSON.stringify(rawPayload), orderDate, newHash, toastOrderGuid]);
+
+      return { id, changed: true };
+    }
+
+    // Orden nueva → insertar
     const result = await this.pool.query(`
       INSERT INTO toast_orders
         (store_id, toast_order_guid, raw_payload, order_date, sync_status, payload_hash)
       VALUES ($1, $2, $3, $4, 'pending', $5)
-      ON CONFLICT (toast_order_guid)
-      DO UPDATE SET
-        raw_payload  = EXCLUDED.raw_payload,
-        order_date   = EXCLUDED.order_date,
-        payload_hash = EXCLUDED.payload_hash,
-        updated_at   = CURRENT_TIMESTAMP
-      WHERE toast_orders.payload_hash IS DISTINCT FROM EXCLUDED.payload_hash
-      RETURNING id, (xmax <> 0) AS was_updated
+      RETURNING id
     `, [storeId, toastOrderGuid, JSON.stringify(rawPayload), orderDate, newHash]);
 
-    if (result.rows.length > 0) {
-      return { id: result.rows[0].id, changed: result.rows[0].was_updated };
-    }
-
-    // No rows returned = hash igual, no hubo update — buscar el id existente
-    const existing = await this.pool.query(
-      `SELECT id FROM toast_orders WHERE toast_order_guid = $1`,
-      [toastOrderGuid]
-    );
-    return { id: existing.rows[0].id, changed: false };
+    return { id: result.rows[0].id, changed: false };
   }
 
   async _upsertCateringOrder(storeId, toastOrderId, parsed) {
@@ -232,9 +245,6 @@ class ToastSyncService {
   }
 
   // ─── PROCESS ORDERS ───────────────────────────────────────────────────────
-  // Procesa tanto órdenes nuevas como órdenes existentes que cambiaron
-  // isManuallyEdited = true → se actualiza la DB pero NO se regenera PDF/Calendar
-
   async _processOrders(orders, storeId, storeCode, storeName) {
     let synced   = 0;
     let catering = 0;
@@ -262,7 +272,6 @@ class ToastSyncService {
         catering++;
 
         if (isNew) {
-          // Orden nueva → audit log + PDF + Calendar
           console.log(`🆕 Nueva orden catering: ${parsed.client?.name} (${eventType})`);
           if (this.auditService) {
             this.auditService.logToastSync(cateringOrderId)
@@ -272,11 +281,9 @@ class ToastSyncService {
             setImmediate(() => this._autoPdfAndCalendar(cateringOrderId, storeCode, storeName));
           }
         } else if (changed) {
-          // Orden existente que cambió en Toast
           updated++;
           console.log(`🔄 Orden actualizada: ${parsed.client?.name} — payment: ${parsed.paymentStatus}`);
 
-          // Verificar si fue editada manualmente — si es así, NO regenerar PDF/Calendar
           const manualCheck = await this.pool.query(
             `SELECT is_manually_edited FROM catering_orders WHERE id = $1`,
             [cateringOrderId]
@@ -305,7 +312,6 @@ class ToastSyncService {
   }
 
   // ─── MODO 1: Polling reciente (cada 15 min) ───────────────────────────────
-  // Trae órdenes de los últimos N minutos — procesa nuevas Y detecta cambios
   async syncRecent(store, minutesBack = 30) {
     const now       = new Date();
     const startDate = new Date(now.getTime() - minutesBack * 60 * 1000);
@@ -319,7 +325,6 @@ class ToastSyncService {
 
     if (!orders || orders.length === 0) return { store: store.code, synced: 0, catering: 0, updated: 0 };
 
-    // Ya no filtramos solo nuevas — procesamos todas para detectar cambios
     const { synced, catering, updated } = await this._processOrders(
       orders, store.id, store.code, store.name
     );
@@ -380,17 +385,13 @@ class ToastSyncService {
     return { store: store.code, synced: totalSynced, catering: totalCatering, updated: totalUpdated };
   }
 
-  // ─── MODO 3: Sync de órdenes futuras (diario, 2am) ───────────────────────
-  // Recorre todas las órdenes pending/confirmed con fulfillment date futuro
-  // y verifica si cambiaron en Toast — garantiza sincronía antes del evento
+  // ─── MODO 3: Sync de órdenes futuras (diario 2am) ─────────────────────────
   async syncUpcoming() {
     console.log(`\n🔍 Upcoming orders sync — verificando cambios en órdenes futuras...`);
 
-    const stores = await this._getActiveStores();
     let totalChecked = 0;
     let totalUpdated = 0;
 
-    // Traer todas las órdenes futuras activas de la DB
     const upcomingResult = await this.pool.query(`
       SELECT co.toast_order_guid, co.id, s.toast_restaurant_guid, s.code, s.name, s.id as store_id
       FROM catering_orders co
@@ -409,7 +410,6 @@ class ToastSyncService {
 
     console.log(`📋 ${upcomingResult.rows.length} órdenes futuras a verificar`);
 
-    // Agrupar por store para minimizar llamadas a la API
     const byStore = upcomingResult.rows.reduce((acc, row) => {
       if (!acc[row.toast_restaurant_guid]) {
         acc[row.toast_restaurant_guid] = {
@@ -425,8 +425,6 @@ class ToastSyncService {
 
     for (const [restaurantGuid, storeData] of Object.entries(byStore)) {
       try {
-        // Toast API no tiene endpoint de "get by GUIDs" en bulk directo
-        // Usamos una ventana amplia: desde 90 días atrás hasta 90 días adelante
         const start = new Date();
         start.setDate(start.getDate() - 90);
         const end = new Date();
@@ -434,6 +432,7 @@ class ToastSyncService {
 
         let page    = 1;
         let hasMore = true;
+        let found   = 0;
 
         while (hasMore) {
           const orders = await this.toastApiClient.getOrdersBulk(
@@ -445,10 +444,7 @@ class ToastSyncService {
 
           if (!orders || orders.length === 0) { hasMore = false; break; }
 
-          // Filtrar solo las que están en nuestra lista de upcoming
-          const relevantOrders = orders.filter(o =>
-            storeData.guids.includes(o.guid)
-          );
+          const relevantOrders = orders.filter(o => storeData.guids.includes(o.guid));
 
           if (relevantOrders.length > 0) {
             const { updated } = await this._processOrders(
@@ -456,10 +452,10 @@ class ToastSyncService {
             );
             totalChecked += relevantOrders.length;
             totalUpdated += updated;
+            found        += relevantOrders.length;
           }
 
-          // Si ya encontramos todas las de esta store, no seguir paginando
-          hasMore = orders.length === 100 && totalChecked < storeData.guids.length;
+          hasMore = orders.length === 100 && found < storeData.guids.length;
           page++;
           await this._sleep(300);
         }
