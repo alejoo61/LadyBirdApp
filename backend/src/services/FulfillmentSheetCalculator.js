@@ -583,40 +583,126 @@ class FulfillmentSheetCalculator {
     };
   }
 
-  // ─── PERSONAL BOX ─────────────────────────────────────────────────────────
+ // ─── PERSONAL BOX ─────────────────────────────────────────────────────────
   async _calculatePersonalBox(cateringOrder) {
     const { guestCount, parsedData } = cateringOrder;
-    const delivery  = parsedData?.delivery || {};
-    const items     = parsedData?.items || [];
+    const delivery = parsedData?.delivery || {};
+    const items    = parsedData?.items || [];
+
     const personalBoxes = [];
     let wantsPaper = false;
+    let totalBoxes = 0;
 
     for (const item of items) {
+      const qty       = item.quantity || 1;
       const modifiers = item.modifiers || [];
-      const combo     = modifiers.find(m => /^#\d+/i.test((m.displayName || '').trim()));
-      const tortilla  = modifiers.find(m => {
+
+      // Detectar tortilla
+      const tortillaMod = modifiers.find(m => {
         const n = (m.displayName || '').toLowerCase();
         return n.includes('flour') || n.includes('corn') || n.includes('50/50');
       });
+
+      // Detectar paper goods
       if (modifiers.some(m => this.resolver.isPaperYes(m.displayName || ''))) wantsPaper = true;
-      for (let i = 0; i < (item.quantity || 1); i++) {
-        personalBoxes.push({
-          combo:    combo?.displayName || item.displayName || item.name,
-          tortilla: tortilla?.displayName || 'Flour',
-          mode:     item.displayName || item.name,
-        });
+
+      // Combos: todos los modifiers que empiezan con #
+      const combos = modifiers
+        .filter(m => /^#\d+/i.test((m.displayName || '').trim()))
+        .map(m => m.displayName);
+
+      const comboLabel   = combos.length > 0 ? combos.join(' + ') : (item.displayName || item.name || '—');
+      const tortillaLabel = tortillaMod?.displayName || 'Corn';
+
+      totalBoxes += qty;
+
+      personalBoxes.push({
+        name:       item.displayName || item.name,
+        quantity:   qty,
+        combos,
+        comboLabel,
+        tortilla:   tortillaLabel,
+      });
+    }
+
+    // ── Tacos agrupados por combo ──
+    // Cada Personal Box tiene 2 tacos total divididos entre los combos del box
+    const comboTotals = {};
+    for (const box of personalBoxes) {
+      const numCombos    = box.combos.length > 0 ? box.combos.length : 1;
+      const tacosPerCombo = 2 / numCombos; // 2 tacos por box / número de combos
+
+      const combosToProcess = box.combos.length > 0 ? box.combos : [box.comboLabel];
+      for (const combo of combosToProcess) {
+        if (!comboTotals[combo]) {
+          comboTotals[combo] = { total: 0, tortilla: box.tortilla };
+        }
+        comboTotals[combo].total += tacosPerCombo * box.quantity;
       }
     }
 
-    const paperGoods = wantsPaper
-      ? await this.resolver.calculatePaperGoods('PERSONAL_BOX', guestCount)
-      : { included: false, items: [] };
+    // Packaging: ≤18 → Half Pan, >18 → Full Pan
+    const tacoRows = Object.entries(comboTotals).map(([combo, data]) => ({
+      name:         combo,
+      total:        data.total,
+      unit:         'each',
+      tortilla:     data.tortilla,
+      packaging:    data.total > TACO_HALF_PAN_MAX ? 'Full Pan' : 'Half Pan',
+      packagingQty: 1,
+      utensil:      '—',
+      tempType:     'hot',
+    }));
+
+    // ── Chips & Salsa — siempre incluidos, 1 por box ──
+    const chipsRow = {
+      name:         'Personal Chips',
+      total:        totalBoxes,
+      unit:         'each',
+      packaging:    'each',
+      packagingQty: totalBoxes,
+      utensil:      '—',
+      tempType:     'dry',
+    };
+
+    const salsaRow = {
+      name:         'Personal Salsa Roja',
+      total:        totalBoxes,
+      unit:         'each',
+      detail:       '0.75 oz cup',
+      packaging:    '0.75 oz cup',
+      packagingQty: totalBoxes,
+      utensil:      '—',
+      tempType:     'cold',
+    };
+
+    // ── Paper Goods ──
+    // Fork Small = totalBoxes + 3
+    // Napkin Pack = guests × 0.2
+    let paperGoods = { included: false, items: [] };
+    if (wantsPaper) {
+      const forkCount   = totalBoxes + 3;
+      const napkinCount = Math.ceil(guestCount * 0.2);
+      paperGoods = {
+        included: true,
+        items: [
+          { name: 'Fork Small',  qty: forkCount,   unit: 'each' },
+          { name: 'Napkin Pack', qty: napkinCount,  unit: 'each' },
+        ],
+      };
+    }
 
     return {
-      header: this._buildHeader(cateringOrder, delivery),
-      personalBoxes, paperGoods,
+      header:       this._buildHeader(cateringOrder, delivery),
+      personalBoxes,
+      tacoRows,
+      chipsRow,
+      salsaRow,
+      totalBoxes,
+      paperGoods,
       proteins: [], toppings: [], salsas: [], tortillas: [], snacks: [],
-      hotItems: [], coldItems: [], dryItems: [],
+      hotItems:  tacoRows,
+      coldItems: [salsaRow],
+      dryItems:  [chipsRow],
     };
   }
 
