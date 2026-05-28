@@ -9,8 +9,8 @@ const CATERING_SOURCES = ['Catering Online Ordering', 'Invoice'];
 
 const EVENT_TYPE_KEYWORDS = {
   TACO_BAR:     ['build your own taco bar', 'taco bar'],
-  BIRD_BOX:     ["breakfast 'bird box", "lunch 'bird box", "build your own 'bird box", 'bird box'],
   PERSONAL_BOX: ["personal breakfast 'bird box", "personal lunch 'bird box", "byo personal 'bird box"],
+  BIRD_BOX:     ["breakfast 'bird box", "lunch 'bird box", "build your own 'bird box", 'bird box'],
   FOODA:        ['fooda'],
 };
 
