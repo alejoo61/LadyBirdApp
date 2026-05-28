@@ -14,8 +14,7 @@ class BirdBoxGenerator extends BaseGenerator {
 
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
     <style>${this._baseCSS(badge.color)}</style></head><body>
-    ${this._headerHTML(header, badge)}
-    ${this._renderSummary(summaryItems || [])}
+    ${this._headerHTML(header, badge)}}
     <div class="main-grid">
       <div class="left-col">
         ${this._renderTacosByCombo(tacoRows || [])}
@@ -46,66 +45,7 @@ class BirdBoxGenerator extends BaseGenerator {
     </body></html>`;
   }
 
-  // ─── SUMMARY ──────────────────────────────────────────────────────────────
-  _renderSummary(summaryItems) {
-    if (!summaryItems || summaryItems.length === 0) return '';
-
-    const TYPE_BADGE = {
-      box:      { label: 'Box',       color: '#457b9d' },
-      sidepack: { label: 'Side Pack', color: '#7b2d8b' },
-      salad:    { label: 'Salad',     color: '#2e7d32' },
-      addon:    { label: 'Add-on',    color: '#6b21a8' },
-      salsa:    { label: 'Salsa',     color: '#7d5a00' },
-      drink:    { label: 'Drink',     color: '#1565c0' },
-    };
-
-    const rows = summaryItems.map(item => {
-      const badge = TYPE_BADGE[item.type] || { label: 'Item', color: '#555' };
-
-      const chipsCell = item.chipsAndSalsa === '—'
-        ? `<td style="text-align:center; color:#bbb; font-size:10px">—</td>`
-        : `<td class="checkbox-cell"><span class="yes-no ${item.chipsAndSalsa === 'Yes' ? 'yes' : 'no'}">${item.chipsAndSalsa}</span></td>`;
-
-      const paperCell = item.paper === '—'
-        ? `<td style="text-align:center; color:#bbb; font-size:10px">—</td>`
-        : `<td class="checkbox-cell"><span class="yes-no ${item.paper === 'Yes' ? 'yes' : 'no'}">${item.paper}</span></td>`;
-
-      return `
-        <tr>
-          <td>
-            <span style="
-              display:inline-block; margin-right:5px;
-              padding:1px 5px; border-radius:3px; font-size:7px;
-              font-weight:900; letter-spacing:0.06em; text-transform:uppercase;
-              background:${badge.color}20; color:${badge.color};
-              border:1px solid ${badge.color}50;
-            ">${badge.label}</span>
-            <strong>${item.name}</strong>
-          </td>
-          <td style="text-align:center; font-weight:700">${item.quantity}</td>
-          <td style="font-size:8px; color:#444">${item.detail || '—'}</td>
-          ${chipsCell}
-          ${paperCell}
-        </tr>`;
-    }).join('');
-
-    return `
-    <div class="section" style="margin-top:8px">
-      <div class="section-header" style="background:#457b9d">Summary</div>
-      <table>
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th style="text-align:center">Qty</th>
-            <th>Detail</th>
-            <th>Chips+Salsa</th>
-            <th>Paper</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
-  }
+ 
 
   // ─── SIDE PACK ────────────────────────────────────────────────────────────
   _renderSidePacks(sidePacks) {
