@@ -7,17 +7,21 @@ const apiClient = axios.create({
   },
 });
 
-// Request interceptor
+// Request interceptor — inyectar JWT y usuario para auditoría
 apiClient.interceptors.request.use(
   (config) => {
-    // Inyectar usuario para auditoría
     if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('lb_token');
+      if (token) {
+        config.headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const stored = localStorage.getItem('lb_user');
       if (stored) {
         try {
           const user = JSON.parse(stored);
-          if (user?.usuario) {
-            config.headers['x-user'] = user.usuario;
+          if (user?.email) {
+            config.headers['x-user'] = user.email;
           }
         } catch { /* ignore */ }
       }
@@ -27,12 +31,19 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor
+// Response interceptor — si el token expiró, limpiar sesión
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      console.log('Unauthorized');
+      if (typeof window !== 'undefined') {
+        const isAuthRoute = error.config?.url?.includes('/auth/');
+        if (!isAuthRoute) {
+          localStorage.removeItem('lb_token');
+          localStorage.removeItem('lb_user');
+          window.location.reload();
+        }
+      }
     }
     return Promise.reject(error);
   }

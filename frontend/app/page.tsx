@@ -6,7 +6,16 @@ import LoginPage from '@/components/LoginPage';
 import AppLayout from '@/components/AppLayout';
 
 function AppContent() {
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <main className="min-h-screen bg-night flex items-center justify-center">
+        <span className="w-8 h-8 border-4 border-bone/20 border-t-bone rounded-full animate-spin" />
+      </main>
+    );
+  }
+
   return isLoggedIn ? <AppLayout /> : <LoginPage />;
 }
 

@@ -3,29 +3,74 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
+import { authApi } from '@/services/api/authApi';
+
+type Mode = 'login' | 'register' | 'forgot';
 
 export default function LoginPage() {
   const { login, registro } = useAuth();
 
-  const [isLogin, setIsLogin]     = useState(true);
-  const [usuario, setUsuario]     = useState('');
+  const [mode, setMode]           = useState<Mode>('login');
+  const [email, setEmail]         = useState('');
+  const [nombre, setNombre]       = useState('');
   const [contrasena, setContrasena] = useState('');
+  const [confirmar, setConfirmar] = useState('');
   const [mensaje, setMensaje]     = useState('');
   const [loading, setLoading]     = useState(false);
+
+  const reset = () => {
+    setEmail(''); setNombre(''); setContrasena('');
+    setConfirmar(''); setMensaje('');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setMensaje('');
+
+    // Validaciones frontend
+    if (!email.endsWith('@ladybirdtaco.com')) {
+      setMensaje('❌ Only @ladybirdtaco.com email addresses are allowed');
+      return;
+    }
+
+    if (mode === 'register') {
+      if (contrasena.length < 8) {
+        setMensaje('❌ Password must be at least 8 characters');
+        return;
+      }
+      if (!/[A-Z]/.test(contrasena) || !/[a-z]/.test(contrasena) || !/[0-9]/.test(contrasena)) {
+        setMensaje('❌ Password must include uppercase, lowercase, and a number');
+        return;
+      }
+      if (contrasena !== confirmar) {
+        setMensaje('❌ Passwords do not match');
+        return;
+      }
+    }
+
+    if (mode === 'forgot') {
+      setLoading(true);
+      try {
+        await authApi.forgotPassword(email);
+        setMensaje('✅ If that email exists, a reset link has been sent');
+        setEmail('');
+      } catch {
+        setMensaje('❌ Error sending reset email');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     setLoading(true);
     try {
-      if (isLogin) {
-        await login(usuario, contrasena);
+      if (mode === 'login') {
+        await login(email, contrasena);
       } else {
-        await registro(usuario, contrasena);
-        setIsLogin(true);
-        setMensaje('✅ Registration successful. Please login.');
-        setUsuario('');
-        setContrasena('');
+        await registro(email, contrasena, nombre);
+        setMensaje('✅ Account created successfully');
+        reset();
+        setMode('login');
       }
     } catch (err: unknown) {
       const error = err as { response?: { data?: { error?: string } } };
@@ -33,6 +78,12 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const titles: Record<Mode, string> = {
+    login:    'Login',
+    register: 'Create Account',
+    forgot:   'Reset Password',
   };
 
   return (
@@ -46,22 +97,58 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
+
+          {/* Email */}
           <input
-            type="text"
-            placeholder="Username"
-            value={usuario}
-            onChange={e => setUsuario(e.target.value)}
+            type="email"
+            placeholder="Email (@ladybirdtaco.com)"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
             className="w-full p-5 bg-white border border-tumbleweed rounded-[1.5rem] outline-none focus:ring-2 focus:ring-night transition-all text-night font-bold shadow-sm"
             required
           />
-          <input
-            type="password"
-            placeholder="Password"
-            value={contrasena}
-            onChange={e => setContrasena(e.target.value)}
-            className="w-full p-5 bg-white border border-tumbleweed rounded-[1.5rem] outline-none focus:ring-2 focus:ring-night transition-all text-night font-bold shadow-sm"
-            required
-          />
+
+          {/* Nombre — solo en registro */}
+          {mode === 'register' && (
+            <input
+              type="text"
+              placeholder="Full name"
+              value={nombre}
+              onChange={e => setNombre(e.target.value)}
+              className="w-full p-5 bg-white border border-tumbleweed rounded-[1.5rem] outline-none focus:ring-2 focus:ring-night transition-all text-night font-bold shadow-sm"
+            />
+          )}
+
+          {/* Password — no en forgot */}
+          {mode !== 'forgot' && (
+            <input
+              type="password"
+              placeholder="Password"
+              value={contrasena}
+              onChange={e => setContrasena(e.target.value)}
+              className="w-full p-5 bg-white border border-tumbleweed rounded-[1.5rem] outline-none focus:ring-2 focus:ring-night transition-all text-night font-bold shadow-sm"
+              required
+            />
+          )}
+
+          {/* Confirmar password — solo en registro */}
+          {mode === 'register' && (
+            <input
+              type="password"
+              placeholder="Confirm password"
+              value={confirmar}
+              onChange={e => setConfirmar(e.target.value)}
+              className="w-full p-5 bg-white border border-tumbleweed rounded-[1.5rem] outline-none focus:ring-2 focus:ring-night transition-all text-night font-bold shadow-sm"
+              required
+            />
+          )}
+
+          {/* Hint de password en registro */}
+          {mode === 'register' && (
+            <p className="text-[10px] text-night/40 font-bold uppercase tracking-widest text-center">
+              Min 8 chars · uppercase · lowercase · number
+            </p>
+          )}
 
           {mensaje && (
             <div className={`p-4 rounded-2xl text-[10px] font-black text-center uppercase tracking-widest ${
@@ -79,16 +166,37 @@ export default function LoginPage() {
             {loading && (
               <span className="w-4 h-4 border-2 border-bone/30 border-t-bone rounded-full animate-spin" />
             )}
-            {isLogin ? 'Login' : 'Create Account'}
+            {titles[mode]}
           </button>
         </form>
 
-        <button
-          onClick={() => { setIsLogin(!isLogin); setMensaje(''); }}
-          className="w-full mt-10 text-[10px] font-black uppercase tracking-[0.3em] text-night/30 hover:text-night transition-colors"
-        >
-          {isLogin ? 'Sign Up Now' : 'Back to Login'}
-        </button>
+        {/* Links de navegación */}
+        <div className="mt-10 flex flex-col gap-3">
+          {mode === 'login' && (
+            <>
+              <button
+                onClick={() => { setMode('register'); reset(); }}
+                className="w-full text-[10px] font-black uppercase tracking-[0.3em] text-night/30 hover:text-night transition-colors"
+              >
+                Sign Up Now
+              </button>
+              <button
+                onClick={() => { setMode('forgot'); reset(); }}
+                className="w-full text-[10px] font-black uppercase tracking-[0.3em] text-night/20 hover:text-night/60 transition-colors"
+              >
+                Forgot Password?
+              </button>
+            </>
+          )}
+          {mode !== 'login' && (
+            <button
+              onClick={() => { setMode('login'); reset(); }}
+              className="w-full text-[10px] font-black uppercase tracking-[0.3em] text-night/30 hover:text-night transition-colors"
+            >
+              Back to Login
+            </button>
+          )}
+        </div>
       </div>
     </main>
   );
