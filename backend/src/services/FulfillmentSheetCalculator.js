@@ -583,7 +583,7 @@ class FulfillmentSheetCalculator {
     };
   }
 
- // ─── PERSONAL BOX ─────────────────────────────────────────────────────────
+// ─── PERSONAL BOX ─────────────────────────────────────────────────────────
   async _calculatePersonalBox(cateringOrder) {
     const { guestCount, parsedData } = cateringOrder;
     const delivery = parsedData?.delivery || {};
@@ -606,38 +606,43 @@ class FulfillmentSheetCalculator {
       // Detectar paper goods
       if (modifiers.some(m => this.resolver.isPaperYes(m.displayName || ''))) wantsPaper = true;
 
-      // Combos: todos los modifiers que empiezan con #
+      // Combos: todos los modifiers que empiezan con # (puede repetirse = 2 tacos del mismo)
+      // Ej: ['#8 Brisket...', '#8 Brisket...'] → 2 tacos del #8
+      // Ej: ['#10 Queso...', '#11 Black Beans...'] → 1 taco de cada uno
       const combos = modifiers
         .filter(m => /^#\d+/i.test((m.displayName || '').trim()))
         .map(m => m.displayName);
 
-      const comboLabel   = combos.length > 0 ? combos.join(' + ') : (item.displayName || item.name || '—');
+      // Deduplicar para el label: "2x #8 Brisket..." o "#10... + #11..."
+      const uniqueCombos = [...new Set(combos)];
+      const comboLabel = uniqueCombos.map(c => {
+        const count = combos.filter(x => x === c).length;
+        return count > 1 ? `${count}x ${c}` : c;
+      }).join(' + ');
+
       const tortillaLabel = tortillaMod?.displayName || 'Corn';
 
       totalBoxes += qty;
 
       personalBoxes.push({
-        name:       item.displayName || item.name,
-        quantity:   qty,
+        name:        item.displayName || item.name,
+        quantity:    qty,
         combos,
-        comboLabel,
-        tortilla:   tortillaLabel,
+        uniqueCombos,
+        comboLabel:  comboLabel || (item.displayName || item.name || '—'),
+        tortilla:    tortillaLabel,
       });
     }
 
     // ── Tacos agrupados por combo ──
-    // Cada Personal Box tiene 2 tacos total divididos entre los combos del box
+    // Cantidad de tacos por combo = número de veces que aparece el modifier × qty de boxes
     const comboTotals = {};
     for (const box of personalBoxes) {
-      const numCombos    = box.combos.length > 0 ? box.combos.length : 1;
-      const tacosPerCombo = 2 / numCombos; // 2 tacos por box / número de combos
-
-      const combosToProcess = box.combos.length > 0 ? box.combos : [box.comboLabel];
-      for (const combo of combosToProcess) {
+      for (const combo of box.combos) {
         if (!comboTotals[combo]) {
           comboTotals[combo] = { total: 0, tortilla: box.tortilla };
         }
-        comboTotals[combo].total += tacosPerCombo * box.quantity;
+        comboTotals[combo].total += box.quantity; // 1 taco por ocurrencia × qty boxes
       }
     }
 
