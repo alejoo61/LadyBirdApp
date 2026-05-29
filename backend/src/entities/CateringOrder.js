@@ -8,6 +8,7 @@ class CateringOrder {
     deliveryMethod, deliveryAddress, deliveryNotes, driverName,
     parsedData, guestCount, totalAmount,
     overrideData, overrideNotes,
+    kitchenFinishTime,
     createdAt, updatedAt
   }) {
     this.id                       = id;
@@ -32,6 +33,7 @@ class CateringOrder {
     this.totalAmount              = totalAmount;
     this.overrideData             = overrideData || {};
     this.overrideNotes            = overrideNotes;
+    this.kitchenFinishTime        = kitchenFinishTime || null;
     this.createdAt                = createdAt;
     this.updatedAt                = updatedAt;
   }
@@ -62,11 +64,10 @@ class CateringOrder {
     return new Date(this.estimatedFulfillmentDate) > new Date();
   }
 
+  // Retorna el kitchen finish time calculado por Google Maps si existe,
+  // de lo contrario retorna null (no calcular en el cliente)
   getKitchenFinishTime() {
-    if (!this.estimatedFulfillmentDate) return null;
-    const finish = new Date(this.estimatedFulfillmentDate);
-    finish.setHours(finish.getHours() - 1);
-    return finish;
+    return this.kitchenFinishTime || null;
   }
 }
 

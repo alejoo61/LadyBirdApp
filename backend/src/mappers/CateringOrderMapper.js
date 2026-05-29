@@ -38,6 +38,7 @@ class CateringOrderMapper {
       totalAmount:              row.total_amount,
       overrideData,
       overrideNotes:            row.override_notes,
+      kitchenFinishTime:        row.kitchen_finish_time || null,
       createdAt:                row.created_at,
       updatedAt:                row.updated_at,
     });
