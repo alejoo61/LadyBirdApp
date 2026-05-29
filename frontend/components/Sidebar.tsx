@@ -9,8 +9,10 @@ import type { LucideIcon } from 'lucide-react';
 import type { AppTab } from '@/context/AppContext';
 
 interface Usuario {
-  id: number;
-  usuario: string;
+  id:     number;
+  email:  string;
+  nombre: string;
+  role:   string;
 }
 
 interface SidebarProps {
@@ -31,6 +33,9 @@ const NAV_ITEMS: { id: AppTab; icon: LucideIcon }[] = [
 ];
 
 export default function Sidebar({ activeTab, onTabChange, usuario, onLogout }: SidebarProps) {
+  const displayName = usuario.nombre || usuario.email.split('@')[0];
+  const initials    = displayName.substring(0, 2).toUpperCase();
+
   return (
     <aside className="w-64 bg-night text-white flex flex-col shadow-2xl shrink-0">
       <div className="p-8 flex justify-center items-center">
@@ -60,11 +65,16 @@ export default function Sidebar({ activeTab, onTabChange, usuario, onLogout }: S
       <div className="p-4 border-t border-white/5">
         <div className="flex items-center space-x-3 px-4 py-3 mb-2">
           <div className="w-8 h-8 bg-rose text-night rounded-full flex items-center justify-center text-xs font-black uppercase shadow-inner">
-            {usuario.usuario.substring(0, 2)}
+            {initials}
           </div>
-          <span className="text-sm font-medium truncate text-tumbleweed tracking-tight">
-            {usuario.usuario}
-          </span>
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm font-bold truncate text-white tracking-tight">
+              {displayName}
+            </span>
+            <span className="text-[10px] font-medium truncate text-tumbleweed/60 tracking-tight">
+              {usuario.email}
+            </span>
+          </div>
         </div>
         <button
           onClick={onLogout}
