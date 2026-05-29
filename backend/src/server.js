@@ -13,10 +13,10 @@ const MenuItemRepository          = require('./repositories/MenuItemRepository')
 const AuditRepository             = require('./repositories/AuditRepository');
 
 // ─── Services ─────────────────────────────────────────────────────────────
-const StoreService             = require('./services/StoreService');
-const EquipmentService         = require('./services/EquipmentService');
-const CateringOrderService     = require('./services/CateringOrderService');
-const IngredientFormulaService = require('./services/IngredientFormulaService');
+const StoreService               = require('./services/StoreService');
+const EquipmentService           = require('./services/EquipmentService');
+const CateringOrderService       = require('./services/CateringOrderService');
+const IngredientFormulaService   = require('./services/IngredientFormulaService');
 const FulfillmentSheetCalculator = require('./services/FulfillmentSheetCalculator');
 const FulfillmentSheetGenerator  = require('./services/FulfillmentSheetGenerator');
 const GoogleCalendarService      = require('./services/GoogleCalendarService');
@@ -25,6 +25,7 @@ const ToastAuthService           = require('./services/ToastAuthService');
 const ToastApiClient             = require('./services/ToastApiClient');
 const ToastSyncService           = require('./services/ToastSyncService');
 const ToastMenuSyncService       = require('./services/ToastMenuSyncService');
+const KitchenFinishTimeService   = require('./services/KitchenFinishTimeService');
 
 // ─── Controllers ──────────────────────────────────────────────────────────
 const StoreController             = require('./controllers/StoreController');
@@ -58,9 +59,10 @@ const ingredientFormulaRepository = new IngredientFormulaRepository(pool);
 const ingredientFormulaService    = new IngredientFormulaService(ingredientFormulaRepository);
 const ingredientFormulaController = new IngredientFormulaController(ingredientFormulaService);
 
-const fulfillmentCalculator = new FulfillmentSheetCalculator(ingredientFormulaRepository, pool);
-const fulfillmentGenerator  = new FulfillmentSheetGenerator();
-const googleCalendarService = new GoogleCalendarService();
+const fulfillmentCalculator    = new FulfillmentSheetCalculator(ingredientFormulaRepository, pool);
+const fulfillmentGenerator     = new FulfillmentSheetGenerator();
+const googleCalendarService    = new GoogleCalendarService();
+const kitchenFinishTimeService = new KitchenFinishTimeService(pool);
 
 const toastAuthService     = new ToastAuthService();
 const toastApiClient       = new ToastApiClient(toastAuthService);
@@ -69,6 +71,7 @@ const toastSyncService     = new ToastSyncService(
   toastApiClient, pool,
   fulfillmentCalculator, fulfillmentGenerator,
   googleCalendarService, auditService,
+  kitchenFinishTimeService,
 );
 
 const storeRepository     = new StoreRepository(pool);
@@ -135,7 +138,6 @@ app.listen(PORT, () => {
 });
 
 // ─── Polling 1: Sync reciente (cada 15 min) ───────────────────────────────
-// Trae órdenes de los últimos 30 min — detecta nuevas Y cambios recientes
 cron.schedule('*/15 * * * *', async () => {
   console.log(`\n⏰ [${new Date().toISOString()}] Auto-sync iniciado...`);
   try {
@@ -151,9 +153,6 @@ cron.schedule('*/15 * * * *', async () => {
 });
 
 // ─── Polling 2: Sync de órdenes futuras (diario a las 2am) ───────────────
-// Verifica cambios en todas las órdenes pending/confirmed con fecha futura
-// Garantiza que cualquier cambio en Toast (pagos, modificaciones) se refleje
-// antes del día del evento, incluso si ocurrió fuera de la ventana de 30 min
 cron.schedule('0 2 * * *', async () => {
   console.log(`\n🌙 [${new Date().toISOString()}] Upcoming orders sync iniciado...`);
   try {
@@ -164,4 +163,18 @@ cron.schedule('0 2 * * *', async () => {
   }
 });
 
-console.log('⏰ Polling activo — sync cada 15 min + diario a las 2am');
+// ─── Polling 3: Kitchen Finish Time (diario a las 3am) ────────────────────
+// Calcula kitchen_finish_time para órdenes futuras que aún no lo tienen
+cron.schedule('0 3 * * *', async () => {
+  console.log(`\n🍳 [${new Date().toISOString()}] Kitchen Finish Time sync iniciado...`);
+  try {
+    const results        = await kitchenFinishTimeService.calculatePending();
+    const totalOk        = results.filter(r => r.kitchenFinishTime).length;
+    const totalFailed    = results.filter(r => r.error).length;
+    console.log(`✅ Kitchen Finish Time — ${totalOk} calculados — ${totalFailed} fallidos`);
+  } catch (error) {
+    console.error('❌ Kitchen Finish Time error:', error.message);
+  }
+});
+
+console.log('⏰ Polling activo — sync cada 15 min + diario 2am + kitchen finish 3am');
