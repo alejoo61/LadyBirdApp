@@ -1,26 +1,30 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { authApi } from '@/services/api/authApi';
 
-function ResetPasswordForm() {
-  const searchParams = useSearchParams();
-  const router       = useRouter();
-  const token        = searchParams.get('token');
+export default function ResetPasswordPage() {
+  const router = useRouter();
 
+  const [token, setToken]             = useState<string | null>(null);
   const [contrasena, setContrasena]   = useState('');
   const [confirmar, setConfirmar]     = useState('');
   const [mensaje, setMensaje]         = useState('');
   const [loading, setLoading]         = useState(false);
   const [success, setSuccess]         = useState(false);
 
+  // Leer token del URL en el cliente sin useSearchParams
   useEffect(() => {
-    if (!token) {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get('token');
+    if (!t) {
       setMensaje('❌ Invalid or missing reset token');
+    } else {
+      setToken(t);
     }
-  }, [token]);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,17 +130,5 @@ function ResetPasswordForm() {
         </button>
       </div>
     </main>
-  );
-}
-
-export default function ResetPasswordPage() {
-  return (
-    <Suspense fallback={
-      <main className="min-h-screen bg-night flex items-center justify-center">
-        <span className="w-8 h-8 border-4 border-bone/20 border-t-bone rounded-full animate-spin" />
-      </main>
-    }>
-      <ResetPasswordForm />
-    </Suspense>
   );
 }
