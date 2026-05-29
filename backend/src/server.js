@@ -102,7 +102,7 @@ app.get('/', (req, res) => res.json({
 app.use('/api/auth',           authRoutes(pool));
 app.use('/api/stores',         storesRoutes(storeController));
 app.use('/api/equipment',      equipmentRoutes(equipmentController));
-app.use('/api/toast',          toastRoutes(pool, toastSyncService, toastMenuSyncService));
+app.use('/api/toast',          toastRoutes(pool, toastSyncService, toastMenuSyncService, kitchenFinishTimeService));
 app.use('/api/formulas',       formulasRoutes(ingredientFormulaController));
 app.use('/api/menu-items',     menuRoutes(menuItemController));
 app.use('/api/audit',          auditRoutes(auditController));
