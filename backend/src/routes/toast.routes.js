@@ -2,7 +2,7 @@
 const express = require('express');
 const router  = express.Router();
 
-module.exports = (pool, toastSyncService, toastMenuSyncService) => {
+module.exports = (pool, toastSyncService, toastMenuSyncService, kitchenFinishTimeService) => {
 
   router.post('/sync', async (req, res) => {
     try {
@@ -61,6 +61,26 @@ module.exports = (pool, toastSyncService, toastMenuSyncService) => {
     try {
       const results = await toastMenuSyncService.syncMenusForAllStores();
       res.json({ success: true, data: results });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ─── Kitchen Finish Time manual trigger ───────────────────────────────────
+  // Calcula kitchen_finish_time para todas las órdenes futuras que aún no lo tienen
+  router.post('/sync/kitchen-finish', async (req, res) => {
+    try {
+      if (!kitchenFinishTimeService) {
+        return res.status(503).json({ success: false, error: 'KitchenFinishTimeService not available' });
+      }
+      const results  = await kitchenFinishTimeService.calculatePending();
+      const ok       = results.filter(r => r.kitchenFinishTime).length;
+      const failed   = results.filter(r => r.error).length;
+      const skipped  = results.filter(r => r.error === 'max_attempts_reached').length;
+      res.json({
+        success: true,
+        data: { total: results.length, calculated: ok, failed, skipped, results },
+      });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
