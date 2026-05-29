@@ -26,6 +26,7 @@ const ToastApiClient             = require('./services/ToastApiClient');
 const ToastSyncService           = require('./services/ToastSyncService');
 const ToastMenuSyncService       = require('./services/ToastMenuSyncService');
 const KitchenFinishTimeService   = require('./services/KitchenFinishTimeService');
+const EmailService               = require('./services/EmailService');
 
 // ─── Controllers ──────────────────────────────────────────────────────────
 const StoreController             = require('./controllers/StoreController');
@@ -47,6 +48,8 @@ const cateringRoutes  = require('./routes/catering.routes');
 
 // ─── Dependency Injection ─────────────────────────────────────────────────
 
+const emailService    = new EmailService();
+
 const auditRepository = new AuditRepository(pool);
 const auditService    = new AuditService(auditRepository);
 const auditController = new AuditController(auditService);
@@ -62,7 +65,7 @@ const ingredientFormulaController = new IngredientFormulaController(ingredientFo
 const fulfillmentCalculator    = new FulfillmentSheetCalculator(ingredientFormulaRepository, pool);
 const fulfillmentGenerator     = new FulfillmentSheetGenerator();
 const googleCalendarService    = new GoogleCalendarService();
-const kitchenFinishTimeService = new KitchenFinishTimeService(pool);
+const kitchenFinishTimeService = new KitchenFinishTimeService(pool, emailService);
 
 const toastAuthService     = new ToastAuthService();
 const toastApiClient       = new ToastApiClient(toastAuthService);
@@ -99,7 +102,7 @@ app.get('/', (req, res) => res.json({
 }));
 
 // ─── Routes ───────────────────────────────────────────────────────────────
-app.use('/api/auth',           authRoutes(pool));
+app.use('/api/auth',           authRoutes(pool, emailService));
 app.use('/api/stores',         storesRoutes(storeController));
 app.use('/api/equipment',      equipmentRoutes(equipmentController));
 app.use('/api/toast',          toastRoutes(pool, toastSyncService, toastMenuSyncService, kitchenFinishTimeService));
@@ -125,7 +128,7 @@ app.listen(PORT, () => {
   console.log(`\n${'='.repeat(60)}`);
   console.log(`🚀 LadyBird API Server — http://localhost:${PORT}`);
   console.log(`${'='.repeat(60)}`);
-  console.log(`🔐 Auth:      POST /api/auth/registro | /api/auth/login`);
+  console.log(`🔐 Auth:      POST /api/auth/registro | /api/auth/login | /api/auth/forgot-password`);
   console.log(`🏪 Stores:    GET/POST/PUT/DELETE /api/stores`);
   console.log(`🔧 Equipment: GET/POST/PUT/DELETE /api/equipment`);
   console.log(`🍞 Toast:     POST /api/toast/sync | /sync/historical | /sync/menu`);
@@ -164,13 +167,12 @@ cron.schedule('0 2 * * *', async () => {
 });
 
 // ─── Polling 3: Kitchen Finish Time (diario a las 3am) ────────────────────
-// Calcula kitchen_finish_time para órdenes futuras que aún no lo tienen
 cron.schedule('0 3 * * *', async () => {
   console.log(`\n🍳 [${new Date().toISOString()}] Kitchen Finish Time sync iniciado...`);
   try {
-    const results        = await kitchenFinishTimeService.calculatePending();
-    const totalOk        = results.filter(r => r.kitchenFinishTime).length;
-    const totalFailed    = results.filter(r => r.error).length;
+    const results     = await kitchenFinishTimeService.calculatePending();
+    const totalOk     = results.filter(r => r.kitchenFinishTime).length;
+    const totalFailed = results.filter(r => r.error).length;
     console.log(`✅ Kitchen Finish Time — ${totalOk} calculados — ${totalFailed} fallidos`);
   } catch (error) {
     console.error('❌ Kitchen Finish Time error:', error.message);
