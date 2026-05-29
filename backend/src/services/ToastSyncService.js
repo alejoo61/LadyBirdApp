@@ -159,7 +159,6 @@ class ToastSyncService {
   async _calculateKitchenFinishTime(cateringOrderId) {
     if (!this.kitchenFinishTimeService) return;
     try {
-      // Traer la orden con las coordenadas del store
       const result = await this.pool.query(`
         SELECT
           co.id,
@@ -310,13 +309,14 @@ class ToastSyncService {
               .catch(e => console.error('⚠️  Audit log error:', e.message));
           }
 
-          // Calcular Kitchen Finish Time para órdenes nuevas de delivery
-          if (parsed.delivery?.method === 'DELIVERY') {
-            setImmediate(() => this._calculateKitchenFinishTime(cateringOrderId));
-          }
-
+          // Kitchen Finish Time primero (await) → luego PDF para que el PDF lo incluya
           if (this.fulfillmentCalculator && this.googleCalendarService) {
-            setImmediate(() => this._autoPdfAndCalendar(cateringOrderId, storeCode, storeName));
+            setImmediate(async () => {
+              if (parsed.delivery?.method === 'DELIVERY') {
+                await this._calculateKitchenFinishTime(cateringOrderId);
+              }
+              await this._autoPdfAndCalendar(cateringOrderId, storeCode, storeName);
+            });
           }
 
         } else if (changed) {
@@ -330,13 +330,14 @@ class ToastSyncService {
           const isManual = manualCheck.rows[0]?.is_manually_edited || false;
 
           if (!isManual) {
-            // Recalcular Kitchen Finish Time si cambió la dirección o el fulfillment date
-            if (parsed.delivery?.method === 'DELIVERY') {
-              setImmediate(() => this._calculateKitchenFinishTime(cateringOrderId));
-            }
-
+            // Kitchen Finish Time primero (await) → luego PDF para que el PDF lo incluya
             if (this.fulfillmentCalculator && this.googleCalendarService) {
-              setImmediate(() => this._autoPdfAndCalendar(cateringOrderId, storeCode, storeName));
+              setImmediate(async () => {
+                if (parsed.delivery?.method === 'DELIVERY') {
+                  await this._calculateKitchenFinishTime(cateringOrderId);
+                }
+                await this._autoPdfAndCalendar(cateringOrderId, storeCode, storeName);
+              });
             }
           } else {
             console.log(`⚠️  Orden ${cateringOrderId} editada manualmente — PDF/Calendar no regenerado`);
