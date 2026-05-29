@@ -4,15 +4,16 @@ const OrderParser     = require('./OrderParser');
 const crypto          = require('crypto');
 
 class ToastSyncService {
-  constructor(toastApiClient, pool, fulfillmentCalculator, fulfillmentGenerator, googleCalendarService, auditService) {
-    this.toastApiClient         = toastApiClient;
-    this.pool                   = pool;
-    this.classifier             = new OrderClassifier();
-    this.parser                 = new OrderParser();
-    this.fulfillmentCalculator  = fulfillmentCalculator;
-    this.fulfillmentGenerator   = fulfillmentGenerator;
-    this.googleCalendarService  = googleCalendarService;
-    this.auditService           = auditService || null;
+  constructor(toastApiClient, pool, fulfillmentCalculator, fulfillmentGenerator, googleCalendarService, auditService, kitchenFinishTimeService) {
+    this.toastApiClient            = toastApiClient;
+    this.pool                      = pool;
+    this.classifier                = new OrderClassifier();
+    this.parser                    = new OrderParser();
+    this.fulfillmentCalculator     = fulfillmentCalculator;
+    this.fulfillmentGenerator      = fulfillmentGenerator;
+    this.googleCalendarService     = googleCalendarService;
+    this.auditService              = auditService || null;
+    this.kitchenFinishTimeService  = kitchenFinishTimeService || null;
   }
 
   _sleep(ms) {
@@ -20,7 +21,6 @@ class ToastSyncService {
   }
 
   // ─── HASH ─────────────────────────────────────────────────────────────────
-  // Solo hashea campos relevantes — ignora timestamps internos de Toast
   _computeHash(rawOrder) {
     const relevant = {
       paymentStatus: rawOrder.checks?.[0]?.paymentStatus,
@@ -55,13 +55,10 @@ class ToastSyncService {
     return result.rows;
   }
 
-  // ─── UPSERT RAW ORDER con hash ────────────────────────────────────────────
-  // Compara hash ANTES del upsert para evitar falsos positivos
-  // Retorna { id, changed } — changed = true solo si el payload realmente cambió
+  // ─── UPSERT RAW ORDER ─────────────────────────────────────────────────────
   async _upsertRawOrder(storeId, toastOrderGuid, rawPayload, orderDate) {
     const newHash = this._computeHash(rawPayload);
 
-    // Verificar si existe y comparar hash
     const existing = await this.pool.query(
       `SELECT id, payload_hash FROM toast_orders WHERE toast_order_guid = $1`,
       [toastOrderGuid]
@@ -71,12 +68,10 @@ class ToastSyncService {
       const currentHash = existing.rows[0].payload_hash;
       const id          = existing.rows[0].id;
 
-      // Hash igual → sin cambios, no hacer nada
       if (currentHash === newHash) {
         return { id, changed: false };
       }
 
-      // Hash diferente → actualizar
       await this.pool.query(`
         UPDATE toast_orders SET
           raw_payload  = $1,
@@ -89,7 +84,6 @@ class ToastSyncService {
       return { id, changed: true };
     }
 
-    // Orden nueva → insertar
     const result = await this.pool.query(`
       INSERT INTO toast_orders
         (store_id, toast_order_guid, raw_payload, order_date, sync_status, payload_hash)
@@ -161,8 +155,45 @@ class ToastSyncService {
     return new Set(result.rows.map(r => r.toast_order_guid));
   }
 
-  // ─── AUTO PDF + CALENDAR ──────────────────────────────────────────────────
+  // ─── KITCHEN FINISH TIME ──────────────────────────────────────────────────
+  async _calculateKitchenFinishTime(cateringOrderId) {
+    if (!this.kitchenFinishTimeService) return;
+    try {
+      // Traer la orden con las coordenadas del store
+      const result = await this.pool.query(`
+        SELECT
+          co.id,
+          co.estimated_fulfillment_date  AS "estimatedFulfillmentDate",
+          co.delivery_method             AS "deliveryMethod",
+          co.delivery_address            AS "deliveryAddress",
+          co.geocode_attempts            AS "geocodeAttempts",
+          co.geocode_failed              AS "geocodeFailed",
+          co.client_name                 AS "clientName",
+          co.display_number              AS "displayNumber",
+          s.latitude                     AS "storeLatitude",
+          s.longitude                    AS "storeLongitude"
+        FROM catering_orders co
+        JOIN stores s ON co.store_id = s.id
+        WHERE co.id = $1
+      `, [cateringOrderId]);
 
+      if (!result.rows[0]) return;
+      const order = result.rows[0];
+
+      const { kitchenFinishTime, driveTimeMinutes, error } =
+        await this.kitchenFinishTimeService.calculate(order);
+
+      if (kitchenFinishTime) {
+        console.log(`🍳 Kitchen Finish Time calculado para #${order.displayNumber}: ${new Date(kitchenFinishTime).toLocaleTimeString('en-US', { timeZone: 'America/Chicago' })} (drive: ${driveTimeMinutes} min)`);
+      } else if (error) {
+        console.warn(`⚠️  Kitchen Finish Time no calculado para #${order.displayNumber}: ${error}`);
+      }
+    } catch (err) {
+      console.error(`❌ Error calculando Kitchen Finish Time para orden ${cateringOrderId}:`, err.message);
+    }
+  }
+
+  // ─── AUTO PDF + CALENDAR ──────────────────────────────────────────────────
   async _autoPdfAndCalendar(orderId, storeCode, storeName) {
     try {
       const orderResult = await this.pool.query(`
@@ -189,7 +220,7 @@ class ToastSyncService {
         clientEmail:              row.client_email,
         clientPhone:              row.client_phone,
         estimatedFulfillmentDate: row.estimated_fulfillment_date,
-        kitchenFinishTime:        null,
+        kitchenFinishTime:        row.kitchen_finish_time || null,
         deliveryMethod:           row.delivery_method,
         deliveryAddress:          row.delivery_address,
         deliveryNotes:            row.delivery_notes,
@@ -273,13 +304,21 @@ class ToastSyncService {
 
         if (isNew) {
           console.log(`🆕 Nueva orden catering: ${parsed.client?.name} (${eventType})`);
+
           if (this.auditService) {
             this.auditService.logToastSync(cateringOrderId)
               .catch(e => console.error('⚠️  Audit log error:', e.message));
           }
+
+          // Calcular Kitchen Finish Time para órdenes nuevas de delivery
+          if (parsed.delivery?.method === 'DELIVERY') {
+            setImmediate(() => this._calculateKitchenFinishTime(cateringOrderId));
+          }
+
           if (this.fulfillmentCalculator && this.googleCalendarService) {
             setImmediate(() => this._autoPdfAndCalendar(cateringOrderId, storeCode, storeName));
           }
+
         } else if (changed) {
           updated++;
           console.log(`🔄 Orden actualizada: ${parsed.client?.name} — payment: ${parsed.paymentStatus}`);
@@ -290,9 +329,16 @@ class ToastSyncService {
           );
           const isManual = manualCheck.rows[0]?.is_manually_edited || false;
 
-          if (!isManual && this.fulfillmentCalculator && this.googleCalendarService) {
-            setImmediate(() => this._autoPdfAndCalendar(cateringOrderId, storeCode, storeName));
-          } else if (isManual) {
+          if (!isManual) {
+            // Recalcular Kitchen Finish Time si cambió la dirección o el fulfillment date
+            if (parsed.delivery?.method === 'DELIVERY') {
+              setImmediate(() => this._calculateKitchenFinishTime(cateringOrderId));
+            }
+
+            if (this.fulfillmentCalculator && this.googleCalendarService) {
+              setImmediate(() => this._autoPdfAndCalendar(cateringOrderId, storeCode, storeName));
+            }
+          } else {
             console.log(`⚠️  Orden ${cateringOrderId} editada manualmente — PDF/Calendar no regenerado`);
           }
 
