@@ -19,6 +19,8 @@ export default function AppLayout() {
 
   if (!usuario) return null;
 
+  const displayName = usuario.nombre || usuario.email.split('@')[0];
+
   return (
     <div className="flex h-screen bg-bone">
       <Sidebar
@@ -29,7 +31,7 @@ export default function AppLayout() {
       />
 
       <main className="flex-1 overflow-y-auto p-10 bg-bone">
-        {activeTab === 'Dashboard'   && <Dashboard usuario={usuario.usuario} />}
+        {activeTab === 'Dashboard'   && <Dashboard usuario={displayName} />}
         {activeTab === 'Catering'    && (
           <CateringOrdersList onNewOrder={openNewOrder} />
         )}
@@ -37,7 +39,7 @@ export default function AppLayout() {
         {activeTab === 'Audit'       && <AuditPage />}
         {activeTab === 'Stores'      && <StoreList />}
         {activeTab === 'Equipments'  && <EquipmentList />}
-        {activeTab === 'Maintenance' && <Dashboard usuario={usuario.usuario} />}
+        {activeTab === 'Maintenance' && <Dashboard usuario={displayName} />}
       </main>
 
       {showNewOrder && (
