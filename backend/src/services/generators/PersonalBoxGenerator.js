@@ -6,7 +6,8 @@ class PersonalBoxGenerator extends BaseGenerator {
   build(data) {
     const {
       header, personalBoxes, tacoRows, chipsRow, salsaRow,
-      totalBoxes, paperGoods, hotItems, coldItems, dryItems,
+      totalBoxes, paperGoods, drinks, addons,
+      hotItems, coldItems, dryItems,
     } = data;
     const badge = this._eventTypeBadge(header.eventType);
 
@@ -18,6 +19,8 @@ class PersonalBoxGenerator extends BaseGenerator {
         ${this._renderBoxGroups(personalBoxes || [], totalBoxes || 0)}
         ${this._renderTacoRows(tacoRows || [])}
         ${this._renderChipsAndSalsa(chipsRow, salsaRow)}
+        ${this._renderAddons(addons || [])}
+        ${this._renderDrinks(drinks || [], header.guestCount)}
       </div>
       <div class="right-col">
         ${this._renderPaperGoods(paperGoods)}
@@ -29,6 +32,7 @@ class PersonalBoxGenerator extends BaseGenerator {
       'Total box count matches order',
       'Chips & Salsa (4oz Roja) included in every box',
       'Paper goods included',
+      'Drinks packed with cups & lids if requested',
       'Delivery notes reviewed',
       'Order label applied to all boxes',
       'Driver assigned and notified',
@@ -141,6 +145,99 @@ class PersonalBoxGenerator extends BaseGenerator {
             <th>Item</th>
             <th style="text-align:center">Total</th>
             <th>Detail</th>
+            <th>Packed?</th>
+            <th>Loaded?</th>
+          </tr>
+        </thead>
+        <tbody>${rows.join('')}</tbody>
+      </table>
+    </div>`;
+  }
+
+  // ─── ADD-ONS (Bunuelos, etc.) ─────────────────────────────────────────────
+  _renderAddons(addons) {
+    if (!addons || addons.length === 0) return '';
+
+    const rows = addons.map(addon => `
+      <tr>
+        <td><strong>${addon.name}</strong></td>
+        <td style="text-align:center; font-weight:900">${addon.quantity}</td>
+        <td class="checkbox-cell"><span class="checkbox"></span></td>
+        <td class="checkbox-cell"><span class="checkbox"></span></td>
+      </tr>`).join('');
+
+    return `
+    <div class="section">
+      <div class="section-header" style="background:#6b21a8">Add-ons</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th style="text-align:center">Qty</th>
+            <th>Packed?</th>
+            <th>Loaded?</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  }
+
+  // ─── DRINKS ───────────────────────────────────────────────────────────────
+  _renderDrinks(drinks, guestCount) {
+    if (!drinks || drinks.length === 0) return '';
+
+    const rows = [];
+
+    for (const drink of drinks) {
+      const amountStr = drink.totalOz ? `${drink.totalOz} oz` : `${drink.quantity} each`;
+      const pkgStr    = drink.packaging
+        ? `${drink.packagingQty ? `${drink.packagingQty}x ` : ''}${drink.packaging}`
+        : `${drink.quantity}x each`;
+
+      rows.push(`
+        <tr>
+          <td><strong>${drink.name}</strong>${drink.quantity > 1 ? `<span style="color:#1565c0; font-weight:900; margin-left:4px">×${drink.quantity}</span>` : ''}</td>
+          <td>${amountStr}</td>
+          <td>${pkgStr}</td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+        </tr>`);
+
+      if (drink.creamers && drink.creamers.length > 0) {
+        for (const cr of drink.creamers) {
+          rows.push(`
+            <tr style="background:#f0f4ff">
+              <td style="padding-left:20px; color:#444">↳ ${cr.name}</td>
+              <td>${cr.totalOz} oz</td>
+              <td>${cr.packaging}</td>
+              <td class="checkbox-cell"><span class="checkbox"></span></td>
+              <td class="checkbox-cell"><span class="checkbox"></span></td>
+            </tr>`);
+        }
+      }
+
+      if (drink.wantsCups && guestCount) {
+        rows.push(`
+          <tr style="background:#f0f4ff">
+            <td style="padding-left:20px; color:#444">↳ 8 oz Hot Cup / Lids</td>
+            <td>${guestCount} each</td>
+            <td>${guestCount}x 8 oz hot cup/lids</td>
+            <td class="checkbox-cell"><span class="checkbox"></span></td>
+            <td class="checkbox-cell"><span class="checkbox"></span></td>
+          </tr>`);
+      }
+    }
+
+    return `
+    <div class="section" style="margin-top:8px">
+      <div class="section-header" style="background:#1565c0">Drinks</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Amount</th>
+            <th>Packaging</th>
             <th>Packed?</th>
             <th>Loaded?</th>
           </tr>
