@@ -27,8 +27,8 @@ class PersonalBoxGenerator extends BaseGenerator {
     ${this._renderQC([
       'Each box labeled with combo and tortilla type',
       'Total box count matches order',
-      'Chips & Salsa (0.75oz Roja) included in every box',
-      'Paper goods included if requested',
+      'Chips & Salsa (4oz Roja) included in every box',
+      'Paper goods included',
       'Delivery notes reviewed',
       'Order label applied to all boxes',
       'Driver assigned and notified',
@@ -80,7 +80,6 @@ class PersonalBoxGenerator extends BaseGenerator {
         <td><strong>${item.name}</strong></td>
         <td style="text-align:center; font-weight:900">${item.total}</td>
         <td>${item.tortilla || '—'}</td>
-        <td>${item.utensil || '—'}</td>
         <td>${item.packagingQty ? `${item.packagingQty}x ${item.packaging}` : (item.packaging || '—')}</td>
         <td class="checkbox-cell"><span class="checkbox"></span></td>
         <td class="checkbox-cell"><span class="checkbox"></span></td>
@@ -95,7 +94,6 @@ class PersonalBoxGenerator extends BaseGenerator {
             <th>Combo</th>
             <th style="text-align:center">Total</th>
             <th>Tortilla</th>
-            <th>Utensil</th>
             <th>Packaging</th>
             <th>Packed?</th>
             <th>Loaded?</th>
@@ -118,7 +116,6 @@ class PersonalBoxGenerator extends BaseGenerator {
           <td><strong>${chipsRow.name}</strong></td>
           <td style="text-align:center; font-weight:900">${chipsRow.total}</td>
           <td>${chipsRow.unit || 'each'}</td>
-          <td>—</td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
         </tr>`);
@@ -130,7 +127,6 @@ class PersonalBoxGenerator extends BaseGenerator {
           <td><strong>${salsaRow.name}</strong></td>
           <td style="text-align:center; font-weight:900">${salsaRow.total}</td>
           <td>${salsaRow.detail || salsaRow.unit || 'each'}</td>
-          <td>—</td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
         </tr>`);
@@ -145,7 +141,6 @@ class PersonalBoxGenerator extends BaseGenerator {
             <th>Item</th>
             <th style="text-align:center">Total</th>
             <th>Detail</th>
-            <th>Utensil</th>
             <th>Packed?</th>
             <th>Loaded?</th>
           </tr>
