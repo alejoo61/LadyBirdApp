@@ -5,6 +5,7 @@ const IngredientResolverService = require('./IngredientResolverService');
 const SALAD_KEYWORDS    = ['salad', 'city slicker', 'cowboy', 'farmer'];
 const DRINK_KEYWORDS    = ['coffee', 'agua', 'limeade', 'drink', 'beverage', 'milk', 'water'];
 const SIDE_PACK_KEYWORD = 'side pack';
+const PERSONAL_BOX_KEYWORDS = ["personal breakfast 'bird box", "personal lunch 'bird box", "byo personal 'bird box", "personal 'bird box"];
 
 const THREE_SALSAS_THRESHOLD = 30;
 const TACO_HALF_PAN_MAX = 18;
@@ -175,8 +176,7 @@ class FulfillmentSheetCalculator {
           );
           const creamerItems = creamers.map(cr => {
             const totalOz   = cr.quantity * 32;
-            const packaging = totalOz > 32 ? '½ Gallon Jug' : '32 oz deli cup';
-            return { name: cr.name, totalOz, packaging, tempType: 'cold' };
+            return { name: cr.name, totalOz, packaging: totalOz > 32 ? '½ Gallon Jug' : '32 oz deli cup', tempType: 'cold' };
           });
           drinks.push({
             name: item.displayName || item.name, quantity: qty,
@@ -294,8 +294,7 @@ class FulfillmentSheetCalculator {
 
     const anyWantsChips = boxes.some(b => b.wantsChips);
     const numSalsas     = guestCount >= THREE_SALSAS_THRESHOLD ? 3 : 1;
-    const totalSalsaOz  = guestCount;
-    const ozPerSalsa    = Math.ceil(totalSalsaOz / numSalsas);
+    const ozPerSalsa    = Math.ceil(guestCount / numSalsas);
 
     const _buildIncludedSalsa = (name) => ({
       name, totalAmount: ozPerSalsa, unit: 'oz', utensil: 'Ladle C/U',
@@ -392,37 +391,86 @@ class FulfillmentSheetCalculator {
     const items    = parsedData?.items || [];
 
     const personalBoxes = [];
+    const drinks        = [];
+    const addons        = [];
     let totalBoxes = 0;
 
     for (const item of items) {
-      const qty       = item.quantity || 1;
-      const modifiers = item.modifiers || [];
+      const itemNameLc = (item.displayName || item.name || '').toLowerCase();
+      const modifiers  = item.modifiers || [];
+      const qty        = item.quantity || 1;
 
-      const tortillaMod = modifiers.find(m => {
-        const n = (m.displayName || '').toLowerCase();
-        return n.includes('flour') || n.includes('corn') || n.includes('50/50');
-      });
+      // ── Bebidas ──
+      if (DRINK_KEYWORDS.some(k => itemNameLc.includes(k))) {
+        if (itemNameLc.includes('coffee')) {
+          const creamers = modifiers
+            .filter(m => {
+              const n = (m.displayName || '').toLowerCase();
+              return n.includes('milk') || n.includes('oat') || n.includes('cream') ||
+                     n.includes('whole') || n.includes('skim') || n.includes('half');
+            })
+            .map(m => ({ name: m.displayName, quantity: m.quantity || qty }));
+          const wantsCups = modifiers.some(m =>
+            (m.displayName || '').toLowerCase().includes('cups and lids') ||
+            (m.displayName || '').toLowerCase().includes('cups & lids')
+          );
+          const creamerItems = creamers.map(cr => {
+            const totalOz = cr.quantity * 32;
+            return { name: cr.name, totalOz, packaging: totalOz > 32 ? '½ Gallon Jug' : '32 oz deli cup', tempType: 'cold' };
+          });
+          drinks.push({
+            name: item.displayName || item.name, quantity: qty,
+            totalOz: qty * 96, packaging: '96 oz coffee', packagingQty: qty,
+            utensil: '—', tempType: 'hot', wantsCups, creamers: creamerItems,
+          });
+        } else {
+          const wantsCups = modifiers.some(m =>
+            (m.displayName || '').toLowerCase().includes('yes, i want cups')
+          );
+          drinks.push({
+            name: item.displayName || item.name, quantity: qty,
+            tempType: 'cold', wantsCups, creamers: [],
+          });
+        }
+        continue;
+      }
 
-      const combos = modifiers
-        .filter(m => /^#\d+/i.test((m.displayName || '').trim()))
-        .map(m => m.displayName);
+      // ── Personal Box (tacos) ──
+      if (PERSONAL_BOX_KEYWORDS.some(k => itemNameLc.includes(k))) {
+        const tortillaMod = modifiers.find(m => {
+          const n = (m.displayName || '').toLowerCase();
+          return n.includes('flour') || n.includes('corn') || n.includes('50/50');
+        });
 
-      const uniqueCombos = [...new Set(combos)];
-      const comboLabel = uniqueCombos.map(c => {
-        const count = combos.filter(x => x === c).length;
-        return count > 1 ? `${count}x ${c}` : c;
-      }).join(' + ');
+        const combos = modifiers
+          .filter(m => /^#\d+/i.test((m.displayName || '').trim()))
+          .map(m => m.displayName);
 
-      const tortillaLabel = tortillaMod?.displayName || 'Corn';
-      totalBoxes += qty;
+        const uniqueCombos = [...new Set(combos)];
+        const comboLabel = uniqueCombos.map(c => {
+          const count = combos.filter(x => x === c).length;
+          return count > 1 ? `${count}x ${c}` : c;
+        }).join(' + ');
 
-      personalBoxes.push({
-        name:        item.displayName || item.name,
-        quantity:    qty,
-        combos,
-        uniqueCombos,
-        comboLabel:  comboLabel || (item.displayName || item.name || '—'),
-        tortilla:    tortillaLabel,
+        const tortillaLabel = tortillaMod?.displayName || 'Corn';
+        totalBoxes += qty;
+
+        personalBoxes.push({
+          name:        item.displayName || item.name,
+          quantity:    qty,
+          combos,
+          uniqueCombos,
+          comboLabel:  comboLabel || (item.displayName || item.name || '—'),
+          tortilla:    tortillaLabel,
+        });
+        continue;
+      }
+
+      // ── Addons (Bunuelos, Chips & Guacamole, etc.) ──
+      addons.push({
+        name:     item.displayName || item.name,
+        quantity: qty,
+        tempType: 'dry',
       });
     }
 
@@ -462,8 +510,6 @@ class FulfillmentSheetCalculator {
     };
 
     // ── Paper Goods — siempre incluidos ──
-    // Tenedores = guestCount + 5
-    // Servilletas = guestCount + 5
     const forkCount   = guestCount + 5;
     const napkinCount = guestCount + 5;
     const paperGoods  = {
@@ -482,9 +528,11 @@ class FulfillmentSheetCalculator {
       salsaRow,
       totalBoxes,
       paperGoods,
+      drinks,
+      addons,
       proteins: [], toppings: [], salsas: [], tortillas: [], snacks: [],
-      hotItems:  tacoRows,
-      coldItems: [salsaRow],
+      hotItems:  [...tacoRows, ...drinks.filter(d => d.tempType === 'hot')],
+      coldItems: [salsaRow, ...drinks.filter(d => d.tempType === 'cold')],
       dryItems:  [chipsRow],
     };
   }
@@ -641,8 +689,8 @@ class FulfillmentSheetCalculator {
       (i.displayName || i.name || '').toLowerCase().includes('space rental')
     );
 
-    const timeMod = rentalItem?.modifiers?.[0];
-    const timeStr = timeMod?.displayName || '';
+    const timeMod   = rentalItem?.modifiers?.[0];
+    const timeStr   = timeMod?.displayName || '';
     const timeRange = this._parseSpaceRentalTime(timeStr, cateringOrder.estimatedFulfillmentDate);
 
     const hasFood = items.some(i => {
@@ -650,22 +698,20 @@ class FulfillmentSheetCalculator {
       return !n.includes('space rental') && !n.includes('ez cater') && !n.includes('open tax');
     });
 
-    const spaceRental = {
-      rentalType:  rentalItem?.displayName || 'Space Rental',
-      timeStr,
-      eventTime:   timeRange.eventTimeLabel,
-      readyBy:     timeRange.readyByLabel,
-      startISO:    timeRange.startISO,
-      endISO:      timeRange.endISO,
-      readyByISO:  timeRange.readyByISO,
-      duration:    timeRange.duration,
-      totalAmount: rentalItem?.price || cateringOrder.totalAmount,
-      hasFood,
-    };
-
     return {
       header:     this._buildHeader(cateringOrder, delivery),
-      spaceRental,
+      spaceRental: {
+        rentalType:  rentalItem?.displayName || 'Space Rental',
+        timeStr,
+        eventTime:   timeRange.eventTimeLabel,
+        readyBy:     timeRange.readyByLabel,
+        startISO:    timeRange.startISO,
+        endISO:      timeRange.endISO,
+        readyByISO:  timeRange.readyByISO,
+        duration:    timeRange.duration,
+        totalAmount: rentalItem?.price || cateringOrder.totalAmount,
+        hasFood,
+      },
       hotItems:   [], coldItems: [], dryItems: [],
       paperGoods: { included: false, items: [] },
     };
@@ -673,19 +719,15 @@ class FulfillmentSheetCalculator {
 
   _parseSpaceRentalTime(timeStr, baseDateISO) {
     const READY_BEFORE_MINUTES = 25;
-
     if (!timeStr || !baseDateISO) {
       return { eventTimeLabel: timeStr || '—', readyByLabel: '—', startISO: baseDateISO, endISO: null, readyByISO: null, duration: '—' };
     }
-
     const match = timeStr.match(/(\d+:\d+\s*(?:am|pm))\s+to\s+(\d+:\d+\s*(?:am|pm))/i);
     if (!match) {
       return { eventTimeLabel: timeStr, readyByLabel: '—', startISO: baseDateISO, endISO: null, readyByISO: null, duration: timeStr };
     }
-
     const baseDate = new Date(baseDateISO);
     const dateStr  = baseDate.toISOString().slice(0, 10);
-
     const parseTime = (t) => {
       const [time, meridiem] = t.trim().split(/\s+/);
       let [h, m] = time.split(':').map(Number);
@@ -693,27 +735,20 @@ class FulfillmentSheetCalculator {
       if (meridiem?.toLowerCase() === 'am' && h === 12) h = 0;
       return new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`);
     };
-
     const startDate   = parseTime(match[1]);
     const endDate     = parseTime(match[2]);
     const readyByDate = new Date(startDate.getTime() - READY_BEFORE_MINUTES * 60 * 1000);
-
-    const fmt = (d) => d.toLocaleTimeString('en-US', {
-      hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Chicago'
-    });
-
+    const fmt = (d) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Chicago' });
     const diffMs  = endDate - startDate;
     const diffHrs = Math.floor(diffMs / 3600000);
     const diffMin = Math.floor((diffMs % 3600000) / 60000);
-    const duration = diffHrs > 0 ? `${diffHrs}h${diffMin > 0 ? ` ${diffMin}min` : ''}` : `${diffMin}min`;
-
     return {
       eventTimeLabel: `${fmt(startDate)} – ${fmt(endDate)}`,
       readyByLabel:   fmt(readyByDate),
       startISO:       startDate.toISOString(),
       endISO:         endDate.toISOString(),
       readyByISO:     readyByDate.toISOString(),
-      duration,
+      duration:       diffHrs > 0 ? `${diffHrs}h${diffMin > 0 ? ` ${diffMin}min` : ''}` : `${diffMin}min`,
     };
   }
 }
