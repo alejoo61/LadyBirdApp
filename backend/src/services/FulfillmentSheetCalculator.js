@@ -5,7 +5,7 @@ const IngredientResolverService = require('./IngredientResolverService');
 const SALAD_KEYWORDS    = ['salad', 'city slicker', 'cowboy', 'farmer'];
 const DRINK_KEYWORDS    = ['coffee', 'agua', 'limeade', 'drink', 'beverage', 'milk', 'water'];
 const SIDE_PACK_KEYWORD = 'side pack';
-const PERSONAL_BOX_KEYWORDS = ["personal breakfast 'bird box", "personal lunch 'bird box", "byo personal 'bird box", "personal 'bird box"];
+const PERSONAL_BOX_KEYWORDS = ["personal breakfast 'bird box", "personal lunch 'bird box", "byo personal 'bird box", "personal 'bird box","breakfast 'bird box","lunch 'bird box",];
 
 const THREE_SALSAS_THRESHOLD = 30;
 const TACO_HALF_PAN_MAX = 18;
@@ -488,8 +488,8 @@ class FulfillmentSheetCalculator {
       total:        data.total,
       unit:         'each',
       tortilla:     data.tortilla,
-      packaging:    data.total > TACO_HALF_PAN_MAX ? 'Full Pan' : 'Half Pan',
-      packagingQty: 1,
+      packaging:    'Personal Box',
+      packagingQty: data.total,
       tempType:     'hot',
     }));
 
