@@ -23,7 +23,10 @@ class FulfillmentSheetGenerator {
     const { header } = calculatedData;
     const generator  = GENERATORS[header.eventType] || GENERATORS.TACO_BAR;
     const html       = generator.build(calculatedData);
+    return this.generateFromHtml(html);
+  }
 
+  async generateFromHtml(html, options = {}) {
     const tmpPath = path.join(os.tmpdir(), `fulfillment-${Date.now()}.pdf`);
     const browser = await puppeteer.launch({
       headless: 'new',
@@ -45,9 +48,9 @@ class FulfillmentSheetGenerator {
 
       await page.pdf({
         path:            tmpPath,
-        format:          'Letter',
+        format:          options.format || 'Letter',
         printBackground: true,
-        margin:          { top: '0.4in', right: '0.4in', bottom: '0.4in', left: '0.4in' },
+        margin:          options.margin || { top: '0.4in', right: '0.4in', bottom: '0.4in', left: '0.4in' },
       });
 
       return fs.readFileSync(tmpPath);
@@ -57,7 +60,7 @@ class FulfillmentSheetGenerator {
     }
   }
 
-  buildFilename(order, storeCode) {
+  buildFilename(order, storeCode, suffix = null) {
     const eventTypeCode = {
       TACO_BAR:     'TacoBar',
       BIRD_BOX:     'BirdBox',
@@ -73,8 +76,9 @@ class FulfillmentSheetGenerator {
       .replace(/[^a-zA-Z0-9]/g, '')
       .slice(0, 25);
     const version    = order.pdfVersion || 1;
+    const suffixPart = suffix ? `_${suffix}` : '';
 
-    return `${store}_${clientSlug}_${eventTypeCode}_V${version}.pdf`;
+    return `${store}_${clientSlug}_${eventTypeCode}_V${version}${suffixPart}.pdf`;
   }
 }
 

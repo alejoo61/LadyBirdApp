@@ -2,6 +2,7 @@
 const express             = require('express');
 const router              = express.Router();
 const CateringOrderMapper = require('../mappers/CateringOrderMapper');
+const PersonalBoxLabelsGenerator = require('../services/generators/PersonalBoxLabelsGenerator');
 
 module.exports = (
   pool,
@@ -23,7 +24,7 @@ module.exports = (
   router.patch('/:id/override',       (req, res) => cateringOrderController.updateOverride(req, res));
   router.patch('/:id/payment-status', (req, res) => cateringOrderController.overridePaymentStatus(req, res));
 
-  // ── Manual edit — responde y dispara PDF+Calendar+Audit en background ────
+  // ── Manual edit ───────────────────────────────────────────────────────────
   router.patch('/:id/manual', async (req, res) => {
     try {
       const actor  = req.headers['x-user'] || 'unknown';
@@ -115,11 +116,22 @@ module.exports = (
             'SELECT google_event_id FROM catering_orders WHERE id = $1', [order.id]
           );
           const existingEventId = orderRow.rows[0]?.google_event_id;
+
+          // Generar labels si es Personal Box
+          let labelsPdf     = null;
+          let labelsPdfName = null;
+          if (order.eventType === 'PERSONAL_BOX') {
+            const labelsGen  = new PersonalBoxLabelsGenerator();
+            const labelsHtml = labelsGen.build(calculatedData);
+            labelsPdf        = await fulfillmentGenerator.generateFromHtml(labelsHtml);
+            labelsPdfName    = fulfillmentGenerator.buildFilename(order, order.storeCode, 'labels');
+          }
+
           let calResult;
           if (existingEventId) {
-            calResult = await googleCalendarService.updateEvent(order, existingEventId, pdf, pdfName, calculatedData);
+            calResult = await googleCalendarService.updateEvent(order, existingEventId, pdf, pdfName, calculatedData, labelsPdf, labelsPdfName);
           } else {
-            calResult = await googleCalendarService.createEvent(order, pdf, pdfName, calculatedData);
+            calResult = await googleCalendarService.createEvent(order, pdf, pdfName, calculatedData, labelsPdf, labelsPdfName);
           }
           if (calResult?.eventId) {
             await pool.query(`
@@ -136,6 +148,42 @@ module.exports = (
       });
     } catch (error) {
       console.error('❌ Fulfillment sheet error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ── Personal Box Labels PDF ───────────────────────────────────────────────
+  router.post('/:id/labels', async (req, res) => {
+    try {
+      const order = await cateringOrderService.getOrderById(req.params.id);
+
+      if (order.eventType !== 'PERSONAL_BOX') {
+        return res.status(400).json({ success: false, error: 'Labels are only available for Personal Box orders' });
+      }
+
+      const storeResult = await pool.query(
+        'SELECT name, code FROM stores WHERE id = $1', [order.storeId]
+      );
+      order.storeName = storeResult.rows[0]?.name || '';
+      order.storeCode = storeResult.rows[0]?.code || '';
+      if (!order.items || order.items.length === 0)
+        order.items = order.parsedData?.items || [];
+
+      const calculatedData = await fulfillmentCalculator.calculate(order);
+      const labelsGen      = new PersonalBoxLabelsGenerator();
+      const labelsHtml     = labelsGen.build(calculatedData);
+      const labelsPdf      = await fulfillmentGenerator.generateFromHtml(labelsHtml);
+      const labelsPdfName  = fulfillmentGenerator.buildFilename(order, order.storeCode, 'labels');
+
+      res.set({
+        'Content-Type':        'application/pdf',
+        'Content-Disposition': `inline; filename="${labelsPdfName}"`,
+        'Content-Length':      labelsPdf.length,
+      });
+      res.send(labelsPdf);
+
+    } catch (error) {
+      console.error('❌ Labels error:', error.message);
       res.status(500).json({ success: false, error: error.message });
     }
   });
