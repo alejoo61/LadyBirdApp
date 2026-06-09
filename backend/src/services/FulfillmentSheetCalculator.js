@@ -119,6 +119,27 @@ class FulfillmentSheetCalculator {
           return n.includes('flour') || n.includes('corn') || n.includes('50/50');
         });
 
+        // Extraer salsa del modifier (ej: "Verde (mild) 0.75 oz cup" → "Salsa Verde")
+        const salsaMod = modifiers.find(m => {
+          const n = (m.displayName || '').toLowerCase();
+          return (n.includes('roja') || n.includes('verde') || n.includes('patron') || n.includes('patrón') || n.includes('most popular')) && n.includes('oz');
+        });
+        let salsaLabel = null;
+        if (salsaMod) {
+          const sn = (salsaMod.displayName || '').toLowerCase();
+          if (sn.includes('verde'))                                 salsaLabel = 'Salsa Verde';
+          else if (sn.includes('patron') || sn.includes('patrón')) salsaLabel = 'Salsa Patrón';
+          else if (sn.includes('most popular'))                     salsaLabel = 'Most Popular';
+          else                                                      salsaLabel = 'Salsa Roja';
+        }
+
+        // Extraer notas especiales (ej: 'Please label Vegetarian')
+        const noteMod = modifiers.find(m => {
+          const n = (m.displayName || '').toLowerCase();
+          return n.includes('please label') || n.includes('note:') || n.includes('allerg');
+        });
+        const note = noteMod?.displayName || null;
+
         const combos = modifiers
           .filter(m => /^#\d+/i.test((m.displayName || '').trim()))
           .map(m => m.displayName);
@@ -138,6 +159,8 @@ class FulfillmentSheetCalculator {
           uniqueCombos,
           comboLabel:  comboLabel || (item.displayName || item.name || '—'),
           tortilla:    tortillaMod?.displayName || 'Corn',
+          salsa:       salsaLabel,
+          note,
         });
         continue;
       }
