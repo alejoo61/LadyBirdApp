@@ -76,7 +76,9 @@ class PersonalBoxGenerator extends BaseGenerator {
         <td style="text-align:center; font-weight:900">${box.quantity}</td>
         <td><strong>${box.comboLabel}</strong></td>
         <td>${box.tortilla}</td>
+        <td>${box.salsa || 'Salsa Roja'}</td>
         <td style="text-align:center; font-size:9px; color:#1e6b3a; font-weight:900">✓</td>
+        ${box.note ? `<td style="font-size:9px; color:#92400e; font-weight:900; background:#fff3cd">⚠ ${box.note}</td>` : '<td>—</td>'}
         <td class="checkbox-cell"><span class="checkbox"></span></td>
         <td class="checkbox-cell"><span class="checkbox"></span></td>
       </tr>`).join('');
@@ -86,8 +88,11 @@ class PersonalBoxGenerator extends BaseGenerator {
       <table>
         <thead><tr>
           <th style="text-align:center">Qty</th>
-          <th>Combo</th><th>Tortilla</th>
-          <th style="text-align:center">Chips+Salsa</th>
+          <th>Combo</th>
+          <th>Tortilla</th>
+          <th>Salsa</th>
+          <th style="text-align:center">Chips</th>
+          <th>Note</th>
           <th>Packed?</th><th>Loaded?</th>
         </tr></thead>
         <tbody>${rows}</tbody>
