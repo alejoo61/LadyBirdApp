@@ -545,6 +545,7 @@ class FulfillmentSheetCalculator {
       guestCount:               order.guestCount,
       estimatedFulfillmentDate: order.estimatedFulfillmentDate,
       kitchenFinishTime:        order.kitchenFinishTime,
+      distanceMiles:            order.distanceMiles || null,
       deliveryMethod:           order.deliveryMethod,
       deliveryAddress:          order.deliveryAddress,
       deliveryNotes:            delivery.notes || order.deliveryNotes,

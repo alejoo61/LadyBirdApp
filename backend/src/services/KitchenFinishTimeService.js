@@ -2,20 +2,19 @@
 
 const axios = require('axios');
 
-const GOOGLE_MAPS_API_URL = 'https://maps.googleapis.com/maps/api/distancematrix/json';
+const GOOGLE_MAPS_API_URL  = 'https://maps.googleapis.com/maps/api/distancematrix/json';
 const MAX_GEOCODE_ATTEMPTS = 2;
-const ALERT_EMAILS = ['catering@ladybirdtaco.com', 'alejandro@ladybirdtaco.com', 'katia@ladybirdtaco.com'];
+const ALERT_EMAILS         = ['catering@ladybirdtaco.com', 'alejandro@ladybirdtaco.com', 'katia@ladybirdtaco.com'];
+const METERS_TO_MILES      = 0.000621371;
 
 class KitchenFinishTimeService {
   constructor(pool, emailService = null) {
     this.pool         = pool;
-    this.emailService = emailService; // opcional, para alertas
+    this.emailService = emailService;
     this.apiKey       = process.env.GOOGLE_MAPS_API_KEY;
   }
 
   // ─── ENTRY POINT ──────────────────────────────────────────────────────────
-  // Calcula y guarda kitchen_finish_time para una orden
-  // Retorna { kitchenFinishTime, driveTimeMinutes, error }
   async calculate(cateringOrder) {
     const {
       id,
@@ -30,60 +29,46 @@ class KitchenFinishTimeService {
     // Solo delivery necesita drive time
     if ((deliveryMethod || '').toUpperCase() !== 'DELIVERY') {
       const kitchenFinishTime = this._applyFormula(estimatedFulfillmentDate, 0);
-      await this._saveKitchenFinishTime(id, kitchenFinishTime, 0);
-      return { kitchenFinishTime, driveTimeMinutes: 0 };
+      await this._saveKitchenFinishTime(id, kitchenFinishTime, 0, null);
+      return { kitchenFinishTime, driveTimeMinutes: 0, distanceMiles: null };
     }
 
-    // Si ya falló 2 veces no intentar más
-    if (geocodeAttempts >= MAX_GEOCODE_ATTEMPTS) {
-      return { kitchenFinishTime: null, driveTimeMinutes: null, error: 'max_attempts_reached' };
-    }
+    if (geocodeAttempts >= MAX_GEOCODE_ATTEMPTS)
+      return { kitchenFinishTime: null, driveTimeMinutes: null, distanceMiles: null, error: 'max_attempts_reached' };
 
-    // Validaciones
-    if (!deliveryAddress) {
-      return { kitchenFinishTime: null, driveTimeMinutes: null, error: 'no_delivery_address' };
-    }
-    if (!storeLatitude || !storeLongitude) {
-      return { kitchenFinishTime: null, driveTimeMinutes: null, error: 'no_store_coordinates' };
-    }
-    if (!this.apiKey) {
-      return { kitchenFinishTime: null, driveTimeMinutes: null, error: 'no_api_key' };
-    }
+    if (!deliveryAddress)
+      return { kitchenFinishTime: null, driveTimeMinutes: null, distanceMiles: null, error: 'no_delivery_address' };
+
+    if (!storeLatitude || !storeLongitude)
+      return { kitchenFinishTime: null, driveTimeMinutes: null, distanceMiles: null, error: 'no_store_coordinates' };
+
+    if (!this.apiKey)
+      return { kitchenFinishTime: null, driveTimeMinutes: null, distanceMiles: null, error: 'no_api_key' };
 
     try {
-      // Llamar a Distance Matrix API
-      const driveTimeMinutes = await this._getDriveTime(
+      const { driveTimeMinutes, distanceMiles } = await this._getDriveTime(
         storeLatitude,
         storeLongitude,
         deliveryAddress,
         estimatedFulfillmentDate,
       );
 
-      // Fórmula: event_time - MAX(drive_time + 15, 30)
       const kitchenFinishTime = this._applyFormula(estimatedFulfillmentDate, driveTimeMinutes);
+      await this._saveKitchenFinishTime(id, kitchenFinishTime, driveTimeMinutes, distanceMiles);
 
-      // Guardar en DB
-      await this._saveKitchenFinishTime(id, kitchenFinishTime, driveTimeMinutes);
-
-      return { kitchenFinishTime, driveTimeMinutes };
+      return { kitchenFinishTime, driveTimeMinutes, distanceMiles };
 
     } catch (error) {
       console.error(`[KitchenFinishTime] Error para orden ${id}:`, error.message);
-
-      // Incrementar intentos fallidos
       await this._incrementGeocodeFailed(id, geocodeAttempts + 1);
-
-      // Si llegó al máximo → enviar alerta
       if (geocodeAttempts + 1 >= MAX_GEOCODE_ATTEMPTS) {
         await this._sendAlert(cateringOrder, error.message);
       }
-
-      return { kitchenFinishTime: null, driveTimeMinutes: null, error: error.message };
+      return { kitchenFinishTime: null, driveTimeMinutes: null, distanceMiles: null, error: error.message };
     }
   }
 
   // ─── BATCH ────────────────────────────────────────────────────────────────
-  // Calcular kitchen_finish_time para todas las órdenes que no lo tienen
   async calculatePending() {
     const result = await this.pool.query(`
       SELECT
@@ -114,77 +99,77 @@ class KitchenFinishTimeService {
       const res = await this.calculate(order);
       results.push({ orderId: order.id, displayNumber: order.displayNumber, ...res });
     }
-
     return results;
   }
 
   // ─── GOOGLE MAPS DISTANCE MATRIX ──────────────────────────────────────────
   async _getDriveTime(originLat, originLng, destinationAddress, arrivalTime) {
-    // Usar arrival_time para obtener el drive time estimado al momento del evento
     const arrivalTimestamp = arrivalTime
       ? Math.floor(new Date(arrivalTime).getTime() / 1000)
       : Math.floor(Date.now() / 1000);
 
     const params = {
-      origins:        `${originLat},${originLng}`,
-      destinations:   destinationAddress,
-      mode:           'driving',
-      arrival_time:   arrivalTimestamp,
-      key:            this.apiKey,
+      origins:      `${originLat},${originLng}`,
+      destinations: destinationAddress,
+      mode:         'driving',
+      arrival_time: arrivalTimestamp,
+      key:          this.apiKey,
     };
 
     const response = await axios.get(GOOGLE_MAPS_API_URL, { params });
     const data     = response.data;
 
-    if (data.status !== 'OK') {
+    if (data.status !== 'OK')
       throw new Error(`Distance Matrix API error: ${data.status}`);
-    }
 
     const element = data.rows?.[0]?.elements?.[0];
-    if (!element || element.status !== 'OK') {
+    if (!element || element.status !== 'OK')
       throw new Error(`No route found: ${element?.status || 'unknown'}`);
-    }
 
     const driveTimeSeconds = element.duration_in_traffic?.value ?? element.duration?.value;
-    if (!driveTimeSeconds) {
+    if (!driveTimeSeconds)
       throw new Error('No duration in response');
-    }
 
-    return Math.ceil(driveTimeSeconds / 60); // convertir a minutos
+    // Distancia en millas (distance.value viene en metros)
+    const distanceMeters = element.distance?.value || null;
+    const distanceMiles  = distanceMeters
+      ? Math.round(distanceMeters * METERS_TO_MILES * 10) / 10  // 1 decimal
+      : null;
+
+    return {
+      driveTimeMinutes: Math.ceil(driveTimeSeconds / 60),
+      distanceMiles,
+    };
   }
 
   // ─── FÓRMULA ──────────────────────────────────────────────────────────────
-  // kitchen_finish_time = event_time - MAX(drive_time + 15, 30)
   _applyFormula(eventTimeISO, driveTimeMinutes) {
     if (!eventTimeISO) return null;
-    const eventTime      = new Date(eventTimeISO);
-    const bufferMinutes  = Math.max(driveTimeMinutes + 15, 30);
-    const kitchenFinish  = new Date(eventTime.getTime() - bufferMinutes * 60 * 1000);
-    return kitchenFinish.toISOString();
+    const eventTime     = new Date(eventTimeISO);
+    const bufferMinutes = Math.max(driveTimeMinutes + 15, 30);
+    return new Date(eventTime.getTime() - bufferMinutes * 60 * 1000).toISOString();
   }
 
   // ─── DB ───────────────────────────────────────────────────────────────────
-  async _saveKitchenFinishTime(orderId, kitchenFinishTime, driveTimeMinutes) {
+  async _saveKitchenFinishTime(orderId, kitchenFinishTime, driveTimeMinutes, distanceMiles) {
     await this.pool.query(`
       UPDATE catering_orders
       SET
-        kitchen_finish_time = $1,
-        geocode_attempts    = geocode_attempts + 1,
-        geocode_failed      = FALSE,
-        pdf_needs_update    = TRUE,
-        updated_at          = NOW()
-      WHERE id = $2
-    `, [kitchenFinishTime, orderId]);
+        kitchen_finish_time      = $1,
+        delivery_distance_miles  = $2,
+        geocode_attempts         = geocode_attempts + 1,
+        geocode_failed           = FALSE,
+        pdf_needs_update         = TRUE,
+        updated_at               = NOW()
+      WHERE id = $3
+    `, [kitchenFinishTime, distanceMiles, orderId]);
   }
 
   async _incrementGeocodeFailed(orderId, attempts) {
     const failed = attempts >= MAX_GEOCODE_ATTEMPTS;
     await this.pool.query(`
       UPDATE catering_orders
-      SET
-        geocode_attempts = $1,
-        geocode_failed   = $2,
-        updated_at       = NOW()
+      SET geocode_attempts = $1, geocode_failed = $2, updated_at = NOW()
       WHERE id = $3
     `, [attempts, failed, orderId]);
   }
@@ -195,7 +180,6 @@ class KitchenFinishTimeService {
       console.error(`[KitchenFinishTime] ALERT — No se pudo calcular kitchen finish para orden #${order.displayNumber} (${order.clientName}): ${errorMessage}`);
       return;
     }
-
     try {
       await this.emailService.send({
         to:      ALERT_EMAILS,

@@ -38,7 +38,8 @@ class CateringOrderMapper {
       totalAmount:              row.total_amount,
       overrideData,
       overrideNotes:            row.override_notes,
-      kitchenFinishTime:        row.kitchen_finish_time || null,
+      kitchenFinishTime:        row.kitchen_finish_time        || null,
+      distanceMiles:            row.delivery_distance_miles    ? parseFloat(row.delivery_distance_miles) : null,
       createdAt:                row.created_at,
       updatedAt:                row.updated_at,
     });
@@ -59,12 +60,10 @@ class CateringOrderMapper {
 
     const items = entity.parsedData?.items || [];
 
-    // Detectar Space Rental por line item
     const isSpaceRental = items.some(i =>
       (i.displayName || i.name || '').toLowerCase().includes('space rental')
     );
 
-    // Restar 10 minutos al fulfillment date para que cocina siempre llegue antes
     const estimatedFulfillmentDate = this._subtractMinutes(entity.estimatedFulfillmentDate, 10);
 
     return {
@@ -94,6 +93,7 @@ class CateringOrderMapper {
       orderDate:                entity.orderDate,
       estimatedFulfillmentDate,
       kitchenFinishTime:        entity.getKitchenFinishTime(),
+      distanceMiles:            entity.distanceMiles || null,
       businessDate:             entity.businessDate,
       deliveryMethod:           entity.deliveryMethod,
       deliveryAddress:          entity.deliveryAddress,
