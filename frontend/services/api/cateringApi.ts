@@ -100,6 +100,12 @@ export const cateringApi = {
 
   syncCalendar: (id: string) =>
     apiClient.post(`/catering/orders/${id}/sync-calendar`),
+
+  generateLabels: (id: string) =>
+    fetch(
+      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/catering/orders/${id}/labels`,
+      { method: 'POST' }
+    ),
 };
 
 export default cateringApi;

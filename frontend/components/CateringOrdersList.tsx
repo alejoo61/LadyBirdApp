@@ -19,10 +19,8 @@ export default function CateringOrdersList({
   return (
     <div className="space-y-6 relative">
 
-      {/* Toast */}
       <StandaloneToast message={c.toast} />
 
-      {/* Edit modal */}
       {c.editingOrder && (
         <EditOrderModal
           order={c.editingOrder}
@@ -35,7 +33,6 @@ export default function CateringOrdersList({
         />
       )}
 
-      {/* Header */}
       <PageHeader
         title="Catering Orders"
         subtitle={
@@ -58,7 +55,6 @@ export default function CateringOrdersList({
         }
       />
 
-      {/* Tabs */}
       <TabGroup
         tabs={c.tabs.map(t => ({
           ...t,
@@ -70,7 +66,6 @@ export default function CateringOrdersList({
         onChange={c.setActiveTab}
       />
 
-      {/* Filters */}
       <CateringOrderFilters
         stores={c.stores}
         activeTab={c.activeTab}
@@ -100,13 +95,12 @@ export default function CateringOrdersList({
         onClearFilters={c.clearFilters}
       />
 
-      {/* Orders list */}
       {c.loading ? (
         <LoadingSpinner fullPage label="Loading orders..." />
       ) : c.filteredOrders.length === 0 ? (
         <EmptyState
           title={
-            c.activeTab === 'catering'       ? 'No catering orders found'
+            c.activeTab === 'catering'         ? 'No catering orders found'
             : c.activeTab === 'house_accounts' ? 'No house accounts found'
             : c.activeTab === 'space_rentals'  ? 'No space rental orders found'
             : 'No orders needing review'
@@ -121,11 +115,13 @@ export default function CateringOrdersList({
               isExpanded={c.expandedId === order.id}
               isUpdating={c.isUpdating}
               generatingPdf={c.generatingPdf}
+              generatingLabels={c.generatingLabels}
               syncingCalendar={c.syncingCalendar}
               onToggle={() => c.setExpandedId(c.expandedId === order.id ? null : order.id)}
               onStatusUpdate={c.handleStatusUpdate}
               onOverridePayment={c.handleOverridePayment}
               onGeneratePdf={c.handleGeneratePdf}
+              onGenerateLabels={c.handleGenerateLabels}
               onSyncCalendar={c.handleSyncCalendar}
               onEdit={() => c.setEditingOrder(order)}
               onCollapse={() => c.setExpandedId(null)}

@@ -3,32 +3,35 @@
 import type { CateringOrder } from '@/services/api/cateringApi';
 import {
   FileText, LockKeyhole, Receipt, CalendarDays,
-  AlertTriangle, Pencil, X, Building2,
+  AlertTriangle, Pencil, X, Building2, Tag,
 } from 'lucide-react';
 
 interface CateringOrderActionsProps {
-  order:            CateringOrder;
-  isUpdating:       boolean;
-  generatingPdf:    string | null;
-  syncingCalendar:  string | null;
-  onStatusUpdate:   (id: string, status: string) => void;
-  onOverridePayment:(id: string) => void;
-  onGeneratePdf:    (id: string, order: CateringOrder) => void;
-  onSyncCalendar:   (id: string) => void;
-  onEdit:           () => void;
-  onCollapse:       () => void;
+  order:              CateringOrder;
+  isUpdating:         boolean;
+  generatingPdf:      string | null;
+  generatingLabels:   string | null;
+  syncingCalendar:    string | null;
+  onStatusUpdate:     (id: string, status: string) => void;
+  onOverridePayment:  (id: string) => void;
+  onGeneratePdf:      (id: string, order: CateringOrder) => void;
+  onGenerateLabels:   (id: string, order: CateringOrder) => void;
+  onSyncCalendar:     (id: string) => void;
+  onEdit:             () => void;
+  onCollapse:         () => void;
 }
 
 const STATUSES = ['pending', 'confirmed', 'completed', 'cancelled'];
 
 export default function CateringOrderActions({
-  order, isUpdating, generatingPdf, syncingCalendar,
-  onStatusUpdate, onOverridePayment, onGeneratePdf,
+  order, isUpdating, generatingPdf, generatingLabels, syncingCalendar,
+  onStatusUpdate, onOverridePayment, onGeneratePdf, onGenerateLabels,
   onSyncCalendar, onEdit, onCollapse,
 }: CateringOrderActionsProps) {
   const isUnpaid       = order.paymentStatus === 'OPEN';
   const isHouseAccount = order.isHouseAccount;
   const isSpaceRental  = order.isSpaceRental;
+  const isPersonalBox  = order.eventType === 'PERSONAL_BOX';
 
   return (
     <div className="space-y-4">
@@ -103,6 +106,8 @@ export default function CateringOrderActions({
                 {status}
               </button>
             ))}
+
+            {/* Fulfillment PDF */}
             <button
               onClick={() => onGeneratePdf(order.id, order)}
               disabled={generatingPdf === order.id}
@@ -110,6 +115,17 @@ export default function CateringOrderActions({
               <FileText size={13} />
               {generatingPdf === order.id ? 'Generating...' : 'Fulfillment PDF'}
             </button>
+
+            {/* Labels — solo para Personal Box */}
+            {isPersonalBox && (
+              <button
+                onClick={() => onGenerateLabels(order.id, order)}
+                disabled={generatingLabels === order.id}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-amber-100 text-amber-700 hover:bg-amber-500 hover:text-white transition-all active:scale-95 disabled:opacity-50">
+                <Tag size={13} />
+                {generatingLabels === order.id ? 'Generating...' : 'Box Labels'}
+              </button>
+            )}
           </div>
         )}
 

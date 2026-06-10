@@ -64,7 +64,6 @@ class GoogleCalendarService {
   }
 
   // ─── BUILD EVENT TITLE ────────────────────────────────────────────────────
-  // Space Rental siempre tiene prioridad en el título del evento
 
   _buildEventTitle(order) {
     const status = (order.status || 'pending').toUpperCase();
@@ -130,11 +129,8 @@ class GoogleCalendarService {
   }
 
   // ─── BUILD EVENT DATES ────────────────────────────────────────────────────
-  // Para Space Rental usa el horario del modifier (startISO/endISO calculado)
-  // Para el resto usa estimatedFulfillmentDate + 1 hora
 
   _buildEventDates(order, calculatedData) {
-    // Space Rental: usar horario parseado del modifier
     if (order.eventType === 'SPACE_RENTAL' && calculatedData?.spaceRental?.startISO) {
       const sr = calculatedData.spaceRental;
       return {
@@ -188,8 +184,9 @@ class GoogleCalendarService {
   }
 
   // ─── CALENDAR: CREATE EVENT ───────────────────────────────────────────────
+  // labelsPdf / labelsPdfName son opcionales — solo para Personal Box
 
-  async createEvent(order, pdfBuffer, pdfFilename, calculatedData) {
+  async createEvent(order, pdfBuffer, pdfFilename, calculatedData, labelsPdf = null, labelsPdfName = null) {
     const calendarId = this._getCalendarId(order.storeCode);
     if (!calendarId) {
       console.log(`⚠️  No calendar configured for store ${order.storeCode} — skipping`);
@@ -199,13 +196,34 @@ class GoogleCalendarService {
     const cal   = await this._getCal();
     const dates = this._buildEventDates(order, calculatedData);
 
-    let driveFile = null;
+    // Subir fulfillment sheet
+    const attachments = [];
     if (pdfBuffer && pdfFilename) {
       try {
-        driveFile = await this.uploadPdfToDrive(pdfBuffer, pdfFilename);
-        console.log(`📎 PDF uploaded to Drive: ${driveFile.webViewLink}`);
+        const driveFile = await this.uploadPdfToDrive(pdfBuffer, pdfFilename);
+        console.log(`📎 Fulfillment PDF uploaded: ${driveFile.webViewLink}`);
+        attachments.push({
+          fileUrl:  driveFile.webViewLink,
+          title:    pdfFilename,
+          mimeType: 'application/pdf',
+        });
       } catch (err) {
-        console.error('❌ Drive upload failed:', err.message);
+        console.error('❌ Fulfillment PDF upload failed:', err.message);
+      }
+    }
+
+    // Subir labels si existen (Personal Box)
+    if (labelsPdf && labelsPdfName) {
+      try {
+        const labelsFile = await this.uploadPdfToDrive(labelsPdf, labelsPdfName);
+        console.log(`🏷️  Labels PDF uploaded: ${labelsFile.webViewLink}`);
+        attachments.push({
+          fileUrl:  labelsFile.webViewLink,
+          title:    labelsPdfName,
+          mimeType: 'application/pdf',
+        });
+      } catch (err) {
+        console.error('❌ Labels PDF upload failed:', err.message);
       }
     }
 
@@ -215,16 +233,12 @@ class GoogleCalendarService {
       start:       dates.start,
       end:         dates.end,
       location:    order.deliveryAddress || '',
-      attachments: driveFile ? [{
-        fileUrl:  driveFile.webViewLink,
-        title:    pdfFilename,
-        mimeType: 'application/pdf',
-      }] : [],
+      attachments,
     };
 
     const response = await cal.events.insert({
       calendarId,
-      requestBody:        eventBody,
+      requestBody:         eventBody,
       supportsAttachments: true,
     });
 
@@ -232,30 +246,53 @@ class GoogleCalendarService {
     return {
       eventId:   response.data.id,
       eventLink: response.data.htmlLink,
-      driveFile,
     };
   }
 
   // ─── CALENDAR: UPDATE EVENT ───────────────────────────────────────────────
 
-  async updateEvent(order, googleEventId, pdfBuffer, pdfFilename, calculatedData) {
+  async updateEvent(order, googleEventId, pdfBuffer, pdfFilename, calculatedData, labelsPdf = null, labelsPdfName = null) {
     const calendarId = this._getCalendarId(order.storeCode);
     if (!calendarId || !googleEventId) return null;
 
     const cal   = await this._getCal();
     const dates = this._buildEventDates(order, calculatedData);
 
-    let driveFile = null;
+    // Traer attachments existentes
+    const existing            = await cal.events.get({ calendarId, eventId: googleEventId });
+    const existingAttachments = existing.data.attachments || [];
+
+    const attachments = [...existingAttachments];
+
+    // Subir nuevo fulfillment sheet
     if (pdfBuffer && pdfFilename) {
       try {
-        driveFile = await this.uploadPdfToDrive(pdfBuffer, pdfFilename);
+        const driveFile = await this.uploadPdfToDrive(pdfBuffer, pdfFilename);
+        console.log(`📎 Fulfillment PDF uploaded: ${driveFile.webViewLink}`);
+        attachments.push({
+          fileUrl:  driveFile.webViewLink,
+          title:    pdfFilename,
+          mimeType: 'application/pdf',
+        });
       } catch (err) {
-        console.error('❌ Drive upload failed:', err.message);
+        console.error('❌ Fulfillment PDF upload failed:', err.message);
       }
     }
 
-    const existing = await cal.events.get({ calendarId, eventId: googleEventId });
-    const existingAttachments = existing.data.attachments || [];
+    // Subir labels si existen (Personal Box)
+    if (labelsPdf && labelsPdfName) {
+      try {
+        const labelsFile = await this.uploadPdfToDrive(labelsPdf, labelsPdfName);
+        console.log(`🏷️  Labels PDF uploaded: ${labelsFile.webViewLink}`);
+        attachments.push({
+          fileUrl:  labelsFile.webViewLink,
+          title:    labelsPdfName,
+          mimeType: 'application/pdf',
+        });
+      } catch (err) {
+        console.error('❌ Labels PDF upload failed:', err.message);
+      }
+    }
 
     const eventBody = {
       summary:     this._buildEventTitle(order),
@@ -263,19 +300,13 @@ class GoogleCalendarService {
       start:       dates.start,
       end:         dates.end,
       location:    order.deliveryAddress || '',
-      attachments: driveFile
-        ? [...existingAttachments, {
-            fileUrl:  driveFile.webViewLink,
-            title:    pdfFilename,
-            mimeType: 'application/pdf',
-          }]
-        : existingAttachments,
+      attachments,
     };
 
     const response = await cal.events.update({
       calendarId,
-      eventId:            googleEventId,
-      requestBody:        eventBody,
+      eventId:             googleEventId,
+      requestBody:         eventBody,
       supportsAttachments: true,
     });
 
@@ -283,7 +314,6 @@ class GoogleCalendarService {
     return {
       eventId:   response.data.id,
       eventLink: response.data.htmlLink,
-      driveFile,
     };
   }
 
