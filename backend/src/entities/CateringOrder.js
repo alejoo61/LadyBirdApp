@@ -9,6 +9,7 @@ class CateringOrder {
     parsedData, guestCount, totalAmount,
     overrideData, overrideNotes,
     kitchenFinishTime,
+    distanceMiles,
     createdAt, updatedAt
   }) {
     this.id                       = id;
@@ -34,6 +35,7 @@ class CateringOrder {
     this.overrideData             = overrideData || {};
     this.overrideNotes            = overrideNotes;
     this.kitchenFinishTime        = kitchenFinishTime || null;
+    this.distanceMiles            = distanceMiles     || null;
     this.createdAt                = createdAt;
     this.updatedAt                = updatedAt;
   }
@@ -64,8 +66,6 @@ class CateringOrder {
     return new Date(this.estimatedFulfillmentDate) > new Date();
   }
 
-  // Retorna el kitchen finish time calculado por Google Maps si existe,
-  // de lo contrario retorna null (no calcular en el cliente)
   getKitchenFinishTime() {
     return this.kitchenFinishTime || null;
   }
