@@ -10,22 +10,24 @@ import {
 } from 'lucide-react';
 
 interface CateringOrderDetailProps {
-  order:            CateringOrder;
-  isUpdating:       boolean;
-  generatingPdf:    string | null;
-  syncingCalendar:  string | null;
-  onStatusUpdate:   (id: string, status: string) => void;
-  onOverridePayment:(id: string) => void;
-  onGeneratePdf:    (id: string, order: CateringOrder) => void;
-  onSyncCalendar:   (id: string) => void;
-  onEdit:           () => void;
-  onCollapse:       () => void;
+  order:              CateringOrder;
+  isUpdating:         boolean;
+  generatingPdf:      string | null;
+  generatingLabels:   string | null;
+  syncingCalendar:    string | null;
+  onStatusUpdate:     (id: string, status: string) => void;
+  onOverridePayment:  (id: string) => void;
+  onGeneratePdf:      (id: string, order: CateringOrder) => void;
+  onGenerateLabels:   (id: string, order: CateringOrder) => void;
+  onSyncCalendar:     (id: string) => void;
+  onEdit:             () => void;
+  onCollapse:         () => void;
 }
 
 export default function CateringOrderDetail({
   order,
-  isUpdating, generatingPdf, syncingCalendar,
-  onStatusUpdate, onOverridePayment, onGeneratePdf,
+  isUpdating, generatingPdf, generatingLabels, syncingCalendar,
+  onStatusUpdate, onOverridePayment, onGeneratePdf, onGenerateLabels,
   onSyncCalendar, onEdit, onCollapse,
 }: CateringOrderDetailProps) {
   return (
@@ -158,10 +160,12 @@ export default function CateringOrderDetail({
         order={order}
         isUpdating={isUpdating}
         generatingPdf={generatingPdf}
+        generatingLabels={generatingLabels}
         syncingCalendar={syncingCalendar}
         onStatusUpdate={onStatusUpdate}
         onOverridePayment={onOverridePayment}
         onGeneratePdf={onGeneratePdf}
+        onGenerateLabels={onGenerateLabels}
         onSyncCalendar={onSyncCalendar}
         onEdit={onEdit}
         onCollapse={onCollapse}

@@ -26,9 +26,10 @@ export function useCateringOrders() {
   const [activeTab, setActiveTab]       = useState<OrderTabType>('catering');
 
   // ── Loading states ────────────────────────────────────────────────────────
-  const [isUpdating, setIsUpdating]         = useState(false);
-  const [generatingPdf, setGeneratingPdf]   = useState<string | null>(null);
-  const [syncingCalendar, setSyncingCalendar] = useState<string | null>(null);
+  const [isUpdating, setIsUpdating]             = useState(false);
+  const [generatingPdf, setGeneratingPdf]       = useState<string | null>(null);
+  const [generatingLabels, setGeneratingLabels] = useState<string | null>(null);
+  const [syncingCalendar, setSyncingCalendar]   = useState<string | null>(null);
 
   // ── Filters ───────────────────────────────────────────────────────────────
   const [searchTerm, setSearchTerm]           = useState('');
@@ -140,6 +141,29 @@ export function useCateringOrders() {
     }
   }, [loadOrders, triggerToast]);
 
+  const handleGenerateLabels = useCallback(async (id: string, order: CateringOrder) => {
+    setGeneratingLabels(id);
+    try {
+      const response = await cateringApi.generateLabels(id);
+      if (!response.ok) throw new Error('Failed to generate labels');
+      const blob = await response.blob();
+      const url  = window.URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      const clientSlug = (order.clientName || 'unknown')
+        .replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 25);
+      const storeCode  = (order.storeCode || 'LB').replace(/\s/g, '');
+      a.download       = `${storeCode}_${clientSlug}_PersonalBox_V${order.pdfVersion || 1}_labels.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      triggerToast('Labels downloaded successfully');
+    } catch {
+      triggerToast('❌ Error generating labels');
+    } finally {
+      setGeneratingLabels(null);
+    }
+  }, [triggerToast]);
+
   const handleSyncCalendar = useCallback(async (id: string) => {
     setSyncingCalendar(id);
     try {
@@ -212,7 +236,7 @@ export function useCateringOrders() {
     toast, activeTab,
     setActiveTab: (tab: OrderTabType) => { setActiveTab(tab); setExpandedId(null); },
     // Loading states
-    isUpdating, generatingPdf, syncingCalendar,
+    isUpdating, generatingPdf, generatingLabels, syncingCalendar,
     // Filters
     searchTerm, setSearchTerm,
     filterEventType, setFilterEventType,
@@ -233,6 +257,7 @@ export function useCateringOrders() {
     handleStatusUpdate,
     handleOverridePayment,
     handleGeneratePdf,
+    handleGenerateLabels,
     handleSyncCalendar,
     loadOrders,
   };

@@ -243,13 +243,29 @@ class ToastSyncService {
 
       console.log(`📄 Auto-generated PDF: ${pdfName}`);
 
+      // Generar labels para Personal Box
+      let labelsPdf     = null;
+      let labelsPdfName = null;
+      if (order.eventType === 'PERSONAL_BOX') {
+        try {
+          const PersonalBoxLabelsGenerator = require('./generators/PersonalBoxLabelsGenerator');
+          const labelsGen  = new PersonalBoxLabelsGenerator();
+          const labelsHtml = labelsGen.build(calculatedData);
+          labelsPdf        = await this.fulfillmentGenerator.generateFromHtml(labelsHtml);
+          labelsPdfName    = this.fulfillmentGenerator.buildFilename(order, order.storeCode, 'labels');
+          console.log(`🏷️  Auto-generated Labels: ${labelsPdfName}`);
+        } catch (err) {
+          console.error('❌ Labels generation error:', err.message);
+        }
+      }
+
       let calResult;
       if (order.googleEventId) {
         calResult = await this.googleCalendarService.updateEvent(
-          order, order.googleEventId, pdf, pdfName, calculatedData
+          order, order.googleEventId, pdf, pdfName, calculatedData, labelsPdf, labelsPdfName
         );
       } else {
-        calResult = await this.googleCalendarService.createEvent(order, pdf, pdfName, calculatedData);
+        calResult = await this.googleCalendarService.createEvent(order, pdf, pdfName, calculatedData, labelsPdf, labelsPdfName);
       }
 
       if (calResult?.eventId) {

@@ -148,17 +148,22 @@ class PersonalBoxLabelsGenerator {
       }
 
       .combo {
-        font-size: 13px;
+        font-size: 11px;
         font-weight: 900;
         color: #1a1a1a;
-        line-height: 1.25;
+        line-height: 1.3;
+        word-break: break-word;
+        hyphens: auto;
       }
 
       .details {
         font-size: 9px;
         font-weight: 700;
         color: #444;
-        margin-top: 2px;
+        margin-top: 3px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .note {

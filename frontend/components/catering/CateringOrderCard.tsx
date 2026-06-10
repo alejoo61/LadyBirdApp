@@ -12,25 +12,27 @@ import {
 } from 'lucide-react';
 
 interface CateringOrderCardProps {
-  order:            CateringOrder;
-  isExpanded:       boolean;
-  isUpdating:       boolean;
-  generatingPdf:    string | null;
-  syncingCalendar:  string | null;
-  onToggle:         () => void;
-  onStatusUpdate:   (id: string, status: string) => void;
-  onOverridePayment:(id: string) => void;
-  onGeneratePdf:    (id: string, order: CateringOrder) => void;
-  onSyncCalendar:   (id: string) => void;
-  onEdit:           () => void;
-  onCollapse:       () => void;
+  order:              CateringOrder;
+  isExpanded:         boolean;
+  isUpdating:         boolean;
+  generatingPdf:      string | null;
+  generatingLabels:   string | null;
+  syncingCalendar:    string | null;
+  onToggle:           () => void;
+  onStatusUpdate:     (id: string, status: string) => void;
+  onOverridePayment:  (id: string) => void;
+  onGeneratePdf:      (id: string, order: CateringOrder) => void;
+  onGenerateLabels:   (id: string, order: CateringOrder) => void;
+  onSyncCalendar:     (id: string) => void;
+  onEdit:             () => void;
+  onCollapse:         () => void;
 }
 
 export default function CateringOrderCard({
   order, isExpanded,
-  isUpdating, generatingPdf, syncingCalendar,
+  isUpdating, generatingPdf, generatingLabels, syncingCalendar,
   onToggle, onStatusUpdate, onOverridePayment,
-  onGeneratePdf, onSyncCalendar, onEdit, onCollapse,
+  onGeneratePdf, onGenerateLabels, onSyncCalendar, onEdit, onCollapse,
 }: CateringOrderCardProps) {
   const isUnpaid       = order.paymentStatus === 'OPEN';
   const isHouseAccount = order.isHouseAccount;
@@ -43,7 +45,6 @@ export default function CateringOrderCard({
     ? order.items.find(i => (i.displayName || '').toLowerCase().includes('space rental'))
     : null;
 
-  // Card border variant
   const borderCls = isTestOrder     ? 'border-fuchsia-300 ring-1 ring-fuchsia-200'
                   : isSpaceRental   ? 'border-indigo-300 ring-1 ring-indigo-100'
                   : isUnpaid        ? 'border-orange-200 opacity-75'
@@ -54,7 +55,6 @@ export default function CateringOrderCard({
   return (
     <div className={`bg-white rounded-[2rem] border shadow-sm transition-all duration-300 overflow-hidden ${borderCls}`}>
 
-      {/* ── Banners ── */}
       {isSpaceRental && (
         <div className="bg-indigo-600 px-6 py-2 flex items-center gap-2">
           <Building2 size={13} className="text-white shrink-0" />
@@ -112,7 +112,6 @@ export default function CateringOrderCard({
         </div>
       )}
 
-      {/* ── Clickable row ── */}
       <div
         className="p-6 flex items-center gap-4 cursor-pointer hover:bg-bone/40 transition-colors"
         onClick={onToggle}>
@@ -168,16 +167,17 @@ export default function CateringOrderCard({
         </div>
       </div>
 
-      {/* ── Expanded detail ── */}
       {isExpanded && (
         <CateringOrderDetail
           order={order}
           isUpdating={isUpdating}
           generatingPdf={generatingPdf}
+          generatingLabels={generatingLabels}
           syncingCalendar={syncingCalendar}
           onStatusUpdate={onStatusUpdate}
           onOverridePayment={onOverridePayment}
           onGeneratePdf={onGeneratePdf}
+          onGenerateLabels={onGenerateLabels}
           onSyncCalendar={onSyncCalendar}
           onEdit={onEdit}
           onCollapse={onCollapse}
