@@ -171,8 +171,35 @@ class FulfillmentSheetCalculator {
         continue;
       }
 
-      // ── Addons ──
-      addons.push({ name: item.displayName || item.name, quantity: qty, tempType: 'dry' });
+      // ── Addons (Bunuelos, Chips & Guacamole, etc.) ──
+      // Intentar resolver packaging desde la DB
+      {
+        const dn            = item.displayName || item.name || '';
+        const canonicalName = await this.resolver.resolveCanonicalName(dn);
+        if (canonicalName) {
+          const formula = await this.resolver.getFormula(canonicalName, 'PERSONAL_BOX')
+                       || await this.resolver.getFormula(canonicalName, 'BIRD_BOX');
+          if (formula) {
+            const isFixedPack = formula.amount_per_person === 0;
+            const totalAmount = isFixedPack
+              ? this._getFixedPackAmount(canonicalName, qty)
+              : this.resolver.calculateAmount(formula, guestCount);
+            const packaging   = this.resolver.getPackaging(formula, guestCount);
+            addons.push({
+              name:         canonicalName,
+              quantity:     qty,
+              totalAmount,
+              unit:         formula.unit,
+              packaging:    packaging.package,
+              packagingQty: isFixedPack ? qty : packaging.qty,
+              tempType:     formula.temp_type || 'dry',
+              detail:       `${totalAmount} ${formula.unit}${packaging.package ? ' · ' + packaging.package : ''}`,
+            });
+            continue;
+          }
+        }
+        addons.push({ name: item.displayName || item.name, quantity: qty, tempType: 'dry' });
+      }
     }
 
     // ── Tacos agrupados por combo (Personal Boxes) ──

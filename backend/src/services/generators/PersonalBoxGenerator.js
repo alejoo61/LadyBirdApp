@@ -154,18 +154,24 @@ class PersonalBoxGenerator extends BaseGenerator {
   // ─── ADD-ONS ──────────────────────────────────────────────────────────────
   _renderAddons(addons) {
     if (!addons || addons.length === 0) return '';
-    const rows = addons.map(addon => `
+    const rows = addons.map(addon => {
+      const detail = addon.detail || addon.packaging
+        ? `${addon.totalAmount ? addon.totalAmount + ' ' + (addon.unit || '') : ''} ${addon.packaging || addon.detail || ''}`.trim()
+        : '';
+      return `
       <tr>
         <td><strong>${addon.name}</strong></td>
         <td style="text-align:center; font-weight:900">${addon.quantity}</td>
+        <td>${detail}</td>
         <td class="checkbox-cell"><span class="checkbox"></span></td>
         <td class="checkbox-cell"><span class="checkbox"></span></td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
     return `
     <div class="section" style="margin-top:8px">
       <div class="section-header" style="background:#6b21a8">Add-ons</div>
       <table>
-        <thead><tr><th>Item</th><th style="text-align:center">Qty</th><th>Packed?</th><th>Loaded?</th></tr></thead>
+        <thead><tr><th>Item</th><th style="text-align:center">Qty</th><th>Detail</th><th>Packed?</th><th>Loaded?</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
