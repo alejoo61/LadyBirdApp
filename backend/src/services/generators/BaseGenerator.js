@@ -202,7 +202,7 @@ class BaseGenerator {
       <div class="info-right">
         <div class="info-row"><span class="info-label">Event Time</span><span class="info-value highlight">${this._formatDate(header.estimatedFulfillmentDate)}</span></div>
         <div class="info-row"><span class="info-label">Kitchen Finish</span><span class="info-value">${this._formatDate(header.kitchenFinishTime)}</span></div>
-        ${header.distanceMiles ? `<div class="info-row"><span class="info-label">Distance</span><span class="info-value">${header.distanceMiles} mi</span></div>` : ''}
+        ${header.distanceMiles ? `<div class="info-row"><span class="info-label">Distance</span><span class="info-value">${header.distanceMiles} miles</span></div>` : ''}
         ${phone ? `<div class="info-row"><span class="info-label">Phone</span><span class="info-value">${phone}</span></div>` : ''}
         ${header.clientContact ? `<div class="info-row"><span class="info-label">Email</span><span class="info-value">${header.clientContact}</span></div>` : ''}
       </div>
