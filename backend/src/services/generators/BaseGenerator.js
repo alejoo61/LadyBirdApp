@@ -204,7 +204,7 @@ class BaseGenerator {
         <div class="info-row"><span class="info-label">Kitchen Finish</span><span class="info-value">${this._formatDate(header.kitchenFinishTime)}</span></div>
         ${header.distanceMiles ? `<div class="info-row"><span class="info-label">Distance</span><span class="info-value">${header.distanceMiles} miles</span></div>` : ''}
         ${phone ? `<div class="info-row"><span class="info-label">Phone</span><span class="info-value">${phone}</span></div>` : ''}
-        ${header.clientContact ? `<div class="info-row"><span class="info-label">Email</span><span class="info-value">${header.clientContact}</span></div>` : ''}
+
       </div>
     </div>
     ${header.deliveryNotes ? `<div class="notes-box"><h4>Delivery Notes</h4><p class="notes-text">${header.deliveryNotes}</p></div>` : ''}
@@ -321,6 +321,106 @@ class BaseGenerator {
           </div>
         `).join('')}
       </div>
+    </div>`;
+  }
+
+  // ─── DRINKS CONSOLIDADO ──────────────────────────────────────────────────
+  _consolidateDrinks(drinks, guestCount) {
+    const drinkRows = [];
+    let needsColdCups = false;
+    let needsHotCups  = false;
+
+    for (const drink of drinks) {
+      const isHot     = drink.tempType === 'hot';
+      const pkgStr    = drink.packaging
+        ? `${drink.packagingQty ? `${drink.packagingQty}x ` : ''}${drink.packaging}`
+        : `${drink.quantity}x each`;
+      const amountStr = drink.totalOz ? `${drink.totalOz} oz` : `${drink.quantity} each`;
+
+      drinkRows.push(`
+        <tr>
+          <td style="white-space:nowrap">
+            <strong>${drink.name}</strong>
+            ${drink.quantity > 1 ? `<span style="color:#1565c0;font-weight:900;margin-left:4px">×${drink.quantity}</span>` : ''}
+          </td>
+          <td>${amountStr}</td>
+          <td>${pkgStr}</td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+        </tr>`);
+
+      // Sub-drinks (Half & Half contents)
+      if (drink.subDrinks?.length > 0) {
+        const subLabel = drink.subDrinks.join(' + ');
+        drinkRows.push(`
+          <tr style="background:#f0f4ff">
+            <td style="padding-left:20px;color:#444">↳ ${subLabel}</td>
+            <td>—</td><td>—</td>
+            <td class="checkbox-cell"><span class="checkbox"></span></td>
+            <td class="checkbox-cell"><span class="checkbox"></span></td>
+          </tr>`);
+      }
+
+      // Creamers
+      if (drink.creamers?.length > 0) {
+        for (const cr of drink.creamers) {
+          drinkRows.push(`
+            <tr style="background:#f0f4ff">
+              <td style="padding-left:20px;color:#444">↳ ${cr.name}</td>
+              <td>${cr.totalOz} oz</td>
+              <td>${cr.packaging}</td>
+              <td class="checkbox-cell"><span class="checkbox"></span></td>
+              <td class="checkbox-cell"><span class="checkbox"></span></td>
+            </tr>`);
+        }
+      }
+
+      if (drink.wantsCups) {
+        if (isHot)  needsHotCups  = true;
+        else        needsColdCups = true;
+      }
+    }
+
+    // Una sola fila consolidada de cups al final
+    const cupRows = [];
+    if (needsColdCups && guestCount) {
+      cupRows.push(`
+        <tr style="background:#e8f5e9; border-top:2px solid #2e7d32">
+          <td style="padding-left:20px;color:#2e7d32;font-weight:900">↳ 16 oz Cold Cup / Lids</td>
+          <td>${guestCount} each</td>
+          <td>${guestCount}x 16 oz cold cup/lids</td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+        </tr>`);
+    }
+    if (needsHotCups && guestCount) {
+      cupRows.push(`
+        <tr style="background:#fde8e8; border-top:2px solid #c0392b">
+          <td style="padding-left:20px;color:#c0392b;font-weight:900">↳ 8 oz Hot Cup / Lids</td>
+          <td>${guestCount} each</td>
+          <td>${guestCount}x 8 oz hot cup/lids</td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+        </tr>`);
+    }
+
+    return { drinkRows, cupRow: cupRows.join('') };
+  }
+
+  _renderDrinksConsolidated(drinks, guestCount) {
+    if (!drinks || drinks.length === 0) return '';
+    const { drinkRows, cupRow } = this._consolidateDrinks(drinks, guestCount);
+    if (!drinkRows.length) return '';
+    return `
+    <div class="section" style="margin-top:8px">
+      <div class="section-header" style="background:#1565c0">Drinks</div>
+      <table>
+        <thead><tr><th>Item</th><th>Amount</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th></tr></thead>
+        <tbody>
+          ${drinkRows.join('')}
+          ${cupRow}
+        </tbody>
+      </table>
     </div>`;
   }
 

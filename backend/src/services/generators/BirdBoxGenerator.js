@@ -28,7 +28,7 @@ class BirdBoxGenerator extends BaseGenerator {
         ${this._renderPaperGoods(paperGoods)}
       </div>
     </div>
-    ${this._renderDrinks(drinks || [], header.guestCount)}
+    ${this._renderDrinksConsolidated(drinks || [], header.guestCount)}
     ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
     ${this._renderQC([
       'All taco combos counted and packed correctly',
@@ -188,89 +188,6 @@ class BirdBoxGenerator extends BaseGenerator {
     </div>`;
   }
 
-  // ─── DRINKS ───────────────────────────────────────────────────────────────
-  _renderDrinks(drinks, guestCount) {
-    if (!drinks || drinks.length === 0) return '';
-
-    const rows = [];
-
-    for (const drink of drinks) {
-      const isHot     = drink.tempType === 'hot';
-      const cupSize   = drink.cupSize || (isHot ? '8 oz hot cup/lids' : '16 oz cold cup/lids');
-      const amountStr = drink.totalOz ? `${drink.totalOz} oz` : `${drink.quantity} each`;
-      const pkgStr    = drink.packaging
-        ? `${drink.packagingQty ? `${drink.packagingQty}x ` : ''}${drink.packaging}`
-        : `${drink.quantity}x each`;
-
-      rows.push(`
-        <tr>
-          <td style="white-space:nowrap">
-            <strong>${drink.name}</strong>
-            ${drink.quantity > 1 ? `<span style="color:#1565c0; font-weight:900; margin-left:4px">×${drink.quantity}</span>` : ''}
-          </td>
-          <td>${amountStr}</td>
-          <td>${pkgStr}</td>
-          <td>—</td>
-          <td class="checkbox-cell"><span class="checkbox"></span></td>
-          <td class="checkbox-cell"><span class="checkbox"></span></td>
-        </tr>`);
-
-      // Sub-drinks (Half & Half contents)
-      if (drink.subDrinks && drink.subDrinks.length > 0) {
-        for (const sub of drink.subDrinks) {
-          rows.push(`
-            <tr style="background:#f0f4ff">
-              <td style="padding-left:20px; color:#444">↳ ${sub}</td>
-              <td>—</td><td>—</td><td>—</td>
-              <td class="checkbox-cell"><span class="checkbox"></span></td>
-              <td class="checkbox-cell"><span class="checkbox"></span></td>
-            </tr>`);
-        }
-      }
-
-      // Creamers
-      if (drink.creamers && drink.creamers.length > 0) {
-        for (const cr of drink.creamers) {
-          rows.push(`
-            <tr style="background:#f0f4ff">
-              <td style="padding-left:20px; color:#444">↳ ${cr.name}</td>
-              <td>${cr.totalOz} oz</td>
-              <td>${cr.packaging}</td>
-              <td>—</td>
-              <td class="checkbox-cell"><span class="checkbox"></span></td>
-              <td class="checkbox-cell"><span class="checkbox"></span></td>
-            </tr>`);
-        }
-      }
-
-      // Cups & lids — usar cupSize correcto
-      if (drink.wantsCups && guestCount) {
-        rows.push(`
-          <tr style="background:#f0f4ff">
-            <td style="padding-left:20px; color:#444">↳ ${cupSize}</td>
-            <td>${guestCount} each</td>
-            <td>${guestCount}x ${cupSize}</td>
-            <td>—</td>
-            <td class="checkbox-cell"><span class="checkbox"></span></td>
-            <td class="checkbox-cell"><span class="checkbox"></span></td>
-          </tr>`);
-      }
-    }
-
-    return `
-    <div class="section" style="margin-top:8px">
-      <div class="section-header" style="background:#1565c0">Drinks &amp; Add-ons</div>
-      <table>
-        <thead>
-          <tr>
-            <th>Item</th><th>Amount</th><th>Packaging</th>
-            <th>Utensil</th><th>Packed?</th><th>Loaded?</th>
-          </tr>
-        </thead>
-        <tbody>${rows.join('')}</tbody>
-      </table>
-    </div>`;
-  }
 
   // ─── ADD-ONS ──────────────────────────────────────────────────────────────
   _renderAddons(addons) {
