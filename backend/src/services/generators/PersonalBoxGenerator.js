@@ -1,5 +1,5 @@
 // src/services/generators/PersonalBoxGenerator.js
-const BaseGenerator  = require('./BaseGenerator');
+const BaseGenerator    = require('./BaseGenerator');
 const BirdBoxGenerator = require('./BirdBoxGenerator');
 
 class PersonalBoxGenerator extends BaseGenerator {
@@ -14,6 +14,10 @@ class PersonalBoxGenerator extends BaseGenerator {
     const bbGen      = new BirdBoxGenerator();
     const hasBirdBox = birdBoxResult && (birdBoxResult.tacoRows?.length > 0 || birdBoxResult.boxes?.length > 0);
 
+    // ── Consolidar paper goods ──
+    const consolidatedPaperGoods = this._consolidatePaperGoods(paperGoods, hasBirdBox ? birdBoxResult.paperGoods : null);
+
+
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
     <style>${this._baseCSS(badge.color)}</style></head><body>
     ${this._headerHTML(header, badge)}
@@ -26,7 +30,7 @@ class PersonalBoxGenerator extends BaseGenerator {
         ${this._renderChipsAndSalsa(chipsRow, salsaRow)}
       </div>
       <div class="right-col">
-        ${this._renderPaperGoods(paperGoods)}
+        ${this._renderPaperGoods(consolidatedPaperGoods)}
       </div>
     </div>` : ''}
 
@@ -35,31 +39,25 @@ class PersonalBoxGenerator extends BaseGenerator {
       <div style="font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:0.12em; color:#457b9d; margin-bottom:6px;">
         'BIRD BOX — included in this order
       </div>
-      <div class="main-grid">
-        <div class="left-col">
-          ${bbGen._renderTacosByCombo(birdBoxResult.tacoRows || [])}
-          ${bbGen._renderSidePacks(birdBoxResult.sidePacks || [])}
-          ${bbGen._renderSalsas(birdBoxResult.salsas || [])}
-          ${bbGen._renderChipsTotal(birdBoxResult.chipsBreakdown || [], birdBoxResult.chipsAndSalsa || [], birdBoxResult.boxes || [], birdBoxResult.hasManuasSalsas)}
-          ${bbGen._renderAddons(birdBoxResult.addons || [])}
-        </div>
-        <div class="right-col">
-          ${this._renderPaperGoods(birdBoxResult.paperGoods)}
-        </div>
+      <div class="left-col">
+        ${bbGen._renderTacosByCombo(birdBoxResult.tacoRows || [])}
+        ${bbGen._renderSidePacks(birdBoxResult.sidePacks || [])}
+        ${bbGen._renderSalsas(birdBoxResult.salsas || [])}
+        ${bbGen._renderChipsTotal(birdBoxResult.chipsBreakdown || [], birdBoxResult.chipsAndSalsa || [], birdBoxResult.boxes || [], birdBoxResult.hasManuasSalsas)}
+        ${bbGen._renderAddons(birdBoxResult.addons || [])}
       </div>
     </div>` : ''}
 
     ${this._renderAddons(addons || [])}
-    ${this._renderDrinks(drinks || [], header.guestCount)}
+    ${this._renderDrinksConsolidated(drinks || [], header.guestCount)}
     ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
     ${this._renderQC([
       'Each personal box labeled with combo and tortilla type',
       'Total box count matches order',
       'Chips & Salsa (4oz Roja) included in every personal box',
       'Paper goods included',
-      hasBirdBox ? "Bird Box tacos counted and packed correctly" : null,
-      hasBirdBox ? "Bird Box chips & salsa included if requested" : null,
-      hasBirdBox ? "Bird Box paper goods matched to guest count" : null,
+      hasBirdBox ? 'Bird Box tacos counted and packed correctly' : null,
+      hasBirdBox ? 'Bird Box chips & salsa included if requested' : null,
       'Drinks packed with cups & lids if requested',
       'Delivery notes reviewed',
       'Order label applied to all boxes',
@@ -67,6 +65,30 @@ class PersonalBoxGenerator extends BaseGenerator {
     ].filter(Boolean))}
     </body></html>`;
   }
+
+  // ─── CONSOLIDAR PAPER GOODS ───────────────────────────────────────────────
+  _consolidatePaperGoods(personalPG, birdBoxPG) {
+    if (!birdBoxPG || !birdBoxPG.included) return personalPG;
+    if (!personalPG || !personalPG.included) return birdBoxPG;
+
+    // Mergear sumando cantidades del mismo item
+    const merged = {};
+    const allItems = [...(personalPG.items || []), ...(birdBoxPG.items || [])];
+    for (const item of allItems) {
+      const key = item.name;
+      if (merged[key]) {
+        merged[key].qty += item.qty;
+      } else {
+        merged[key] = { ...item };
+      }
+    }
+
+    return {
+      included: true,
+      items:    Object.values(merged),
+    };
+  }
+
 
   // ─── PERSONAL BOX GROUPS ──────────────────────────────────────────────────
   _renderBoxGroups(personalBoxes, totalBoxes) {
@@ -88,11 +110,8 @@ class PersonalBoxGenerator extends BaseGenerator {
       <table>
         <thead><tr>
           <th style="text-align:center">Qty</th>
-          <th>Combo</th>
-          <th>Tortilla</th>
-          <th>Salsa</th>
-          <th style="text-align:center">Chips</th>
-          <th>Note</th>
+          <th>Combo</th><th>Tortilla</th><th>Salsa</th>
+          <th style="text-align:center">Chips</th><th>Note</th>
           <th>Packed?</th><th>Loaded?</th>
         </tr></thead>
         <tbody>${rows}</tbody>
@@ -100,7 +119,7 @@ class PersonalBoxGenerator extends BaseGenerator {
     </div>`;
   }
 
-  // ─── PERSONAL TACOS BY COMBO ──────────────────────────────────────────────
+  // ─── PERSONALLY WRAPPED TACOS ─────────────────────────────────────────────
   _renderPersonalTacoRows(tacoRows) {
     if (!tacoRows || tacoRows.length === 0) return '';
     const rows = tacoRows.map(item => `
@@ -178,64 +197,6 @@ class PersonalBoxGenerator extends BaseGenerator {
       <table>
         <thead><tr><th>Item</th><th style="text-align:center">Qty</th><th>Detail</th><th>Packed?</th><th>Loaded?</th></tr></thead>
         <tbody>${rows}</tbody>
-      </table>
-    </div>`;
-  }
-
-  // ─── DRINKS ───────────────────────────────────────────────────────────────
-  _renderDrinks(drinks, guestCount) {
-    if (!drinks || drinks.length === 0) return '';
-    const rows = [];
-    for (const drink of drinks) {
-      const isHot     = drink.tempType === 'hot';
-      const cupSize   = drink.cupSize || (isHot ? '8 oz hot cup/lids' : '16 oz cold cup/lids');
-      const amountStr = drink.totalOz ? `${drink.totalOz} oz` : `${drink.quantity} each`;
-      const pkgStr    = drink.packaging ? `${drink.packagingQty ? `${drink.packagingQty}x ` : ''}${drink.packaging}` : `${drink.quantity}x each`;
-      rows.push(`
-        <tr>
-          <td><strong>${drink.name}</strong>${drink.quantity > 1 ? `<span style="color:#1565c0;font-weight:900;margin-left:4px">×${drink.quantity}</span>` : ''}</td>
-          <td>${amountStr}</td><td>${pkgStr}</td>
-          <td class="checkbox-cell"><span class="checkbox"></span></td>
-          <td class="checkbox-cell"><span class="checkbox"></span></td>
-        </tr>`);
-      if (drink.subDrinks?.length > 0) {
-        for (const sub of drink.subDrinks) {
-          rows.push(`
-            <tr style="background:#f0f4ff">
-              <td style="padding-left:20px;color:#444">↳ ${sub}</td>
-              <td>—</td><td>—</td>
-              <td class="checkbox-cell"><span class="checkbox"></span></td>
-              <td class="checkbox-cell"><span class="checkbox"></span></td>
-            </tr>`);
-        }
-      }
-      if (drink.creamers?.length > 0) {
-        for (const cr of drink.creamers) {
-          rows.push(`
-            <tr style="background:#f0f4ff">
-              <td style="padding-left:20px;color:#444">↳ ${cr.name}</td>
-              <td>${cr.totalOz} oz</td><td>${cr.packaging}</td>
-              <td class="checkbox-cell"><span class="checkbox"></span></td>
-              <td class="checkbox-cell"><span class="checkbox"></span></td>
-            </tr>`);
-        }
-      }
-      if (drink.wantsCups && guestCount) {
-        rows.push(`
-          <tr style="background:#f0f4ff">
-            <td style="padding-left:20px;color:#444">↳ ${cupSize}</td>
-            <td>${guestCount} each</td><td>${guestCount}x ${cupSize}</td>
-            <td class="checkbox-cell"><span class="checkbox"></span></td>
-            <td class="checkbox-cell"><span class="checkbox"></span></td>
-          </tr>`);
-      }
-    }
-    return `
-    <div class="section" style="margin-top:8px">
-      <div class="section-header" style="background:#1565c0">Drinks</div>
-      <table>
-        <thead><tr><th>Item</th><th>Amount</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th></tr></thead>
-        <tbody>${rows.join('')}</tbody>
       </table>
     </div>`;
   }
