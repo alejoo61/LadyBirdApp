@@ -3,7 +3,7 @@
 const IngredientResolverService = require('./IngredientResolverService');
 
 const SALAD_KEYWORDS    = ['salad', 'city slicker', 'cowboy', 'farmer'];
-const DRINK_KEYWORDS    = ['coffee', 'agua', 'limeade', 'drink', 'beverage', 'milk', 'water'];
+const DRINK_KEYWORDS    = ['coffee', 'agua', 'limeade', 'drink', 'beverage', 'milk', 'water', 'half & half', 'fresca', 'juice', 'tea', 'soda', 'horchata'];
 const SIDE_PACK_KEYWORD = 'side pack';
 
 const PERSONAL_BOX_KEYWORDS = [
@@ -473,17 +473,48 @@ class FulfillmentSheetCalculator {
   // ─── HELPER: parsear bebida ───────────────────────────────────────────────
   _parseDrink(item, modifiers, qty) {
     const itemNameLc = (item.displayName || item.name || '').toLowerCase();
+    const isHot      = itemNameLc.includes('coffee') || itemNameLc.includes('tea') || itemNameLc.includes('hot');
+    const tempType   = isHot ? 'hot' : 'cold';
+    const cupSize    = isHot ? '8 oz hot cup/lids' : '16 oz cold cup/lids';
+
+    const wantsCups = modifiers.some(m => {
+      const n = (m.displayName || '').toLowerCase();
+      return n.includes('yes, i want cups') || n.includes('cups and lids') || n.includes('cups & lids');
+    });
+
     if (itemNameLc.includes('coffee')) {
       const creamers = modifiers
-        .filter(m => { const n = (m.displayName||'').toLowerCase(); return n.includes('milk') || n.includes('oat') || n.includes('cream') || n.includes('whole') || n.includes('skim') || n.includes('half'); })
+        .filter(m => { const n = (m.displayName||'').toLowerCase(); return n.includes('milk') || n.includes('oat') || n.includes('cream') || n.includes('whole') || n.includes('skim'); })
         .map(m => ({ name: m.displayName, quantity: m.quantity || qty }));
-      const wantsCups    = modifiers.some(m => (m.displayName||'').toLowerCase().includes('cups and lids') || (m.displayName||'').toLowerCase().includes('cups & lids'));
-      const creamerItems = creamers.map(cr => { const totalOz = cr.quantity * 32; return { name: cr.name, totalOz, packaging: totalOz > 32 ? '½ Gallon Jug' : '32 oz deli cup', tempType: 'cold' }; });
-      return { name: item.displayName || item.name, quantity: qty, totalOz: qty * 96, packaging: '96 oz coffee', packagingQty: qty, utensil: '—', tempType: 'hot', wantsCups, creamers: creamerItems };
-    } else {
-      const wantsCups = modifiers.some(m => (m.displayName||'').toLowerCase().includes('yes, i want cups'));
-      return { name: item.displayName || item.name, quantity: qty, tempType: 'cold', wantsCups, creamers: [] };
+      const creamerItems = creamers.map(cr => {
+        const totalOz = cr.quantity * 32;
+        return { name: cr.name, totalOz, packaging: totalOz > 32 ? '½ Gallon Jug' : '32 oz deli cup', tempType: 'cold' };
+      });
+      return {
+        name: item.displayName || item.name, quantity: qty,
+        totalOz: qty * 96, packaging: '96 oz coffee', packagingQty: qty,
+        utensil: '—', tempType: 'hot', wantsCups, cupSize: '8 oz hot cup/lids', creamers: creamerItems,
+      };
     }
+
+    // Bebidas con sub-drinks (Half & Half, mixtas)
+    const subDrinkKeywords = ['limeade', 'agua', 'fresca', 'horchata', 'juice', 'watermelon', 'lavender'];
+    const subDrinks = modifiers
+      .filter(m => {
+        const n = (m.displayName || '').toLowerCase();
+        return subDrinkKeywords.some(k => n.includes(k));
+      })
+      .map(m => m.displayName);
+
+    return {
+      name:        item.displayName || item.name,
+      quantity:    qty,
+      tempType,
+      wantsCups,
+      cupSize,
+      subDrinks,
+      creamers:    [],
+    };
   }
 
   // ─── FOODA ────────────────────────────────────────────────────────────────
