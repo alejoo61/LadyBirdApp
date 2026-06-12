@@ -506,6 +506,17 @@ class FulfillmentSheetCalculator {
       })
       .map(m => m.displayName);
 
+    // Packaging según tamaño
+    let packaging    = null;
+    let packagingQty = qty;
+    if (itemNameLc.includes('1/2 gal') || itemNameLc.includes('half gal')) {
+      packaging = '½ Gal jug';
+    } else if (itemNameLc.includes('1 gal') || itemNameLc.includes('gallon')) {
+      packaging = '1 Gal jug';
+    } else if (itemNameLc.includes('96 oz')) {
+      packaging = '96 oz container';
+    }
+
     return {
       name:        item.displayName || item.name,
       quantity:    qty,
@@ -513,6 +524,8 @@ class FulfillmentSheetCalculator {
       wantsCups,
       cupSize,
       subDrinks,
+      packaging,
+      packagingQty,
       creamers:    [],
     };
   }
