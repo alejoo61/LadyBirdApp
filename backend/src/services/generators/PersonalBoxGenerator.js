@@ -114,7 +114,7 @@ class PersonalBoxGenerator extends BaseGenerator {
       </tr>`).join('');
     return `
     <div class="section">
-      <div class="section-header" style="background:#457b9d">Tacos by Combo</div>
+      <div class="section-header" style="background:#457b9d">Individually Wrapped Tacos</div>
       <table>
         <thead><tr>
           <th>Combo</th><th style="text-align:center">Total</th>
@@ -187,6 +187,8 @@ class PersonalBoxGenerator extends BaseGenerator {
     if (!drinks || drinks.length === 0) return '';
     const rows = [];
     for (const drink of drinks) {
+      const isHot     = drink.tempType === 'hot';
+      const cupSize   = drink.cupSize || (isHot ? '8 oz hot cup/lids' : '16 oz cold cup/lids');
       const amountStr = drink.totalOz ? `${drink.totalOz} oz` : `${drink.quantity} each`;
       const pkgStr    = drink.packaging ? `${drink.packagingQty ? `${drink.packagingQty}x ` : ''}${drink.packaging}` : `${drink.quantity}x each`;
       rows.push(`
@@ -196,6 +198,17 @@ class PersonalBoxGenerator extends BaseGenerator {
           <td class="checkbox-cell"><span class="checkbox"></span></td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
         </tr>`);
+      if (drink.subDrinks?.length > 0) {
+        for (const sub of drink.subDrinks) {
+          rows.push(`
+            <tr style="background:#f0f4ff">
+              <td style="padding-left:20px;color:#444">↳ ${sub}</td>
+              <td>—</td><td>—</td>
+              <td class="checkbox-cell"><span class="checkbox"></span></td>
+              <td class="checkbox-cell"><span class="checkbox"></span></td>
+            </tr>`);
+        }
+      }
       if (drink.creamers?.length > 0) {
         for (const cr of drink.creamers) {
           rows.push(`
@@ -210,8 +223,8 @@ class PersonalBoxGenerator extends BaseGenerator {
       if (drink.wantsCups && guestCount) {
         rows.push(`
           <tr style="background:#f0f4ff">
-            <td style="padding-left:20px;color:#444">↳ 8 oz Hot Cup / Lids</td>
-            <td>${guestCount} each</td><td>${guestCount}x 8 oz hot cup/lids</td>
+            <td style="padding-left:20px;color:#444">↳ ${cupSize}</td>
+            <td>${guestCount} each</td><td>${guestCount}x ${cupSize}</td>
             <td class="checkbox-cell"><span class="checkbox"></span></td>
             <td class="checkbox-cell"><span class="checkbox"></span></td>
           </tr>`);

@@ -14,7 +14,7 @@ class BirdBoxGenerator extends BaseGenerator {
 
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
     <style>${this._baseCSS(badge.color)}</style></head><body>
-    ${this._headerHTML(header, badge)}}
+    ${this._headerHTML(header, badge)}
     <div class="main-grid">
       <div class="left-col">
         ${this._renderTacosByCombo(tacoRows || [])}
@@ -45,8 +45,6 @@ class BirdBoxGenerator extends BaseGenerator {
     </body></html>`;
   }
 
- 
-
   // ─── SIDE PACK ────────────────────────────────────────────────────────────
   _renderSidePacks(sidePacks) {
     if (!sidePacks || sidePacks.length === 0) return '';
@@ -60,7 +58,6 @@ class BirdBoxGenerator extends BaseGenerator {
            </tr>`
         : '';
 
-      // Contenido sin los chips — chips van en sección consolidada
       const rows = sp.contents.map(c => `
         <tr>
           <td><strong>${c.item}</strong></td>
@@ -110,9 +107,7 @@ class BirdBoxGenerator extends BaseGenerator {
 
     const totalRow = chipsBreakdown.length > 1 ? `
       <tr style="background:#fef3c7; border-top:2px solid #784212">
-        <td style="font-weight:900; font-size:9px; text-transform:uppercase; letter-spacing:0.08em; color:#784212">
-          TOTAL
-        </td>
+        <td style="font-weight:900; font-size:9px; text-transform:uppercase; letter-spacing:0.08em; color:#784212">TOTAL</td>
         <td style="font-weight:900; color:#784212">${totalPans} Full Pan${totalPans > 1 ? 's' : ''}</td>
         <td colspan="4"></td>
       </tr>` : '';
@@ -123,7 +118,7 @@ class BirdBoxGenerator extends BaseGenerator {
       <table>
         <thead>
           <tr>
-            <th>Descripción</th><th>Cantidad</th><th>Packaging</th>
+            <th>Description</th><th>Amount</th><th>Packaging</th>
             <th>Utensil</th><th>Packed?</th><th>Loaded?</th>
           </tr>
         </thead>
@@ -193,15 +188,17 @@ class BirdBoxGenerator extends BaseGenerator {
     </div>`;
   }
 
-  // ─── DRINKS & ADD-ONS ─────────────────────────────────────────────────────
+  // ─── DRINKS ───────────────────────────────────────────────────────────────
   _renderDrinks(drinks, guestCount) {
     if (!drinks || drinks.length === 0) return '';
 
     const rows = [];
 
     for (const drink of drinks) {
-      const amountStr  = drink.totalOz ? `${drink.totalOz} oz` : `${drink.quantity} each`;
-      const pkgStr     = drink.packaging
+      const isHot     = drink.tempType === 'hot';
+      const cupSize   = drink.cupSize || (isHot ? '8 oz hot cup/lids' : '16 oz cold cup/lids');
+      const amountStr = drink.totalOz ? `${drink.totalOz} oz` : `${drink.quantity} each`;
+      const pkgStr    = drink.packaging
         ? `${drink.packagingQty ? `${drink.packagingQty}x ` : ''}${drink.packaging}`
         : `${drink.quantity}x each`;
 
@@ -218,7 +215,20 @@ class BirdBoxGenerator extends BaseGenerator {
           <td class="checkbox-cell"><span class="checkbox"></span></td>
         </tr>`);
 
-      // Creamers/leches
+      // Sub-drinks (Half & Half contents)
+      if (drink.subDrinks && drink.subDrinks.length > 0) {
+        for (const sub of drink.subDrinks) {
+          rows.push(`
+            <tr style="background:#f0f4ff">
+              <td style="padding-left:20px; color:#444">↳ ${sub}</td>
+              <td>—</td><td>—</td><td>—</td>
+              <td class="checkbox-cell"><span class="checkbox"></span></td>
+              <td class="checkbox-cell"><span class="checkbox"></span></td>
+            </tr>`);
+        }
+      }
+
+      // Creamers
       if (drink.creamers && drink.creamers.length > 0) {
         for (const cr of drink.creamers) {
           rows.push(`
@@ -233,13 +243,13 @@ class BirdBoxGenerator extends BaseGenerator {
         }
       }
 
-      // 8oz hot cup/lids × guest count
+      // Cups & lids — usar cupSize correcto
       if (drink.wantsCups && guestCount) {
         rows.push(`
           <tr style="background:#f0f4ff">
-            <td style="padding-left:20px; color:#444">↳ 8 oz Hot Cup / Lids</td>
+            <td style="padding-left:20px; color:#444">↳ ${cupSize}</td>
             <td>${guestCount} each</td>
-            <td>${guestCount}x 8 oz hot cup/lids</td>
+            <td>${guestCount}x ${cupSize}</td>
             <td>—</td>
             <td class="checkbox-cell"><span class="checkbox"></span></td>
             <td class="checkbox-cell"><span class="checkbox"></span></td>
@@ -253,12 +263,8 @@ class BirdBoxGenerator extends BaseGenerator {
       <table>
         <thead>
           <tr>
-            <th>Item</th>
-            <th>Amount</th>
-            <th>Packaging</th>
-            <th>Utensil</th>
-            <th>Packed?</th>
-            <th>Loaded?</th>
+            <th>Item</th><th>Amount</th><th>Packaging</th>
+            <th>Utensil</th><th>Packed?</th><th>Loaded?</th>
           </tr>
         </thead>
         <tbody>${rows.join('')}</tbody>
