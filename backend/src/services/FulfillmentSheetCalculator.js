@@ -199,16 +199,20 @@ class FulfillmentSheetCalculator {
             const totalAmount = isFixedPack
               ? this._getFixedPackAmount(canonicalName, qty)
               : this.resolver.calculateAmount(formula, guestCount);
+            const fixedUnit   = isFixedPack ? this._getFixedPackUnit(canonicalName) : formula.unit;
             const packaging   = this.resolver.getPackaging(formula, guestCount);
+            // Chips addons siempre incluyen 1 Full Pan de chips por unidad
+            const hasChipsPan = isFixedPack && ['Chips & Guacamole', 'Chips & Queso', 'Chips & Salsa'].includes(canonicalName);
             addons.push({
               name:         canonicalName,
               quantity:     qty,
               totalAmount,
-              unit:         isFixedPack ? 'each' : formula.unit,
+              unit:         fixedUnit,
               packaging:    packaging.package,
               packagingQty: isFixedPack ? qty : packaging.qty,
               tempType:     formula.temp_type || 'dry',
-              detail:       `${totalAmount} ${isFixedPack ? 'each' : formula.unit}${packaging.package ? ' · ' + packaging.package : ''}`,
+              hasChipsPan,
+              chipPans:     hasChipsPan ? qty : 0,
             });
             continue;
           }
@@ -433,7 +437,7 @@ class FulfillmentSheetCalculator {
     const ozPerSalsa      = Math.ceil(effectiveGuests / numSalsas);
 
     const _buildIncludedSalsa = (name) => ({
-      name, totalAmount: ozPerSalsa, unit: 'oz', utensil: 'Ladle C/U',
+      name, totalAmount: ozPerSalsa, unit: 'oz', utensil: 'Ladle',
       packaging: '32 oz deli cup', packagingQty: ozPerSalsa > 32 ? 2 : 1,
       tempType: 'cold', included: 'Yes',
     });
@@ -656,8 +660,14 @@ class FulfillmentSheetCalculator {
 
   _getFixedPackAmount(canonicalName, qty) {
     // Buñuelos: 1 pan = 40 piezas
+    // Chips & Guacamole/Queso/Salsa: 32 oz de dip
     const fixedAmounts = { 'Chips & Queso': 32, 'Chips & Guacamole': 32, 'Chips & Salsa': 32, 'Bunuelos': 40 };
     return (fixedAmounts[canonicalName] ?? 1) * qty;
+  }
+
+  _getFixedPackUnit(canonicalName) {
+    const units = { 'Chips & Queso': 'oz', 'Chips & Guacamole': 'oz', 'Chips & Salsa': 'oz', 'Bunuelos': 'each' };
+    return units[canonicalName] || 'each';
   }
 
   // ─── PAPER GOODS CONTEXT BUILDER ────────────────────────────────────────
