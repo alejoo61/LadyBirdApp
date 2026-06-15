@@ -19,6 +19,13 @@ class PersonalBoxGenerator extends BaseGenerator {
     let consolidatedPaperGoods = this._consolidatePaperGoods(paperGoods, hasBirdBox ? birdBoxResult.paperGoods : null);
     if (hasTacoBar) consolidatedPaperGoods = this._consolidatePaperGoods(consolidatedPaperGoods, tacoBarResult.paperGoods);
 
+    // ── Consolidar utensils ──
+    const utensilMap = this._collectUtensils([
+      personalTacoRows || [],
+      ...(hasBirdBox ? [birdBoxResult.tacoRows || [], birdBoxResult.salsas || []] : []),
+      ...(hasTacoBar  ? [tacoBarResult.proteins || [], tacoBarResult.toppings || [], tacoBarResult.salsas || [], tacoBarResult.tortillas || []] : []),
+    ]);
+
 
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
     <style>${this._baseCSS(badge.color)}</style></head><body>
@@ -33,6 +40,7 @@ class PersonalBoxGenerator extends BaseGenerator {
       </div>
       <div class="right-col">
         ${this._renderPaperGoods(consolidatedPaperGoods)}
+        ${this._renderUtensils(utensilMap)}
       </div>
     </div>` : ''}
 
@@ -68,6 +76,7 @@ class PersonalBoxGenerator extends BaseGenerator {
     </div>` : ''}
 
     ${this._renderAddons(addons || [])}
+    ${this._renderChipsConsolidated(chipsRow, hasBirdBox ? birdBoxResult : null)}
     ${this._renderDrinksConsolidated(drinks || [], header.guestCount)}
     ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
     ${this._renderQC([
@@ -178,30 +187,78 @@ class PersonalBoxGenerator extends BaseGenerator {
 
   // ─── CHIPS & SALSA ────────────────────────────────────────────────────────
   _renderChipsAndSalsa(chipsRow, salsaRow) {
-    if (!chipsRow && !salsaRow) return '';
-    const rows = [];
-    if (chipsRow) rows.push(`
-      <tr>
-        <td><strong>${chipsRow.name}</strong></td>
-        <td style="text-align:center; font-weight:900">${chipsRow.total}</td>
-        <td>${chipsRow.unit || 'each'}</td>
-        <td class="checkbox-cell"><span class="checkbox"></span></td>
-        <td class="checkbox-cell"><span class="checkbox"></span></td>
-      </tr>`);
-    if (salsaRow) rows.push(`
-      <tr>
-        <td><strong>${salsaRow.name}</strong></td>
-        <td style="text-align:center; font-weight:900">${salsaRow.total}</td>
-        <td>${salsaRow.detail || salsaRow.unit || 'each'}</td>
-        <td class="checkbox-cell"><span class="checkbox"></span></td>
-        <td class="checkbox-cell"><span class="checkbox"></span></td>
-      </tr>`);
+    if (!salsaRow) return '';
     return `
     <div class="section">
-      <div class="section-header" style="background:#784212">Chips &amp; Salsa</div>
+      <div class="section-header" style="background:#784212">Personal Salsa</div>
       <table>
         <thead><tr><th>Item</th><th style="text-align:center">Total</th><th>Detail</th><th>Packed?</th><th>Loaded?</th></tr></thead>
-        <tbody>${rows.join('')}</tbody>
+        <tbody>
+          <tr>
+            <td><strong>${salsaRow.name}</strong></td>
+            <td style="text-align:center; font-weight:900">${salsaRow.total}</td>
+            <td>${salsaRow.detail || salsaRow.unit || 'each'}</td>
+            <td class="checkbox-cell"><span class="checkbox"></span></td>
+            <td class="checkbox-cell"><span class="checkbox"></span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>`;
+  }
+
+  // ─── CHIPS CONSOLIDADO ────────────────────────────────────────────────────
+  _renderChipsConsolidated(chipsRow, birdBoxResult) {
+    const rows = [];
+    let totalPans = 0;
+
+    // Personal chips (individual boxes)
+    if (chipsRow && chipsRow.total > 0) {
+      rows.push(`
+        <tr>
+          <td>Personal Chips (individual boxes)</td>
+          <td style="font-weight:900">${chipsRow.total} each</td>
+          <td>—</td>
+          <td>Tongs Large</td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+        </tr>`);
+    }
+
+    // Bird Box chips
+    if (birdBoxResult?.chipsBreakdown?.length > 0) {
+      for (const c of birdBoxResult.chipsBreakdown) {
+        const match = (c.amount || '').match(/^(\d+)/);
+        if (match) totalPans += parseInt(match[1]);
+        rows.push(`
+          <tr>
+            <td style="font-size:8px; color:#555">${c.label}</td>
+            <td style="font-weight:900">${c.amount}</td>
+            <td>${c.packaging}</td>
+            <td>${c.utensil}</td>
+            <td class="checkbox-cell"><span class="checkbox"></span></td>
+            <td class="checkbox-cell"><span class="checkbox"></span></td>
+          </tr>`);
+      }
+    }
+
+    if (rows.length === 0) return '';
+
+    const totalRow = totalPans > 0 ? `
+      <tr style="background:#fef3c7; border-top:2px solid #784212">
+        <td style="font-weight:900; font-size:9px; text-transform:uppercase; color:#784212">TOTAL CHIP PANS</td>
+        <td style="font-weight:900; color:#784212">${totalPans} Full Pan${totalPans > 1 ? 's' : ''}</td>
+        <td colspan="4"></td>
+      </tr>` : '';
+
+    return `
+    <div class="section" style="margin-top:8px">
+      <div class="section-header" style="background:#784212">Chips</div>
+      <table>
+        <thead><tr><th>Description</th><th>Amount</th><th>Packaging</th><th>Utensil</th><th>Packed?</th><th>Loaded?</th></tr></thead>
+        <tbody>
+          ${rows.join('')}
+          ${totalRow}
+        </tbody>
       </table>
     </div>`;
   }
@@ -210,14 +267,14 @@ class PersonalBoxGenerator extends BaseGenerator {
   _renderAddons(addons) {
     if (!addons || addons.length === 0) return '';
     const rows = addons.map(addon => {
-      const detail = addon.detail || addon.packaging
-        ? `${addon.totalAmount ? addon.totalAmount + ' ' + (addon.unit || '') : ''} ${addon.packaging || addon.detail || ''}`.trim()
-        : '';
+      const amount  = addon.totalAmount ? `${addon.totalAmount} ${addon.unit || ''}`.trim() : (addon.quantity ? `${addon.quantity}x` : '—');
+      const pkg     = addon.packaging || '—';
       return `
       <tr>
         <td><strong>${addon.name}</strong></td>
         <td style="text-align:center; font-weight:900">${addon.quantity}</td>
-        <td>${detail}</td>
+        <td>${amount}</td>
+        <td>${pkg}</td>
         <td class="checkbox-cell"><span class="checkbox"></span></td>
         <td class="checkbox-cell"><span class="checkbox"></span></td>
       </tr>`;
@@ -226,7 +283,7 @@ class PersonalBoxGenerator extends BaseGenerator {
     <div class="section" style="margin-top:8px">
       <div class="section-header" style="background:#6b21a8">Add-ons</div>
       <table>
-        <thead><tr><th>Item</th><th style="text-align:center">Qty</th><th>Detail</th><th>Packed?</th><th>Loaded?</th></tr></thead>
+        <thead><tr><th>Item</th><th style="text-align:center">Qty</th><th>Amount</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
