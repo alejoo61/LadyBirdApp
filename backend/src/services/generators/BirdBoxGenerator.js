@@ -12,6 +12,12 @@ class BirdBoxGenerator extends BaseGenerator {
 
     const badge = this._eventTypeBadge(header.eventType);
 
+    // Consolidar utensils
+    const utensilMap = this._collectUtensils([
+      tacoRows || [], salsas || [], addons || [], salads || [],
+      ...(sidePacks || []).map(sp => sp.contents || []),
+    ]);
+
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
     <style>${this._baseCSS(badge.color)}</style></head><body>
     ${this._headerHTML(header, badge)}
@@ -26,6 +32,7 @@ class BirdBoxGenerator extends BaseGenerator {
       </div>
       <div class="right-col">
         ${this._renderPaperGoods(paperGoods)}
+        ${this._renderUtensils(utensilMap)}
       </div>
     </div>
     ${this._renderDrinksConsolidated(drinks || [], header.guestCount)}
@@ -63,7 +70,7 @@ class BirdBoxGenerator extends BaseGenerator {
           <td><strong>${c.item}</strong></td>
           <td>${c.amount}</td>
           <td>${c.packaging}</td>
-          <td>${c.utensil}</td>
+          <td>${c.utensil || '—'}</td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
         </tr>`).join('');
@@ -100,7 +107,7 @@ class BirdBoxGenerator extends BaseGenerator {
         <td style="font-size:8px; color:#555">${c.label}</td>
         <td><strong>${c.amount}</strong></td>
         <td>${c.packaging}</td>
-        <td>${c.utensil}</td>
+        <td>${c.utensil || 'Tongs Large'}</td>
         <td class="checkbox-cell"><span class="checkbox"></span></td>
         <td class="checkbox-cell"><span class="checkbox"></span></td>
       </tr>`).join('');

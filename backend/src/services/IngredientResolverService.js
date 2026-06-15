@@ -1,5 +1,41 @@
 // src/services/IngredientResolverService.js
 
+// ─── UTENSIL RULES ────────────────────────────────────────────────────────
+// Mapeo de ingredientes a utensilios según el documento de operaciones
+const UTENSIL_RULES = {
+  // Tong Large
+  'Chips':            'Tongs Large',
+  'Bunuelos':         'Tongs Large',
+  'Rajas':            'Tongs Large',
+  'House-Smoked Brisket': 'Tongs Large',
+  'Adobo Chicken':    'Tongs Large',
+  'Bacon':            'Tongs Large',
+  // Tong Small
+  'Sliced Avocado':   'Tongs Small',
+  'Pickled Onions':   'Tongs Small',
+  'Shredded Cheese':  'Tongs Small',
+  'Cabbage':          'Tongs Small',
+  'Flour Tortillas':  'Tongs Small',
+  'Corn Tortillas':   'Tongs Small',
+  // Spoon Serving
+  'Guacamole':        'Spoon Serving',
+  'Esquites':         'Spoon Serving',
+  'Black Beans':      'Spoon Serving',
+  'Pico de Gallo':    'Spoon Serving',
+  'Potato':           'Spoon Serving',
+  'Refried Beans':    'Spoon Serving',
+  'Scrambled Eggs':   'Spoon Serving',
+  'Salsa Verde Braised Chicken': 'Spoon Serving',
+  'Chorizo':          'Spoon Serving',
+  // Spoon Small
+  'Cotija':           'Spoon Small',
+  // Ladle
+  'Queso':            'Ladle',
+  'Salsa Roja':       'Ladle',
+  'Salsa Verde':      'Ladle',
+  'Salsa Patrón':     'Ladle',
+};
+
 class IngredientResolverService {
   constructor(pool) {
     this.pool = pool;
@@ -161,7 +197,6 @@ class IngredientResolverService {
       const hasModifiers = item.modifiers && item.modifiers.length > 0;
 
       if (!hasModifiers) {
-        // ── Orden manual (modifiers vacío o ausente) ──
         const dn = item.displayName || item.name || '';
         if (!dn) continue;
 
@@ -181,7 +216,6 @@ class IngredientResolverService {
         displayNames.add(dn);
 
       } else {
-        // ── Orden Toast (modifiers con contenido) ──
         for (const mod of item.modifiers) {
           const dn = mod.displayName || '';
           if (!dn) continue;
@@ -212,10 +246,27 @@ class IngredientResolverService {
       const formula = await this.getFormula(canonicalName, eventType);
       if (!formula) continue;
 
-      results.push({ canonicalName, formula, displayName });
+      // Agregar utensil desde las reglas si no viene de la DB
+      const utensil = formula.utensil || this.getUtensilForItem(canonicalName) || '—';
+
+      results.push({ canonicalName, formula: { ...formula, utensil }, displayName });
     }
 
     return { ingredients: results, wantsPaper, wantsChips };
+  }
+
+  // ─── UTENSIL LOOKUP ───────────────────────────────────────────────────────
+
+  getUtensilForItem(canonicalName) {
+    if (!canonicalName) return null;
+    // Buscar match exacto primero
+    if (UTENSIL_RULES[canonicalName]) return UTENSIL_RULES[canonicalName];
+    // Buscar match parcial
+    const nameLc = canonicalName.toLowerCase();
+    for (const [key, utensil] of Object.entries(UTENSIL_RULES)) {
+      if (nameLc.includes(key.toLowerCase())) return utensil;
+    }
+    return null;
   }
 
   // ─── CALCULAR CANTIDADES ──────────────────────────────────────────────────
@@ -224,8 +275,25 @@ class IngredientResolverService {
     return parseFloat((formula.amount_per_person * guestCount).toFixed(2));
   }
 
+  // ─── SALSA PACKAGING — 3 niveles ─────────────────────────────────────────
+  // > 16 oz  → 32 oz deli cup
+  // > 6 oz   → 16 oz deli cup
+  // ≤ 6 oz   → 6 oz cup
+
+  getSalsaPackaging(totalOz) {
+    if (totalOz > 16) return { package: '32 oz deli cup', qty: Math.ceil(totalOz / 32) };
+    if (totalOz > 6)  return { package: '16 oz deli cup', qty: 1 };
+    return              { package: '6 oz cup',      qty: Math.ceil(totalOz / 6) };
+  }
+
   getPackaging(formula, guestCount) {
     const total = this.calculateAmount(formula, guestCount);
+
+    // Salsas: usar reglas de 3 niveles
+    if (formula.category === 'salsa') {
+      return this.getSalsaPackaging(total);
+    }
+
     if (!formula.small_package_max) return { package: formula.small_package || formula.unit, qty: 1 };
 
     if (formula.large_package_max && total > formula.small_package_max) {
@@ -240,21 +308,86 @@ class IngredientResolverService {
     };
   }
 
-  // ─── CALCULAR PAPER GOODS DESDE DB ────────────────────────────────────────
+  // ─── CALCULAR PAPER GOODS ─────────────────────────────────────────────────
+  // Reglas según documento de operaciones:
+  // - Boats:        guestCount + 5 (doble si hay Queso, Guac o Buñuelos)
+  // - Napkins:      guestCount × 2.5
+  // - Forks Small:  guestCount + 5
+  // - Spoons Small: 1 por tipo de salsa en 6oz + 1 por dressing de ensalada
+  // - Fork Serving: 2 por ensalada
+  // - Spoon Serving: 1 por item de la lista
+  // - Tong Small:   1 por tipo de tortilla + items específicos
+  // - Tong Large:   Chips, Buñuelos, Rajas, Brisket, Adobo, Bacon
+  // - Ladle:        Queso + 1 por salsa en 16oz/32oz
 
-  async calculatePaperGoods(eventType, guestCount) {
-    const formulas = await this.getPaperFormulas(eventType);
-    if (!formulas.length) return { included: false, items: [] };
+  async calculatePaperGoods(eventType, guestCount, context = {}) {
+    const {
+      hasQueso      = false,
+      hasGuac       = false,
+      hasBunuelos   = false,
+      salsaCount    = 0,   // # de salsas en 6oz
+      salsaLargeCount = 0, // # de salsas en 16/32oz
+      dressingCount = 0,
+      saladCount    = 0,
+      hasTortillaFlour = false,
+      hasTortillaCorn  = false,
+      hasChips      = false,
+      hasRajas      = false,
+      hasBrisket    = false,
+      hasAdobo      = false,
+      hasBacon      = false,
+      // Spoon Serving items
+      spoonServingCount = 0,
+    } = context;
 
-    return {
-      included: true,
-      items: formulas.map(f => ({
-        name:    f.canonical_name,
-        qty:     Math.ceil(f.amount_per_person * guestCount),
-        unit:    f.unit,
-        package: f.small_package || 'each',
-      })),
-    };
+    const items = [];
+
+    // Taco Boats
+    const boatBase = guestCount + 5;
+    const boatQty  = (hasQueso || hasGuac || hasBunuelos) ? boatBase * 2 : boatBase;
+    items.push({ name: 'Taco Boats', qty: boatQty, unit: 'each' });
+
+    // Napkins
+    items.push({ name: 'Napkins', qty: Math.ceil(guestCount * 2.5), unit: 'each' });
+
+    // Forks Small
+    items.push({ name: 'Fork Small', qty: guestCount + 5, unit: 'each' });
+
+    // Spoons Small — salsas en 6oz + dressings
+    const spoonSmallQty = salsaCount + dressingCount;
+    if (spoonSmallQty > 0) {
+      items.push({ name: 'Spoon Small', qty: spoonSmallQty, unit: 'each' });
+    }
+
+    // Fork Serving — 2 por ensalada
+    if (saladCount > 0) {
+      items.push({ name: 'Fork Serving', qty: saladCount * 2, unit: 'each' });
+    }
+
+    // Spoon Serving — 1 por item de la lista
+    if (spoonServingCount > 0) {
+      items.push({ name: 'Spoon Serving', qty: spoonServingCount, unit: 'each' });
+    }
+
+    // Tong Small — 1 por tipo de tortilla
+    const tongSmallQty = (hasTortillaFlour ? 1 : 0) + (hasTortillaCorn ? 1 : 0);
+    if (tongSmallQty > 0) {
+      items.push({ name: 'Tong Small', qty: tongSmallQty, unit: 'each' });
+    }
+
+    // Tong Large — Chips, Buñuelos, Rajas, Brisket, Adobo, Bacon
+    const tongLargeItems = [hasChips, hasBunuelos, hasRajas, hasBrisket, hasAdobo, hasBacon].filter(Boolean).length;
+    if (tongLargeItems > 0) {
+      items.push({ name: 'Tong Large', qty: tongLargeItems, unit: 'each' });
+    }
+
+    // Ladle — Queso + salsas en 16/32oz
+    const ladleQty = (hasQueso ? 1 : 0) + salsaLargeCount;
+    if (ladleQty > 0) {
+      items.push({ name: 'Ladle', qty: ladleQty, unit: 'each' });
+    }
+
+    return { included: true, items };
   }
 }
 

@@ -7,15 +7,17 @@ class PersonalBoxGenerator extends BaseGenerator {
   build(data) {
     const {
       header, personalBoxes, personalTacoRows, chipsRow, salsaRow,
-      totalBoxes, paperGoods, drinks, addons, birdBoxResult,
+      totalBoxes, paperGoods, drinks, addons, birdBoxResult, tacoBarResult,
       hotItems, coldItems, dryItems,
     } = data;
     const badge      = this._eventTypeBadge(header.eventType);
     const bbGen      = new BirdBoxGenerator();
-    const hasBirdBox = birdBoxResult && (birdBoxResult.tacoRows?.length > 0 || birdBoxResult.boxes?.length > 0);
+    const hasBirdBox  = birdBoxResult && (birdBoxResult.tacoRows?.length > 0 || birdBoxResult.boxes?.length > 0);
+    const hasTacoBar  = tacoBarResult && (tacoBarResult.proteins?.length > 0 || tacoBarResult.tortillas?.length > 0);
 
-    // ── Consolidar paper goods ──
-    const consolidatedPaperGoods = this._consolidatePaperGoods(paperGoods, hasBirdBox ? birdBoxResult.paperGoods : null);
+    // ── Consolidar paper goods (Personal Box + Bird Box + Taco Bar) ──
+    let consolidatedPaperGoods = this._consolidatePaperGoods(paperGoods, hasBirdBox ? birdBoxResult.paperGoods : null);
+    if (hasTacoBar) consolidatedPaperGoods = this._consolidatePaperGoods(consolidatedPaperGoods, tacoBarResult.paperGoods);
 
 
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -48,6 +50,23 @@ class PersonalBoxGenerator extends BaseGenerator {
       </div>
     </div>` : ''}
 
+    ${hasTacoBar ? `
+    <div style="margin-top:12px; border-top:3px solid #c0392b; padding-top:8px;">
+      <div style="font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:0.12em; color:#c0392b; margin-bottom:6px;">
+        TACO BAR — included in this order
+      </div>
+      <div class="main-grid">
+        <div class="left-col">
+          ${this._renderSection('Proteins',  tacoBarResult.proteins  || [], '#c0392b')}
+          ${this._renderSection('Toppings',  tacoBarResult.toppings  || [], '#1e6b3a')}
+          ${this._renderSection('Salsas',    tacoBarResult.salsas    || [], '#7d5a00')}
+          ${this._renderSection('Tortillas', (tacoBarResult.tortillas || []).map(t => ({ ...t, totalAmount: t.totalAmount ?? t.total })), '#4a235a')}
+          ${this._renderSection('Snacks',    tacoBarResult.snacks    || [], '#784212')}
+        </div>
+        <div class="right-col"></div>
+      </div>
+    </div>` : ''}
+
     ${this._renderAddons(addons || [])}
     ${this._renderDrinksConsolidated(drinks || [], header.guestCount)}
     ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
@@ -58,6 +77,8 @@ class PersonalBoxGenerator extends BaseGenerator {
       'Paper goods included',
       hasBirdBox ? 'Bird Box tacos counted and packed correctly' : null,
       hasBirdBox ? 'Bird Box chips & salsa included if requested' : null,
+      hasTacoBar ? 'Taco Bar proteins and toppings packed correctly' : null,
+      hasTacoBar ? 'Taco Bar tortillas included' : null,
       'Drinks packed with cups & lids if requested',
       'Delivery notes reviewed',
       'Order label applied to all boxes',
@@ -71,15 +92,25 @@ class PersonalBoxGenerator extends BaseGenerator {
     if (!birdBoxPG || !birdBoxPG.included) return personalPG;
     if (!personalPG || !personalPG.included) return birdBoxPG;
 
-    // Mergear sumando cantidades del mismo item
+    // Normalizar nombres para poder mergear correctamente
+    const normalize = (name) => {
+      const n = (name || '').toLowerCase();
+      if (n.includes('fork'))       return 'Forks';
+      if (n.includes('napkin'))     return 'Napkins';
+      if (n.includes('taco boat'))  return 'Taco Boats';
+      if (n.includes('plate'))      return 'Plates';
+      if (n.includes('spoon'))      return 'Spoons';
+      return name;
+    };
+
     const merged = {};
     const allItems = [...(personalPG.items || []), ...(birdBoxPG.items || [])];
     for (const item of allItems) {
-      const key = item.name;
+      const key = normalize(item.name);
       if (merged[key]) {
         merged[key].qty += item.qty;
       } else {
-        merged[key] = { ...item };
+        merged[key] = { ...item, name: key };
       }
     }
 

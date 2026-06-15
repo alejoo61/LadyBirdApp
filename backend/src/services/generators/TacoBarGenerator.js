@@ -6,8 +6,7 @@ class TacoBarGenerator extends BaseGenerator {
   build(data) {
     const {
       header, proteins, toppings, salsas, tortillas, snacks,
-      paperGoods, hotItems, coldItems, dryItems,
-      salads,
+      paperGoods, hotItems, coldItems, dryItems, salads,
     } = data;
     const badge = this._eventTypeBadge(header.eventType);
 
@@ -16,6 +15,12 @@ class TacoBarGenerator extends BaseGenerator {
       totalAmount: t.totalAmount ?? t.total,
       unit:        t.unit || 'each',
     }));
+
+    // Consolidar utensils de todos los items
+    const utensilMap = this._collectUtensils([
+      proteins || [], toppings || [], salsas || [],
+      tortillaItems, snacks || [], salads || [],
+    ]);
 
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
     <style>${this._baseCSS(badge.color)}</style></head><body>
@@ -31,6 +36,7 @@ class TacoBarGenerator extends BaseGenerator {
       </div>
       <div class="right-col">
         ${this._renderPaperGoods(paperGoods)}
+        ${this._renderUtensils(utensilMap)}
       </div>
     </div>
     ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
@@ -42,16 +48,14 @@ class TacoBarGenerator extends BaseGenerator {
     if (!salads || salads.length === 0) return '';
 
     const rows = salads.map(salad => {
-      const qty       = salad.quantity || 1;
+      const qty         = salad.quantity || 1;
       const isNoProtein = !salad.protein ||
         salad.protein.toLowerCase().includes('without') ||
         salad.protein.toLowerCase().includes('no protein');
-
       const proteinColor   = isNoProtein ? '#888888' : '#c0392b';
       const proteinDisplay = isNoProtein
         ? 'NO PROTEIN'
         : (salad.protein || '').replace(/^(small|large)\s+with\s+/i, '').toUpperCase();
-
       const servesTotal = salad.serves
         ? salad.serves * qty
         : (salad.size === 'Large' ? 20 : 10) * qty;
@@ -65,12 +69,8 @@ class TacoBarGenerator extends BaseGenerator {
           </td>
           <td style="text-align:center">
             <span style="
-              display:inline-block;
-              padding:3px 8px;
-              border-radius:3px;
-              font-size:9px;
-              font-weight:900;
-              letter-spacing:0.08em;
+              display:inline-block; padding:3px 8px; border-radius:3px;
+              font-size:9px; font-weight:900; letter-spacing:0.08em;
               background:${isNoProtein ? '#f0f0f0' : '#fde8e8'};
               color:${proteinColor};
               border:1.5px solid ${isNoProtein ? '#ccc' : '#f5aaaa'};
@@ -79,7 +79,6 @@ class TacoBarGenerator extends BaseGenerator {
           <td style="text-align:center; font-weight:700">${servesTotal} ppl</td>
           <td style="font-size:8px; color:#555; font-style:italic">${salad.dressing || '—'}</td>
           <td>${salad.packaging || '—'}</td>
-          <td>${salad.utensil || '—'}</td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
         </tr>`;
@@ -93,27 +92,17 @@ class TacoBarGenerator extends BaseGenerator {
       <table>
         <thead>
           <tr>
-            <th>Salad</th>
-            <th style="text-align:center">Protein</th>
-            <th style="text-align:center">Serves</th>
-            <th>Dressing</th>
-            <th>Packaging</th>
-            <th>Utensil</th>
-            <th>Packed?</th>
-            <th>Loaded?</th>
+            <th>Salad</th><th style="text-align:center">Protein</th>
+            <th style="text-align:center">Serves</th><th>Dressing</th>
+            <th>Packaging</th><th>Packed?</th><th>Loaded?</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
       <div style="
-        background:#f0faf0;
-        border-top:1px solid #a5d6a7;
-        padding:5px 10px;
-        font-size:8px;
-        font-weight:900;
-        color:#2e7d32;
-        text-transform:uppercase;
-        letter-spacing:0.08em;
+        background:#f0faf0; border-top:1px solid #a5d6a7;
+        padding:5px 10px; font-size:8px; font-weight:900;
+        color:#2e7d32; text-transform:uppercase; letter-spacing:0.08em;
       ">
         ⚠ Dressing served on the side — do not forget:
         ${dressings.map(d => `<span style="font-weight:700; color:#1a1a1a; margin-left:4px">${d}</span>`).join(' &nbsp;|&nbsp; ')}
