@@ -253,7 +253,7 @@ class BaseGenerator {
       <table>
         <thead><tr><th>Item</th><th>Qty</th><th>Packed?</th><th>Loaded?</th></tr></thead>
         <tbody>
-          ${paperGoods.items.map(item => `
+          ${paperGoods.items.filter(item => !item.name.toLowerCase().includes('serving utensil')).map(item => `
             <tr>
               <td>${item.name}</td>
               <td>${item.qty} ${item.unit || item.package || 'each'}</td>
@@ -321,6 +321,40 @@ class BaseGenerator {
           </div>
         `).join('')}
       </div>
+    </div>`;
+  }
+
+  // ─── UTENSILS ─────────────────────────────────────────────────────────────
+  _collectUtensils(allItemArrays) {
+    // Extrae utensilios únicos de múltiples arrays de items
+    const utensilMap = {};
+    for (const items of allItemArrays) {
+      for (const item of (items || [])) {
+        const utensil = item.utensil;
+        if (!utensil || utensil === '—' || utensil === '-') continue;
+        if (!utensilMap[utensil]) utensilMap[utensil] = [];
+        utensilMap[utensil].push(item.name);
+      }
+    }
+    return utensilMap;
+  }
+
+  _renderUtensils(utensilMap) {
+    if (!utensilMap || Object.keys(utensilMap).length === 0) return '';
+    const rows = Object.entries(utensilMap).map(([utensil, items]) => `
+      <tr>
+        <td><strong>${utensil}</strong></td>
+        <td style="font-size:8px; color:#555">${items.join(', ')}</td>
+        <td class="checkbox-cell"><span class="checkbox"></span></td>
+        <td class="checkbox-cell"><span class="checkbox"></span></td>
+      </tr>`).join('');
+    return `
+    <div class="section" style="margin-top:8px">
+      <div class="section-header" style="background:#2d3748">Utensils</div>
+      <table>
+        <thead><tr><th>Utensil</th><th>Used For</th><th>Packed?</th><th>Loaded?</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
     </div>`;
   }
 
