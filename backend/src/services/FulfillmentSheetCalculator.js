@@ -195,7 +195,7 @@ class FulfillmentSheetCalculator {
           const formula = await this.resolver.getFormula(canonicalName, 'PERSONAL_BOX')
                        || await this.resolver.getFormula(canonicalName, 'BIRD_BOX');
           if (formula) {
-            const isFixedPack = formula.amount_per_person === 0;
+            const isFixedPack = parseFloat(formula.amount_per_person) === 0;
             const totalAmount = isFixedPack
               ? this._getFixedPackAmount(canonicalName, qty)
               : this.resolver.calculateAmount(formula, guestCount);
@@ -204,11 +204,11 @@ class FulfillmentSheetCalculator {
               name:         canonicalName,
               quantity:     qty,
               totalAmount,
-              unit:         formula.unit,
+              unit:         isFixedPack ? 'each' : formula.unit,
               packaging:    packaging.package,
               packagingQty: isFixedPack ? qty : packaging.qty,
               tempType:     formula.temp_type || 'dry',
-              detail:       `${totalAmount} ${formula.unit}${packaging.package ? ' · ' + packaging.package : ''}`,
+              detail:       `${totalAmount} ${isFixedPack ? 'each' : formula.unit}${packaging.package ? ' · ' + packaging.package : ''}`,
             });
             continue;
           }
@@ -355,7 +355,7 @@ class FulfillmentSheetCalculator {
           const formula = await this.resolver.getFormula(canonicalName, 'BIRD_BOX');
           if (formula) {
             const qty         = item.quantity || 1;
-            const isFixedPack = formula.amount_per_person === 0;
+            const isFixedPack = parseFloat(formula.amount_per_person) === 0;
             const totalAmount = isFixedPack ? this._getFixedPackAmount(canonicalName, qty) : this.resolver.calculateAmount(formula, guestCount);
             const packaging   = this.resolver.getPackaging(formula, guestCount);
             manualSalsas.push({ name: canonicalName, category: formula.category, tempType: formula.temp_type, unit: formula.unit, utensil: formula.utensil, totalAmount, packaging: packaging.package, packagingQty: isFixedPack ? qty : packaging.qty, included: 'Yes', quantity: qty, servesCount: isFixedPack ? 20*qty : null });
