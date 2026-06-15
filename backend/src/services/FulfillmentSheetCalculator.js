@@ -655,7 +655,8 @@ class FulfillmentSheetCalculator {
   }
 
   _getFixedPackAmount(canonicalName, qty) {
-    const fixedAmounts = { 'Chips & Queso': 32, 'Chips & Guacamole': 32, 'Chips & Salsa': 32, 'Bunuelos': 1 };
+    // Buñuelos: 1 pan = 40 piezas
+    const fixedAmounts = { 'Chips & Queso': 32, 'Chips & Guacamole': 32, 'Chips & Salsa': 32, 'Bunuelos': 40 };
     return (fixedAmounts[canonicalName] ?? 1) * qty;
   }
 
