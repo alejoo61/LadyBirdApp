@@ -52,7 +52,7 @@ class FulfillmentSheetCalculator {
     const delivery = parsedData?.delivery || {};
     const items    = parsedData?.items || [];
 
-    const { ingredients, wantsPaper } =
+    const { ingredients, wantsPaper, wantsChips } =
       await this.resolver.resolveOrderIngredients(parsedData, 'TACO_BAR');
 
     const calculated = ingredients.map(({ canonicalName, formula }) => {
