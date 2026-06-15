@@ -233,14 +233,14 @@ class PersonalBoxGenerator extends BaseGenerator {
       }
     }
 
-    // Addons con chips (Chips & Guacamole, Chips & Queso, etc.)
-    const chipAddons = (addons || []).filter(a => (a.name || '').toLowerCase().includes('chip'));
+    // Addons que incluyen chips (Chips & Guacamole, Chips & Queso, etc.)
+    const chipAddons = (addons || []).filter(a => a.hasChipsPan && a.chipPans > 0);
     for (const addon of chipAddons) {
-      totalPans += addon.quantity || 1;
+      totalPans += addon.chipPans;
       rows.push(`
         <tr>
           <td>${addon.name} (×${addon.quantity || 1})</td>
-          <td style="font-weight:900">${addon.quantity || 1} Full Pan${(addon.quantity || 1) > 1 ? 's' : ''}</td>
+          <td style="font-weight:900">${addon.chipPans} Full Pan${addon.chipPans > 1 ? 's' : ''}</td>
         </tr>`);
     }
 
