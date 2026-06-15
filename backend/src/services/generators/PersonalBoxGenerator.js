@@ -76,7 +76,7 @@ class PersonalBoxGenerator extends BaseGenerator {
     </div>` : ''}
 
     ${this._renderAddons(addons || [])}
-    ${this._renderChipsConsolidated(chipsRow, hasBirdBox ? birdBoxResult : null)}
+    ${this._renderChipsConsolidated(chipsRow, hasBirdBox ? birdBoxResult : null, addons || [])}
     ${this._renderDrinksConsolidated(drinks || [], header.guestCount)}
     ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
     ${this._renderQC([
@@ -206,8 +206,8 @@ class PersonalBoxGenerator extends BaseGenerator {
     </div>`;
   }
 
-  // ─── CHIPS CONSOLIDADO ────────────────────────────────────────────────────
-  _renderChipsConsolidated(chipsRow, birdBoxResult) {
+  // ─── CHIPS SUMMARY ───────────────────────────────────────────────────────
+  _renderChipsConsolidated(chipsRow, birdBoxResult, addons) {
     const rows = [];
     let totalPans = 0;
 
@@ -215,12 +215,8 @@ class PersonalBoxGenerator extends BaseGenerator {
     if (chipsRow && chipsRow.total > 0) {
       rows.push(`
         <tr>
-          <td>Personal Chips (individual boxes)</td>
+          <td>Personal Boxes (${chipsRow.total} boxes)</td>
           <td style="font-weight:900">${chipsRow.total} each</td>
-          <td>—</td>
-          <td>Tongs Large</td>
-          <td class="checkbox-cell"><span class="checkbox"></span></td>
-          <td class="checkbox-cell"><span class="checkbox"></span></td>
         </tr>`);
     }
 
@@ -231,33 +227,36 @@ class PersonalBoxGenerator extends BaseGenerator {
         if (match) totalPans += parseInt(match[1]);
         rows.push(`
           <tr>
-            <td style="font-size:8px; color:#555">${c.label}</td>
+            <td>${c.label}</td>
             <td style="font-weight:900">${c.amount}</td>
-            <td>${c.packaging}</td>
-            <td>${c.utensil}</td>
-            <td class="checkbox-cell"><span class="checkbox"></span></td>
-            <td class="checkbox-cell"><span class="checkbox"></span></td>
           </tr>`);
       }
     }
 
+    // Addons con chips (Chips & Guacamole, Chips & Queso, etc.)
+    const chipAddons = (addons || []).filter(a => (a.name || '').toLowerCase().includes('chip'));
+    for (const addon of chipAddons) {
+      totalPans += addon.quantity || 1;
+      rows.push(`
+        <tr>
+          <td>${addon.name} (×${addon.quantity || 1})</td>
+          <td style="font-weight:900">${addon.quantity || 1} Full Pan${(addon.quantity || 1) > 1 ? 's' : ''}</td>
+        </tr>`);
+    }
+
     if (rows.length === 0) return '';
 
-    const totalRow = totalPans > 0 ? `
-      <tr style="background:#fef3c7; border-top:2px solid #784212">
-        <td style="font-weight:900; font-size:9px; text-transform:uppercase; color:#784212">TOTAL CHIP PANS</td>
-        <td style="font-weight:900; color:#784212">${totalPans} Full Pan${totalPans > 1 ? 's' : ''}</td>
-        <td colspan="4"></td>
-      </tr>` : '';
-
     return `
-    <div class="section" style="margin-top:8px">
-      <div class="section-header" style="background:#784212">Chips</div>
+    <div class="section" style="margin-top:8px; border:2px solid #784212">
+      <div class="section-header" style="background:#784212; font-size:10px">🍟 Chips Summary</div>
       <table>
-        <thead><tr><th>Description</th><th>Amount</th><th>Packaging</th><th>Utensil</th><th>Packed?</th><th>Loaded?</th></tr></thead>
+        <thead><tr><th>Description</th><th>Amount</th></tr></thead>
         <tbody>
           ${rows.join('')}
-          ${totalRow}
+          <tr style="background:#fef3c7; border-top:2px solid #784212">
+            <td style="font-weight:900; font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:#784212">TOTAL FULL PANS</td>
+            <td style="font-weight:900; font-size:12px; color:#784212">${totalPans} Full Pan${totalPans !== 1 ? 's' : ''}</td>
+          </tr>
         </tbody>
       </table>
     </div>`;
