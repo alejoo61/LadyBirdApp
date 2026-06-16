@@ -6,6 +6,7 @@ module.exports = (equipmentController) => {
   // ── CRUD base ─────────────────────────────────────────────────────────────
   router.get('/',                       (req, res) => equipmentController.getAll(req, res));
   router.get('/types',                  (req, res) => equipmentController.getTypes(req, res));
+  router.get('/type-catalog',           (req, res) => equipmentController.getTypeCatalog(req, res));
   router.get('/qr/:code',               (req, res) => equipmentController.getByCode(req, res));
   router.get('/:id',                    (req, res) => equipmentController.getById(req, res));
   router.post('/',                      (req, res) => equipmentController.create(req, res));

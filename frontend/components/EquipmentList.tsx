@@ -6,17 +6,19 @@ import { equipmentApi, storesApi } from '@/services/api';
 import type { Equipment } from '@/services/api/equipmentApi';
 import type { Store } from '@/services/api';
 import { Plus, Package, CheckCircle, AlertTriangle, X } from 'lucide-react';
-import EquipmentCard from '@/components/equipment/EquipmentCard';
-import BatchModal    from '@/components/equipment/BatchModal';
-import TransferModal from '@/components/equipment/TransferModal';
-import HistoryModal  from '@/components/equipment/HistoryModal';
+import EquipmentCard from './equipment/EquipmentCard';
+import BatchModal    from './equipment/BatchModal';
+import TransferModal from './equipment/TransferModal';
+import HistoryModal  from './equipment/HistoryModal';
 
 interface ApiError { response?: { data?: { error?: string } } }
+interface EquipmentType { id: string; name: string; code: string; }
 
 export default function EquipmentList() {
-  const [equipment, setEquipment]     = useState<Equipment[]>([]);
-  const [stores, setStores]           = useState<Store[]>([]);
-  const [types, setTypes]             = useState<string[]>([]);
+  const [equipment, setEquipment]       = useState<Equipment[]>([]);
+  const [stores, setStores]             = useState<Store[]>([]);
+  const [types, setTypes]               = useState<string[]>([]);
+  const [equipmentTypes, setEquipmentTypes] = useState<EquipmentType[]>([]);
   const [loading, setLoading]         = useState(true);
   const [showToast, setShowToast]     = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -35,12 +37,18 @@ export default function EquipmentList() {
   const [deleteId, setDeleteId]           = useState<string | null>(null);
   const [errorMessage, setErrorMessage]   = useState('');
 
-  const [formData, setFormData] = useState({ storeId: '', name: '', type: '', yearCode: new Date().getFullYear().toString() });
+  const [formData, setFormData] = useState({ storeId: '', name: '', type: '', typeCode: '', yearCode: new Date().getFullYear().toString() });
 
   useEffect(() => {
-    Promise.all([storesApi.getAll({ active: true }), equipmentApi.getTypes()])
-      .then(([sRes, tRes]) => { setStores(sRes.data.data); setTypes(tRes.data.data); })
-      .catch(console.error);
+    Promise.all([
+      storesApi.getAll({ active: true }),
+      equipmentApi.getTypes(),
+      equipmentApi.getTypeCatalog(),
+    ]).then(([sRes, tRes, catRes]) => {
+      setStores(sRes.data.data);
+      setTypes(tRes.data.data);
+      setEquipmentTypes(catRes.data.data);
+    }).catch(console.error);
   }, []);
 
   useEffect(() => { loadEquipment(); }, [selectedStore, selectedType, showOnlyDown]);
@@ -147,7 +155,7 @@ export default function EquipmentList() {
             className="flex items-center gap-2 bg-white border-2 border-tumbleweed text-night hover:border-night transition-all px-5 py-3 rounded-2xl font-black uppercase tracking-widest text-sm">
             <Package size={18} /> Batch
           </button>
-          <button onClick={() => { setEditingId(null); setFormData({ storeId: '', name: '', type: '', yearCode: new Date().getFullYear().toString() }); setErrorMessage(''); setEditModal(true); }}
+          <button onClick={() => { setEditingId(null); setFormData({ storeId: '', name: '', type: '', typeCode: '', yearCode: new Date().getFullYear().toString() }); setErrorMessage(''); setEditModal(true); }}
             className="flex items-center gap-2 bg-night text-bone hover:bg-night/90 transition-all px-5 py-3 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl">
             <Plus size={18} /> New Asset
           </button>
@@ -181,7 +189,7 @@ export default function EquipmentList() {
             <EquipmentCard
               key={item.id}
               item={item}
-              onEdit={i => { setEditingId(i.id); setFormData({ storeId: i.storeId, name: i.name, type: i.type, yearCode: i.yearCode }); setErrorMessage(''); setEditModal(true); }}
+              onEdit={i => { setEditingId(i.id); setFormData({ storeId: i.storeId, name: i.name, type: i.type, typeCode: '', yearCode: i.yearCode }); setErrorMessage(''); setEditModal(true); }}
               onDelete={id => setDeleteId(id)}
               onToggleStatus={handleToggleStatus}
               onTransfer={i => setTransferTarget(i)}
@@ -205,9 +213,19 @@ export default function EquipmentList() {
                 <option value="">Select Store...</option>
                 {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
-              <input className={inputCls} placeholder="Name (e.g. Tortilla Press)" value={formData.name}     onChange={e => setFormData({ ...formData, name: e.target.value })}     required />
-              <input className={inputCls} placeholder="Type (e.g. Kitchen)"         value={formData.type}     onChange={e => setFormData({ ...formData, type: e.target.value })}     required />
-              <input className={inputCls} placeholder="Year (e.g. 2026)"            value={formData.yearCode} onChange={e => setFormData({ ...formData, yearCode: e.target.value })} required />
+              <div>
+                <label className="block text-[10px] font-black text-night/40 uppercase tracking-[0.2em] mb-2 ml-1">Equipment Type</label>
+                <select className={inputCls}
+                  value={formData.typeCode}
+                  onChange={e => {
+                    const t = equipmentTypes.find(x => x.code === e.target.value);
+                    setFormData({ ...formData, typeCode: e.target.value, type: t?.name || '', name: t?.name || '' });
+                  }} required>
+                  <option value="">Select type...</option>
+                  {equipmentTypes.map(t => <option key={t.id} value={t.code}>{t.name} ({t.code})</option>)}
+                </select>
+              </div>
+              <input className={inputCls} placeholder="Year (e.g. 2026)" value={formData.yearCode} onChange={e => setFormData({ ...formData, yearCode: e.target.value })} required />
               {editingId && <p className="text-[10px] text-rose font-black uppercase tracking-wider ml-1">⚠ Changing store will regenerate the equipment code</p>}
               {errorMessage && <p className="p-4 bg-red-50 text-red-500 text-[10px] font-black uppercase rounded-2xl border border-red-100">{errorMessage}</p>}
               <button disabled={isSubmitting} className="w-full py-5 bg-night text-bone rounded-2xl font-black uppercase tracking-[0.2em] shadow-xl hover:bg-night/90 transition-all disabled:opacity-50">

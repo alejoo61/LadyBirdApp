@@ -1,33 +1,52 @@
 // components/equipment/BatchModal.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Package } from 'lucide-react';
+import equipmentApi from '@/services/api/equipmentApi';
 import type { Store } from '@/services/api';
 
+interface EquipmentType { id: string; name: string; code: string; }
+
 interface Props {
-  stores:      Store[];
-  onClose:     () => void;
-  onSubmit:    (data: { storeId: string; name: string; type: string; yearCode: string; quantity: number }) => Promise<void>;
+  stores:   Store[];
+  onClose:  () => void;
+  onSubmit: (data: { storeId: string; name: string; type: string; typeCode: string; yearCode: string; quantity: number }) => Promise<void>;
 }
 
 export default function BatchModal({ stores, onClose, onSubmit }: Props) {
+  const [equipmentTypes, setEquipmentTypes] = useState<EquipmentType[]>([]);
   const [form, setForm] = useState({
     storeId:  '',
-    name:     '',
-    type:     '',
+    typeId:   '',
     yearCode: new Date().getFullYear().toString(),
     quantity: 1,
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError]           = useState('');
 
+  useEffect(() => {
+    equipmentApi.getTypeCatalog()
+      .then(res => setEquipmentTypes(res.data.data))
+      .catch(console.error);
+  }, []);
+
+  const selectedType = equipmentTypes.find(t => t.id === form.typeId);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedType) return;
     setSubmitting(true);
     setError('');
     try {
-      await onSubmit({ ...form, quantity: Number(form.quantity) });
+      await onSubmit({
+        storeId:  form.storeId,
+        name:     selectedType.name,
+        type:     selectedType.name,
+        typeCode: selectedType.code,
+        yearCode: form.yearCode,
+        quantity: Number(form.quantity),
+      });
       onClose();
     } catch (err: unknown) {
       setError((err as Error).message || 'Error creating batch');
@@ -58,21 +77,29 @@ export default function BatchModal({ stores, onClose, onSubmit }: Props) {
             </select>
           </div>
 
-          <input className={inputCls} placeholder="Equipment name (e.g. Tortilla Press)" value={form.name}     onChange={e => setForm({ ...form, name: e.target.value })}     required />
-          <input className={inputCls} placeholder="Type (e.g. Kitchen)"                  value={form.type}     onChange={e => setForm({ ...form, type: e.target.value })}     required />
-          <input className={inputCls} placeholder="Year (e.g. 2026)"                     value={form.yearCode} onChange={e => setForm({ ...form, yearCode: e.target.value })} required />
+          <div>
+            <label className="block text-[10px] font-black text-night/40 uppercase tracking-[0.2em] mb-2 ml-1">Equipment Type</label>
+            <select className={inputCls} value={form.typeId} onChange={e => setForm({ ...form, typeId: e.target.value })} required>
+              <option value="">Select type...</option>
+              {equipmentTypes.map(t => (
+                <option key={t.id} value={t.id}>{t.name} ({t.code})</option>
+              ))}
+            </select>
+            {selectedType && (
+              <p className="text-[10px] text-night/40 font-bold mt-2 ml-1">
+                Code prefix: <span className="text-rose font-black">{selectedType.code}</span> — e.g. 001-{selectedType.code}-26-01
+              </p>
+            )}
+          </div>
 
           <div>
-            <label className="block text-[10px] font-black text-night/40 uppercase tracking-[0.2em] mb-2 ml-1">
-              Quantity (1–50)
-            </label>
-            <input
-              type="number" min={1} max={50}
-              className={inputCls}
-              value={form.quantity}
-              onChange={e => setForm({ ...form, quantity: Number(e.target.value) })}
-              required
-            />
+            <label className="block text-[10px] font-black text-night/40 uppercase tracking-[0.2em] mb-2 ml-1">Year</label>
+            <input className={inputCls} placeholder="e.g. 2026" value={form.yearCode} onChange={e => setForm({ ...form, yearCode: e.target.value })} required />
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-black text-night/40 uppercase tracking-[0.2em] mb-2 ml-1">Quantity (1–50)</label>
+            <input type="number" min={1} max={50} className={inputCls} value={form.quantity} onChange={e => setForm({ ...form, quantity: Number(e.target.value) })} required />
             <p className="text-[10px] text-night/40 font-bold mt-2 ml-1">
               Will create {form.quantity} unit{form.quantity !== 1 ? 's' : ''} with sequential codes
             </p>
@@ -80,9 +107,9 @@ export default function BatchModal({ stores, onClose, onSubmit }: Props) {
 
           {error && <p className="p-4 bg-red-50 text-red-500 text-[10px] font-black uppercase rounded-2xl border border-red-100">{error}</p>}
 
-          <button disabled={submitting}
+          <button disabled={submitting || !selectedType}
             className="w-full py-5 bg-night text-bone rounded-2xl font-black uppercase tracking-[0.2em] shadow-xl hover:bg-night/90 transition-all active:scale-95 disabled:opacity-50">
-            {submitting ? `Creating ${form.quantity} items...` : `Create ${form.quantity} Asset${form.quantity !== 1 ? 's' : ''}`}
+            {submitting ? `Creating ${form.quantity} items...` : `Create ${form.quantity} ${selectedType?.name || 'Asset'}${form.quantity !== 1 ? 's' : ''}`}
           </button>
         </form>
       </div>

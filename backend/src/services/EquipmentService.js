@@ -37,23 +37,24 @@ class EquipmentService {
     const store = await this.storeRepository.findById(storeId);
     if (!store) throw new Error('Store not found');
 
-    const initials  = Equipment.calculateInitials(name);
-    const maxSeq    = await this.equipmentRepository.getMaxSequenceInStore(storeId, initials);
-    const nextSeq   = maxSeq + 1;
-    const code      = Equipment.generateFormattedCode(store.code, initials, yearCode, nextSeq);
+    // Usar typeCode del catálogo si está disponible, sino calcular del nombre
+    const initials = data.typeCode || Equipment.calculateInitials(name);
+    const maxSeq   = await this.equipmentRepository.getMaxSequenceInStore(storeId, initials);
+    const nextSeq  = maxSeq + 1;
+    const eqCode   = Equipment.generateFormattedCode(store.code, initials, yearCode, nextSeq);
 
     const created = await this.equipmentRepository.create({
       ...data,
-      equipmentCode: code,
+      equipmentCode: eqCode,
       seq:           nextSeq,
-      qrCodeText:    `LADYBIRD-EQ:${code}`,
+      qrCodeText:    `LADYBIRD-EQ:${eqCode}`,
     });
     return await this.getEquipmentById(created.id);
   }
 
   // ── BATCH CREATION ────────────────────────────────────────────────────────
   // Crea N equipos del mismo tipo en una tienda
-  async createBatch({ storeId, name, type, yearCode, quantity }) {
+  async createBatch({ storeId, name, type, typeCode, yearCode, quantity }) {
     if (!storeId || !name || !type || !yearCode || !quantity)
       throw new Error('storeId, name, type, yearCode, and quantity are required');
     if (quantity < 1 || quantity > 50)
@@ -62,7 +63,7 @@ class EquipmentService {
     const store = await this.storeRepository.findById(storeId);
     if (!store) throw new Error('Store not found');
 
-    const initials = Equipment.calculateInitials(name);
+    const initials = typeCode || Equipment.calculateInitials(name);
     let maxSeq     = await this.equipmentRepository.getMaxSequenceInStore(storeId, initials);
 
     const created = [];
@@ -162,6 +163,10 @@ class EquipmentService {
 
   async getEquipmentTypes() {
     return await this.equipmentRepository.getTypes();
+  }
+
+  async getEquipmentTypeCatalog() {
+    return await this.equipmentRepository.getEquipmentTypeCatalog();
   }
 }
 

@@ -71,6 +71,9 @@ export const equipmentApi = {
 
   getTypes: () =>
     apiClient.get<{ success: boolean; data: string[] }>('/equipment/types'),
+
+  getTypeCatalog: () =>
+    apiClient.get<{ success: boolean; data: { id: string; name: string; code: string }[] }>('/equipment/type-catalog'),
 };
 
 export default equipmentApi;
