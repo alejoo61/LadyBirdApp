@@ -32,6 +32,11 @@ interface Store {
 
 type Mode = 'menu' | 'transfer' | 'maintenance' | 'success';
 
+// Requerido para static export — los códigos se resuelven en el cliente
+export function generateStaticParams() {
+  return [];
+}
+
 export default function EquipmentQRPage() {
   const { code }                        = useParams<{ code: string }>();
   const [equipment, setEquipment]       = useState<EquipmentData | null>(null);
