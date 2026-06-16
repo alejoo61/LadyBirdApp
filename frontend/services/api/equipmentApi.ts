@@ -1,60 +1,76 @@
+// services/api/equipmentApi.ts
 import apiClient from './client';
 
-// Interfaz que representa un Equipo en el sistema
 export interface Equipment {
-  id: string;
-  storeId: string;
+  id:            string;
+  storeId:       string;
   equipmentCode: string;
-  type: string;
-  name: string;
-  yearCode: string;
-  seq: number;
-  isDown: boolean;
-  qrCodeText?: string; 
-  status: string;
-  createdAt: string;
-  store?: {
-    id: string;
-    name: string;
-    code: string;
-  };
+  type:          string;
+  name:          string;
+  yearCode:      string;
+  seq:           number;
+  isDown:        boolean;
+  qrCodeText?:   string;
+  status:        string;
+  createdAt:     string;
+  store?: { id: string; name: string; code: string; };
 }
 
-// Datos necesarios para crear un equipo (el código es opcional porque lo genera el back)
 export interface EquipmentCreateData {
-  storeId: string;
-  name: string;
-  type: string;
-  yearCode: string;
-  equipmentCode?: string; 
+  storeId:        string;
+  name:           string;
+  type:           string;
+  yearCode:       string;
+  equipmentCode?: string;
 }
 
-// Objeto de la API con todos los métodos necesarios
+export interface TransferHistory {
+  id:            string;
+  fromStore:     { id: string; name: string; code: string } | null;
+  toStore:       { id: string; name: string; code: string } | null;
+  reason:        string;
+  isTemporary:   boolean;
+  returnDate:    string | null;
+  transferredBy: string | null;
+  transferredAt: string;
+}
+
 export const equipmentApi = {
-  getAll: (params?: { storeId?: string; type?: string; isDown?: boolean }) => 
+  getAll: (params?: { storeId?: string; type?: string; isDown?: boolean }) =>
     apiClient.get('/equipment', { params }),
 
-  getById: (id: string) => 
+  getById: (id: string) =>
     apiClient.get(`/equipment/${id}`),
 
-  create: (data: EquipmentCreateData) => 
+  getByCode: (code: string) =>
+    apiClient.get(`/equipment/qr/${code}`),
+
+  create: (data: EquipmentCreateData) =>
     apiClient.post('/equipment', data),
 
-  update: (id: string, data: Partial<EquipmentCreateData>) => 
+  createBatch: (data: { storeId: string; name: string; type: string; yearCode: string; quantity: number }) =>
+    apiClient.post('/equipment/batch', data),
+
+  update: (id: string, data: Partial<EquipmentCreateData>) =>
     apiClient.put(`/equipment/${id}`, data),
 
-  delete: (id: string) => 
+  delete: (id: string) =>
     apiClient.delete(`/equipment/${id}`),
 
-  markAsDown: (id: string) => 
-    apiClient.post(`/equipment/${id}/down`),
+  markAsDown: (id: string) =>
+    apiClient.patch(`/equipment/${id}/mark-down`),
 
-  markAsOperational: (id: string) => 
-    apiClient.post(`/equipment/${id}/operational`),
+  markAsOperational: (id: string) =>
+    apiClient.patch(`/equipment/${id}/mark-operational`),
 
-  getTypes: () => 
+  transfer: (id: string, data: { toStoreId: string; isTemporary: boolean; returnDate?: string; reason?: string; transferredBy?: string }) =>
+    apiClient.post(`/equipment/${id}/transfer`, data),
+
+  getHistory: (id: string) =>
+    apiClient.get<{ success: boolean; data: TransferHistory[] }>(`/equipment/${id}/history`),
+
+  getTypes: () =>
     apiClient.get<{ success: boolean; data: string[] }>('/equipment/types'),
 };
 
-// EXPORTACIÓN POR DEFECTO (Esto es lo que arregla el error de la pantalla roja)
 export default equipmentApi;
