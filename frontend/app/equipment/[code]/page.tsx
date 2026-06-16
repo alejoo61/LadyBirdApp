@@ -1,8 +1,10 @@
 // app/equipment/[code]/page.tsx
-// Server Component wrapper — requerido para static export
+import EquipmentQRClient from './EquipmentQRClient';
 
 export function generateStaticParams() {
   return [];
 }
 
-export { default } from './EquipmentQRClient';
+export default function Page() {
+  return <EquipmentQRClient />;
+}
