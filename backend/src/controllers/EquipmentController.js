@@ -20,6 +20,14 @@ class EquipmentController {
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
   };
 
+  // GET /api/equipment/type-catalog — catálogo completo con name + code
+  getTypeCatalog = async (req, res) => {
+    try {
+      const types = await this.equipmentService.getEquipmentTypeCatalog();
+      res.json({ success: true, data: types });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+  };
+
   getById = async (req, res) => {
     try {
       const equipment = await this.equipmentService.getEquipmentById(req.params.id);

@@ -142,6 +142,14 @@ class EquipmentRepository {
     const result = await this.pool.query('SELECT DISTINCT type FROM equipment WHERE deleted_at IS NULL');
     return result.rows.map(r => r.type);
   }
+
+  // ── EQUIPMENT TYPE CATALOG ────────────────────────────────────────────────
+  async getEquipmentTypeCatalog() {
+    const result = await this.pool.query(
+      'SELECT id, name, code FROM equipment_types WHERE is_active = true ORDER BY name ASC'
+    );
+    return result.rows;
+  }
 }
 
 module.exports = EquipmentRepository;
