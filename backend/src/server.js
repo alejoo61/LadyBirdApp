@@ -45,6 +45,8 @@ const formulasRoutes  = require('./routes/formulas.routes');
 const menuRoutes      = require('./routes/menu.routes');
 const auditRoutes     = require('./routes/audit.routes');
 const cateringRoutes  = require('./routes/catering.routes');
+const maintenanceRoutes = require('./routes/maintenance.routes');
+
 
 // ─── Dependency Injection ─────────────────────────────────────────────────
 
@@ -101,6 +103,7 @@ app.get('/', (req, res) => res.json({
   version:   '1.0.0',
 }));
 
+
 // ─── Routes ───────────────────────────────────────────────────────────────
 app.use('/api/auth',           authRoutes(pool, emailService));
 app.use('/api/stores',         storesRoutes(storeController));
@@ -119,6 +122,7 @@ app.use('/api/catering/orders', cateringRoutes(
   googleCalendarService,
   toastSyncService,
 ));
+app.use('/api/maintenance', maintenanceRoutes(pool));
 
 // ─── Store equipment route (nested) ───────────────────────────────────────
 app.get('/api/stores/:storeId/equipment', (req, res) => equipmentController.getByStore(req, res));
