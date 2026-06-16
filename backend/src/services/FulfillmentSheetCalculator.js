@@ -559,7 +559,7 @@ class FulfillmentSheetCalculator {
     const itemNameLc = (item.displayName || item.name || '').toLowerCase();
     const isHot      = itemNameLc.includes('coffee') || itemNameLc.includes('tea') || itemNameLc.includes('hot');
     const tempType   = isHot ? 'hot' : 'cold';
-    const cupSize    = isHot ? '8 oz hot cup/lids' : '16 oz cold cup/lids';
+    const cupSize    = isHot ? '8 oz hot cups/lids' : '16 oz cold cups/lids';
 
     const wantsCups = modifiers.some(m => {
       const n = (m.displayName || '').toLowerCase();
@@ -577,7 +577,7 @@ class FulfillmentSheetCalculator {
       return {
         name: item.displayName || item.name, quantity: qty,
         totalOz: qty * 96, packaging: '96 oz coffee', packagingQty: qty,
-        utensil: '—', tempType: 'hot', wantsCups, cupSize: '8 oz hot cup/lids', creamers: creamerItems,
+        utensil: '—', tempType: 'hot', wantsCups, cupSize: '8 oz hot cups/lids', creamers: creamerItems,
       };
     }
 

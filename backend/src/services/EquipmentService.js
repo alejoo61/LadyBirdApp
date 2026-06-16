@@ -4,107 +4,155 @@ const Equipment = require('../entities/Equipment');
 class EquipmentService {
   constructor(equipmentRepository, storeRepository) {
     this.equipmentRepository = equipmentRepository;
-    this.storeRepository = storeRepository;
+    this.storeRepository     = storeRepository;
   }
 
   async getAllEquipment(filters = {}) {
-    const processedFilters = {
+    return await this.equipmentRepository.findAll({
       storeId: filters.storeId || null,
-      type: filters.type || null,
-      isDown: filters.isDown === 'true' || filters.isDown === true
-    };
-    return await this.equipmentRepository.findAll(processedFilters, true);
+      type:    filters.type    || null,
+      isDown:  filters.isDown === 'true' || filters.isDown === true,
+    });
   }
 
   async getEquipmentById(id) {
     const cleanId = (typeof id === 'object' && id !== null) ? id.id : id;
-    const equipment = await this.equipmentRepository.findById(cleanId, true);
+    const equipment = await this.equipmentRepository.findById(cleanId);
     if (!equipment) throw new Error('Equipment not found');
     return equipment;
   }
 
-  async createEquipment(equipmentData) {
-    const { storeId, name, yearCode, type } = equipmentData;
+  async getEquipmentByCode(code) {
+    const equipment = await this.equipmentRepository.findByCode(code);
+    if (!equipment) throw new Error('Equipment not found');
+    return equipment;
+  }
 
-    if (!storeId || !name || !yearCode || !type) {
+  // ── CREAR EQUIPO ──────────────────────────────────────────────────────────
+  async createEquipment(data) {
+    const { storeId, name, yearCode, type } = data;
+    if (!storeId || !name || !yearCode || !type)
       throw new Error('storeId, name, yearCode, and type are required');
-    }
+
+    const store = await this.storeRepository.findById(storeId);
+    if (!store) throw new Error('Store not found');
+
+    const initials  = Equipment.calculateInitials(name);
+    const maxSeq    = await this.equipmentRepository.getMaxSequenceInStore(storeId, initials);
+    const nextSeq   = maxSeq + 1;
+    const code      = Equipment.generateFormattedCode(store.code, initials, yearCode, nextSeq);
+
+    const created = await this.equipmentRepository.create({
+      ...data,
+      equipmentCode: code,
+      seq:           nextSeq,
+      qrCodeText:    `LADYBIRD-EQ:${code}`,
+    });
+    return await this.getEquipmentById(created.id);
+  }
+
+  // ── BATCH CREATION ────────────────────────────────────────────────────────
+  // Crea N equipos del mismo tipo en una tienda
+  async createBatch({ storeId, name, type, yearCode, quantity }) {
+    if (!storeId || !name || !type || !yearCode || !quantity)
+      throw new Error('storeId, name, type, yearCode, and quantity are required');
+    if (quantity < 1 || quantity > 50)
+      throw new Error('Quantity must be between 1 and 50');
 
     const store = await this.storeRepository.findById(storeId);
     if (!store) throw new Error('Store not found');
 
     const initials = Equipment.calculateInitials(name);
-    const maxSeq = await this.equipmentRepository.getMaxSequenceInStore(storeId, initials);
-    const nextSeq = maxSeq + 1;
+    let maxSeq     = await this.equipmentRepository.getMaxSequenceInStore(storeId, initials);
 
-    const generatedCode = Equipment.generateFormattedCode(store.code, initials, yearCode, nextSeq);
-
-    const finalData = {
-      ...equipmentData,
-      equipmentCode: generatedCode,
-      seq: nextSeq,
-      qrCodeText: `LADYBIRD-EQ:${generatedCode}` 
-    };
-
-    const created = await this.equipmentRepository.create(finalData);
-    return await this.getEquipmentById(created.id);
+    const created = [];
+    for (let i = 0; i < quantity; i++) {
+      const nextSeq = ++maxSeq;
+      const code    = Equipment.generateFormattedCode(store.code, initials, yearCode, nextSeq);
+      const eq      = await this.equipmentRepository.create({
+        storeId, name, type, yearCode,
+        equipmentCode: code,
+        seq:           nextSeq,
+        qrCodeText:    `LADYBIRD-EQ:${code}`,
+        isDown:        false,
+      });
+      created.push(await this.getEquipmentById(eq.id));
+    }
+    return created;
   }
 
-  /**
-   * ACTUALIZAR EQUIPO (Corregido para evitar nulos)
-   */
-  async updateEquipment(id, equipmentData) {
-    const existing = await this.getEquipmentById(id);
-    
-    // 1. Empezamos con los datos que ya existen para no enviar NULOS a la DB
-    let dataToUpdate = {
-      storeId: equipmentData.storeId || existing.storeId,
-      name: equipmentData.name || existing.name,
-      type: equipmentData.type || existing.type,
-      yearCode: equipmentData.yearCode || existing.yearCode,
-      isDown: equipmentData.isDown !== undefined ? equipmentData.isDown : existing.isDown,
-      // Estos campos se mantienen a menos que haya transferencia
-      equipmentCode: existing.equipmentCode,
-      seq: existing.seq,
-      qrCodeText: existing.qrCodeText
-    };
+  // ── TRANSFER ──────────────────────────────────────────────────────────────
+  // Transfiere un equipo a otra tienda (temporal o definitivo)
+  async transferEquipment(id, { toStoreId, isTemporary = false, returnDate, reason, transferredBy }) {
+    if (!toStoreId) throw new Error('toStoreId is required');
 
-    // 2. Si detectamos transferencia de tienda, REGENERAMOS el código
-    if (equipmentData.storeId && equipmentData.storeId !== existing.storeId) {
-      const newStore = await this.storeRepository.findById(equipmentData.storeId);
-      if (!newStore) throw new Error('New Store not found');
+    const equipment = await this.getEquipmentById(id);
+    const toStore   = await this.storeRepository.findById(toStoreId);
+    if (!toStore) throw new Error('Destination store not found');
 
-      // Registrar historial
-      await this.equipmentRepository.logTransfer(existing.id, existing.storeId, equipmentData.storeId);
+    const fromStoreId = equipment.storeId;
 
-      // Calcular nueva nomenclatura
-      const initials = Equipment.calculateInitials(dataToUpdate.name);
-      const maxSeq = await this.equipmentRepository.getMaxSequenceInStore(equipmentData.storeId, initials);
-      const nextSeq = maxSeq + 1;
+    // Registrar historial
+    await this.equipmentRepository.logTransfer(equipment.id, fromStoreId, toStoreId, {
+      isTemporary,
+      returnDate: returnDate || null,
+      reason:     reason || (isTemporary ? 'Temporary loan' : 'Permanent transfer'),
+      transferredBy: transferredBy || null,
+    });
 
-      dataToUpdate.equipmentCode = Equipment.generateFormattedCode(
-        newStore.code, 
-        initials, 
-        dataToUpdate.yearCode, 
-        nextSeq
-      );
-      dataToUpdate.seq = nextSeq;
-      dataToUpdate.qrCodeText = `LADYBIRD-EQ:${dataToUpdate.equipmentCode}`;
+    // Si es definitivo, actualizar store_id y regenerar código
+    if (!isTemporary) {
+      const initials = Equipment.calculateInitials(equipment.name);
+      const maxSeq   = await this.equipmentRepository.getMaxSequenceInStore(toStoreId, initials);
+      const nextSeq  = maxSeq + 1;
+      const newCode  = Equipment.generateFormattedCode(toStore.code, initials, equipment.yearCode, nextSeq);
+
+      await this.equipmentRepository.update(equipment.id, {
+        ...equipment,
+        storeId:       toStoreId,
+        equipmentCode: newCode,
+        seq:           nextSeq,
+        qrCodeText:    `LADYBIRD-EQ:${newCode}`,
+      });
     }
 
-    // 3. Enviamos el objeto completo (sin nulos) al repositorio
+    return await this.getEquipmentById(equipment.id);
+  }
+
+  // ── HISTORIAL ─────────────────────────────────────────────────────────────
+  async getTransferHistory(id) {
+    await this.getEquipmentById(id); // Valida que existe
+    return await this.equipmentRepository.getHistory(id);
+  }
+
+  // ── ACTUALIZAR ────────────────────────────────────────────────────────────
+  async updateEquipment(id, data) {
+    const existing = await this.getEquipmentById(id);
+
+    let dataToUpdate = {
+      storeId:       data.storeId       || existing.storeId,
+      name:          data.name          || existing.name,
+      type:          data.type          || existing.type,
+      yearCode:      data.yearCode      || existing.yearCode,
+      isDown:        data.isDown !== undefined ? data.isDown : existing.isDown,
+      equipmentCode: existing.equipmentCode,
+      seq:           existing.seq,
+      qrCodeText:    existing.qrCodeText,
+    };
+
+    // Si cambia de tienda → transferencia definitiva automática
+    if (data.storeId && data.storeId !== existing.storeId) {
+      return await this.transferEquipment(id, { toStoreId: data.storeId, isTemporary: false });
+    }
+
     const updated = await this.equipmentRepository.update(id, dataToUpdate);
     return await this.getEquipmentById(updated.id);
   }
 
   async markEquipmentStatus(id, isDown) {
     const equipment = await this.getEquipmentById(id);
-    // Usamos el ID limpio y solo actualizamos el campo necesario
-    const updated = await this.equipmentRepository.update(equipment.id, { 
-      ...equipment, 
-      isDown 
-    });
-    return await this.getEquipmentById(updated.id);
+    await this.equipmentRepository.update(equipment.id, { ...equipment, isDown });
+    return await this.getEquipmentById(equipment.id);
   }
 
   async deleteEquipment(id) {

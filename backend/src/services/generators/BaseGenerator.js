@@ -420,9 +420,9 @@ class BaseGenerator {
     if (needsColdCups && guestCount) {
       cupRows.push(`
         <tr style="background:#e8f5e9; border-top:2px solid #2e7d32">
-          <td style="padding-left:20px;color:#2e7d32;font-weight:900">↳ 16 oz Cold Cup / Lids</td>
+          <td style="padding-left:20px;color:#2e7d32;font-weight:900">↳ 16 oz Cold Cups / Lids</td>
           <td>${guestCount} each</td>
-          <td>${guestCount}x 16 oz cold cup/lids</td>
+          <td>${guestCount}x 16 oz cold cups/lids</td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
         </tr>`);
@@ -430,9 +430,9 @@ class BaseGenerator {
     if (needsHotCups && guestCount) {
       cupRows.push(`
         <tr style="background:#fde8e8; border-top:2px solid #c0392b">
-          <td style="padding-left:20px;color:#c0392b;font-weight:900">↳ 8 oz Hot Cup / Lids</td>
+          <td style="padding-left:20px;color:#c0392b;font-weight:900">↳ 8 oz Hot Cups / Lids</td>
           <td>${guestCount} each</td>
-          <td>${guestCount}x 8 oz hot cup/lids</td>
+          <td>${guestCount}x 8 oz hot cups/lids</td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
         </tr>`);
