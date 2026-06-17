@@ -438,7 +438,7 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
       };
 
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/catering/manual-fulfillment`,
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/catering/orders/manual-fulfillment`,
         { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
       );
 

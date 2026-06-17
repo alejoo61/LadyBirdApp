@@ -110,7 +110,7 @@ export const cateringApi = {
 
   generateManualFulfillment: (data: Record<string, unknown>) =>
     fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/catering/manual-fulfillment`,
+      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/catering/orders/manual-fulfillment`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
