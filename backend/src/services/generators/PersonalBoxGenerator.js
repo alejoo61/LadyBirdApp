@@ -240,7 +240,7 @@ class PersonalBoxGenerator extends BaseGenerator {
 
     return `
     <div class="section" style="margin-top:8px; border:2px solid #784212">
-      <div class="section-header" style="background:#784212; font-size:10px">🍟 Chips Summary</div>
+      <div class="section-header" style="background:#784212; font-size:10px">Chips Summary</div>
       <table>
         <thead><tr><th>Description</th><th>Amount</th></tr></thead>
         <tbody>
@@ -289,10 +289,10 @@ class PersonalBoxGenerator extends BaseGenerator {
     const totalRow = totalChipPans > 0 ? `
       <tr style="background:#fef3c7; border-top:2px solid #784212">
         <td colspan="2" style="font-weight:900; font-size:9px; text-transform:uppercase; letter-spacing:0.08em; color:#784212">
-          🍟 Total Chip Pans
+          Total Chips
         </td>
         <td colspan="2" style="font-weight:900; font-size:11px; color:#784212">
-          ${totalChipPans} Full Pan${totalChipPans !== 1 ? 's' : ''}
+          ${totalChipPans} Full Pans
         </td>
         <td class="checkbox-cell"></td>
         <td class="checkbox-cell"></td>
