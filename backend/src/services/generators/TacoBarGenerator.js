@@ -16,11 +16,6 @@ class TacoBarGenerator extends BaseGenerator {
       unit:        t.unit || 'each',
     }));
 
-    // Consolidar utensils de todos los items
-    const utensilMap = this._collectUtensils([
-      proteins || [], toppings || [], salsas || [],
-      tortillaItems, snacks || [], salads || [],
-    ]);
 
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
     <style>${this._baseCSS(badge.color)}</style></head><body>
@@ -36,7 +31,6 @@ class TacoBarGenerator extends BaseGenerator {
       </div>
       <div class="right-col">
         ${this._renderPaperGoods(paperGoods)}
-        ${this._renderUtensils(utensilMap)}
       </div>
     </div>
     ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
