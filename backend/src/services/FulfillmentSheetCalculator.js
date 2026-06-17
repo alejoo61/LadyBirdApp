@@ -71,6 +71,33 @@ class FulfillmentSheetCalculator {
     const salads           = this._extractSalads(items);
     const snacks           = grouped.snack || [];
 
+    // Detectar addons standalone (Bunuelos, Chips & Guacamole, etc.)
+    const addons = [];
+    for (const item of items) {
+      const itemNameLc = (item.displayName || item.name || '').toLowerCase();
+      if (DRINK_KEYWORDS.some(k => itemNameLc.includes(k))) continue;
+      if (item.modifiers && item.modifiers.length > 0) continue;
+      const dn            = item.displayName || item.name || '';
+      const canonicalName = await this.resolver.resolveCanonicalName(dn);
+      if (!canonicalName) continue;
+      const formula = await this.resolver.getFormula(canonicalName, 'TACO_BAR')
+                   || await this.resolver.getFormula(canonicalName, 'BIRD_BOX');
+      if (!formula || formula.category !== 'addon') continue;
+      const qty         = item.quantity || 1;
+      const isFixedPack = parseFloat(formula.amount_per_person) === 0;
+      const totalAmount = isFixedPack ? this._getFixedPackAmount(canonicalName, qty) : this.resolver.calculateAmount(formula, guestCount);
+      const fixedUnit   = isFixedPack ? this._getFixedPackUnit(canonicalName) : formula.unit;
+      const packaging   = this.resolver.getPackaging(formula, guestCount);
+      const hasChipsPan = isFixedPack && ['Chips & Guacamole', 'Chips & Queso', 'Chips & Salsa'].includes(canonicalName);
+      addons.push({
+        name: canonicalName, quantity: qty, totalAmount,
+        unit: fixedUnit, packaging: packaging.package,
+        packagingQty: isFixedPack ? qty : packaging.qty,
+        tempType: formula.temp_type || 'dry',
+        hasChipsPan, chipPans: hasChipsPan ? qty : 0,
+      });
+    }
+
     // Construir contexto para paper goods
     const paperContext = this._buildPaperContext(calculated, tortillas, grouped.salsa || [], salads, wantsChips);
     const paperGoods   = wantsPaper
@@ -82,7 +109,7 @@ class FulfillmentSheetCalculator {
       proteins:  grouped.protein || [],
       toppings:  grouped.topping || [],
       salsas:    grouped.salsa   || [],
-      snacks, tortillas, paperGoods, salads,
+      snacks, tortillas, paperGoods, salads, addons,
       hotItems:  [...(grouped.protein || []), ...tortillas],
       coldItems: [...(grouped.topping || []), ...(grouped.salsa || []), ...salads],
       dryItems:  [...snacks],
@@ -356,13 +383,28 @@ class FulfillmentSheetCalculator {
         const dn            = item.displayName || item.name || '';
         const canonicalName = await this.resolver.resolveCanonicalName(dn);
         if (canonicalName) {
-          const formula = await this.resolver.getFormula(canonicalName, 'BIRD_BOX');
+          const formula = await this.resolver.getFormula(canonicalName, 'BIRD_BOX')
+                       || await this.resolver.getFormula(canonicalName, 'PERSONAL_BOX');
           if (formula) {
             const qty         = item.quantity || 1;
             const isFixedPack = parseFloat(formula.amount_per_person) === 0;
-            const totalAmount = isFixedPack ? this._getFixedPackAmount(canonicalName, qty) : this.resolver.calculateAmount(formula, guestCount);
-            const packaging   = this.resolver.getPackaging(formula, guestCount);
-            manualSalsas.push({ name: canonicalName, category: formula.category, tempType: formula.temp_type, unit: formula.unit, utensil: formula.utensil, totalAmount, packaging: packaging.package, packagingQty: isFixedPack ? qty : packaging.qty, included: 'Yes', quantity: qty, servesCount: isFixedPack ? 20*qty : null });
+            if (formula.category === 'addon') {
+              const totalAmount = isFixedPack ? this._getFixedPackAmount(canonicalName, qty) : this.resolver.calculateAmount(formula, guestCount);
+              const fixedUnit   = isFixedPack ? this._getFixedPackUnit(canonicalName) : formula.unit;
+              const packaging   = this.resolver.getPackaging(formula, guestCount);
+              const hasChipsPan = isFixedPack && ['Chips & Guacamole', 'Chips & Queso', 'Chips & Salsa'].includes(canonicalName);
+              addonItems.push({
+                name: canonicalName, quantity: qty, totalAmount,
+                unit: fixedUnit, packaging: packaging.package,
+                packagingQty: isFixedPack ? qty : packaging.qty,
+                tempType: formula.temp_type || 'dry',
+                hasChipsPan, chipPans: hasChipsPan ? qty : 0,
+              });
+            } else {
+              const totalAmount = isFixedPack ? this._getFixedPackAmount(canonicalName, qty) : this.resolver.calculateAmount(formula, guestCount);
+              const packaging   = this.resolver.getPackaging(formula, guestCount);
+              manualSalsas.push({ name: canonicalName, category: formula.category, tempType: formula.temp_type, unit: formula.unit, utensil: formula.utensil, totalAmount, packaging: packaging.package, packagingQty: isFixedPack ? qty : packaging.qty, included: 'Yes', quantity: qty, servesCount: isFixedPack ? 20*qty : null });
+            }
             continue;
           }
         }
