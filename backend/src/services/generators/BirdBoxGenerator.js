@@ -12,12 +12,6 @@ class BirdBoxGenerator extends BaseGenerator {
 
     const badge = this._eventTypeBadge(header.eventType);
 
-    // Consolidar utensils
-    const utensilMap = this._collectUtensils([
-      tacoRows || [], salsas || [], addons || [], salads || [],
-      ...(sidePacks || []).map(sp => sp.contents || []),
-    ]);
-
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
     <style>${this._baseCSS(badge.color)}</style></head><body>
     ${this._headerHTML(header, badge)}
@@ -32,7 +26,6 @@ class BirdBoxGenerator extends BaseGenerator {
       </div>
       <div class="right-col">
         ${this._renderPaperGoods(paperGoods)}
-        ${this._renderUtensils(utensilMap)}
       </div>
     </div>
     ${this._renderDrinksConsolidated(drinks || [], header.guestCount)}
@@ -142,7 +135,7 @@ class BirdBoxGenerator extends BaseGenerator {
     if (!tacoRows || tacoRows.length === 0) return '';
     return `
     <div class="section">
-      <div class="section-header" style="background:#457b9d">Tacos by Combo</div>
+      <div class="section-header" style="background:#457b9d">Individually Wrapped Tacos</div>
       <table>
         <thead>
           <tr>
