@@ -47,6 +47,7 @@ export interface CateringOrder {
   isHouseAccount: boolean;
   isSpaceRental: boolean;
   isManuallyEdited: boolean;
+  isManualSheet: boolean;
   pdfVersion: number;
   pdfNeedsUpdate: boolean;
   calendarNeedsUpdate: boolean;
@@ -105,6 +106,16 @@ export const cateringApi = {
     fetch(
       `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/catering/orders/${id}/labels`,
       { method: 'POST' }
+    ),
+
+  generateManualFulfillment: (data: Record<string, unknown>) =>
+    fetch(
+      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/catering/manual-fulfillment`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }
     ),
 };
 

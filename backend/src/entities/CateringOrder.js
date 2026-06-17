@@ -38,6 +38,9 @@ class CateringOrder {
     this.distanceMiles            = distanceMiles     || null;
     this.createdAt                = createdAt;
     this.updatedAt                = updatedAt;
+
+    // Manual fulfillment sheet (not sourced from Toast)
+    this.isManualSheet            = false;
   }
 
   getEventTypeLabel() {

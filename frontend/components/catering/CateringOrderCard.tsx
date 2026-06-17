@@ -8,7 +8,7 @@ import {
 } from './orderUtils';
 import {
   ChevronDown, ChevronUp, CalendarDays, RefreshCw,
-  FlaskConical, Building2, Receipt, LockKeyhole,
+  FlaskConical, Building2, Receipt, LockKeyhole, ClipboardList,
 } from 'lucide-react';
 
 interface CateringOrderCardProps {
@@ -37,15 +37,17 @@ export default function CateringOrderCard({
   const isUnpaid       = order.paymentStatus === 'OPEN';
   const isHouseAccount = order.isHouseAccount;
   const isSpaceRental  = order.isSpaceRental;
+  const isManualSheet  = order.isManualSheet;
   const isTodayOrder   = isToday(order.estimatedFulfillmentDate);
-  const isTestOrder    = order.toastOrderGuid?.startsWith('MANUAL-');
-  const isEdited       = order.isManuallyEdited && !isTestOrder;
+  const isTestOrder    = order.toastOrderGuid?.startsWith('MANUAL-') && !isManualSheet;
+  const isEdited       = order.isManuallyEdited && !isTestOrder && !isManualSheet;
 
   const spaceRentalItem = isSpaceRental
     ? order.items.find(i => (i.displayName || '').toLowerCase().includes('space rental'))
     : null;
 
-  const borderCls = isTestOrder     ? 'border-fuchsia-300 ring-1 ring-fuchsia-200'
+  const borderCls = isManualSheet   ? 'border-emerald-300 ring-1 ring-emerald-200'
+                  : isTestOrder     ? 'border-fuchsia-300 ring-1 ring-fuchsia-200'
                   : isSpaceRental   ? 'border-indigo-300 ring-1 ring-indigo-100'
                   : isUnpaid        ? 'border-orange-200 opacity-75'
                   : isTodayOrder    ? 'border-sky ring-1 ring-sky/30'
@@ -54,6 +56,15 @@ export default function CateringOrderCard({
 
   return (
     <div className={`bg-white rounded-[2rem] border shadow-sm transition-all duration-300 overflow-hidden ${borderCls}`}>
+
+      {isManualSheet && (
+        <div className="bg-emerald-700 px-6 py-2 flex items-center gap-2">
+          <ClipboardList size={13} className="text-white shrink-0" />
+          <span className="text-[11px] font-black uppercase tracking-[0.2em] text-white">
+            Manual Fulfillment Sheet
+          </span>
+        </div>
+      )}
 
       {isSpaceRental && (
         <div className="bg-indigo-600 px-6 py-2 flex items-center gap-2">
@@ -73,7 +84,7 @@ export default function CateringOrderCard({
         </div>
       )}
 
-      {isTodayOrder && !isUnpaid && !isTestOrder && (
+      {isTodayOrder && !isUnpaid && !isTestOrder && !isManualSheet && (
         <div className="bg-sky/10 border-b border-sky/20 px-6 py-1.5 flex items-center gap-2">
           <CalendarDays size={11} className="text-sky shrink-0" />
           <span className="text-[10px] font-black uppercase tracking-widest text-sky">Today&apos;s Order</span>
@@ -126,10 +137,11 @@ export default function CateringOrderCard({
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[10px] font-mono font-bold text-night/30">#{order.displayNumber}</span>
             <span className="font-black text-night text-sm truncate">{order.clientName}</span>
+            {isManualSheet  && <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 shrink-0">Manual Sheet</span>}
             {isTestOrder    && <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-fuchsia-500 text-white shrink-0 animate-pulse">TEST</span>}
             {isHouseAccount && <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-purple-100 text-purple-500 shrink-0">House Acct</span>}
             {isSpaceRental  && <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-600 shrink-0">Space Rental</span>}
-            {isTodayOrder && !isUnpaid && !isTestOrder && <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-sky/20 text-sky shrink-0">Today</span>}
+            {isTodayOrder && !isUnpaid && !isTestOrder && !isManualSheet && <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-sky/20 text-sky shrink-0">Today</span>}
             {isEdited && <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-600 shrink-0">Edited</span>}
           </div>
           <p className="text-[11px] text-night/40 font-medium truncate mt-0.5">

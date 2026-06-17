@@ -72,6 +72,140 @@ module.exports = (
     }
   });
 
+  // ── Manual Fulfillment Sheet (sin Toast, sin Calendar) ────────────────────
+  router.post('/manual-fulfillment', async (req, res) => {
+    try {
+      const {
+        storeId, clientName, clientPhone, clientEmail,
+        eventType, guestCount, deliveryMethod, deliveryAddress,
+        deliveryNotes, eventDate, eventTime,
+        items = [], drinks = [], addons = [],
+      } = req.body;
+
+      if (!storeId || !clientName || !eventType || !guestCount || !eventDate) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing required fields: storeId, clientName, eventType, guestCount, eventDate',
+        });
+      }
+
+      // Construir estimatedFulfillmentDate combinando fecha + hora
+      const fulfillmentDate = eventTime
+        ? new Date(`${eventDate}T${eventTime}`)
+        : new Date(`${eventDate}T12:00:00`);
+
+      if (isNaN(fulfillmentDate.getTime())) {
+        return res.status(400).json({ success: false, error: 'Invalid eventDate or eventTime' });
+      }
+
+      const storeResult = await pool.query(
+        'SELECT id, name, code FROM stores WHERE id = $1', [storeId]
+      );
+      if (!storeResult.rows.length) {
+        return res.status(404).json({ success: false, error: 'Store not found' });
+      }
+      const store = storeResult.rows[0];
+
+      // Armar parsedData con el formato que espera FulfillmentSheetCalculator
+      const parsedData = {
+        items: [
+          ...items,
+          ...drinks,
+          ...addons,
+        ],
+      };
+
+      // Insertar orden en DB con is_manual_sheet = true
+      const displayNumber = `M-${Date.now()}`;
+      const toastGuid     = `MANUAL-SHEET-${Date.now()}`;
+
+      const insertResult = await pool.query(`
+        INSERT INTO catering_orders (
+          store_id, toast_order_guid, display_number,
+          event_type, status, client_name, client_email, client_phone,
+          estimated_fulfillment_date, delivery_method, delivery_address, delivery_notes,
+          parsed_data, guest_count, total_amount,
+          is_manually_edited, is_manual_sheet,
+          payment_status, pdf_version,
+          created_at, updated_at
+        ) VALUES (
+          $1, $2, $3,
+          $4, 'confirmed', $5, $6, $7,
+          $8, $9, $10, $11,
+          $12, $13, 0,
+          true, true,
+          'PAID', 1,
+          CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        ) RETURNING id
+      `, [
+        storeId, toastGuid, displayNumber,
+        eventType, clientName, clientEmail || null, clientPhone || null,
+        fulfillmentDate.toISOString(),
+        deliveryMethod || 'PICKUP',
+        deliveryAddress || null,
+        deliveryNotes || null,
+        JSON.stringify(parsedData),
+        guestCount,
+      ]);
+
+      const orderId = insertResult.rows[0].id;
+
+      // Construir objeto order para el generator
+      const order = {
+        id:                       orderId,
+        storeId,
+        storeName:                store.name,
+        storeCode:                store.code,
+        toastOrderGuid:           toastGuid,
+        displayNumber,
+        eventType,
+        status:                   'confirmed',
+        clientName,
+        clientEmail:              clientEmail || null,
+        clientPhone:              clientPhone || null,
+        estimatedFulfillmentDate: fulfillmentDate.toISOString(),
+        kitchenFinishTime:        null,
+        deliveryMethod:           deliveryMethod || 'PICKUP',
+        deliveryAddress:          deliveryAddress || null,
+        deliveryNotes:            deliveryNotes || null,
+        parsedData,
+        items:                    parsedData.items,
+        guestCount,
+        totalAmount:              0,
+        overrideData:             {},
+        overrideNotes:            null,
+        isManuallyEdited:         true,
+        isManualSheet:            true,
+        pdfVersion:               1,
+        paymentStatus:            'PAID',
+        distanceMiles:            null,
+        getKitchenFinishTime:     () => null,
+        getEventTypeLabel:        () => eventType,
+        getStatusLabel:           () => 'Confirmed',
+        isUpcoming:               () => fulfillmentDate > new Date(),
+      };
+
+      const calculatedData = await fulfillmentCalculator.calculate(order);
+      calculatedData.header.isManuallyEdited = true;
+      calculatedData.header.isManualSheet    = true;
+      calculatedData.header.pdfVersion       = 1;
+
+      const pdf     = await fulfillmentGenerator.generate(calculatedData);
+      const pdfName = fulfillmentGenerator.buildFilename(order, store.code);
+
+      res.set({
+        'Content-Type':        'application/pdf',
+        'Content-Disposition': `inline; filename="${pdfName}"`,
+        'Content-Length':      pdf.length,
+      });
+      res.send(pdf);
+
+    } catch (error) {
+      console.error('❌ Manual fulfillment error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // ── Fulfillment PDF ───────────────────────────────────────────────────────
   router.post('/:id/fulfillment-sheet', async (req, res) => {
     try {
@@ -96,7 +230,7 @@ module.exports = (
 
       const calculatedData = await fulfillmentCalculator.calculate(order);
       calculatedData.header.isManuallyEdited = order.isManuallyEdited || false;
-      calculatedData.header.isEZCater        = order.isEZCater        || false;
+      calculatedData.header.isManualSheet    = order.isManualSheet    || false;
       calculatedData.header.pdfVersion       = newVersion;
 
       const pdf     = await fulfillmentGenerator.generate(calculatedData);
@@ -127,20 +261,23 @@ module.exports = (
             labelsPdfName    = fulfillmentGenerator.buildFilename(order, order.storeCode, 'labels');
           }
 
-          let calResult;
-          if (existingEventId) {
-            calResult = await googleCalendarService.updateEvent(order, existingEventId, pdf, pdfName, calculatedData, labelsPdf, labelsPdfName);
-          } else {
-            calResult = await googleCalendarService.createEvent(order, pdf, pdfName, calculatedData, labelsPdf, labelsPdfName);
-          }
-          if (calResult?.eventId) {
-            await pool.query(`
-              UPDATE catering_orders
-              SET google_event_id = $1, calendar_needs_update = false, updated_at = CURRENT_TIMESTAMP
-              WHERE id = $2
-            `, [calResult.eventId, order.id]);
-            await auditService.logCalendarSynced(order.id, 'system', calResult.eventId);
-            console.log(`📅 Calendar synced for order ${order.displayNumber}`);
+          // Skip calendar para manual sheets
+          if (!order.isManualSheet) {
+            let calResult;
+            if (existingEventId) {
+              calResult = await googleCalendarService.updateEvent(order, existingEventId, pdf, pdfName, calculatedData, labelsPdf, labelsPdfName);
+            } else {
+              calResult = await googleCalendarService.createEvent(order, pdf, pdfName, calculatedData, labelsPdf, labelsPdfName);
+            }
+            if (calResult?.eventId) {
+              await pool.query(`
+                UPDATE catering_orders
+                SET google_event_id = $1, calendar_needs_update = false, updated_at = CURRENT_TIMESTAMP
+                WHERE id = $2
+              `, [calResult.eventId, order.id]);
+              await auditService.logCalendarSynced(order.id, 'system', calResult.eventId);
+              console.log(`📅 Calendar synced for order ${order.displayNumber}`);
+            }
           }
         } catch (err) {
           console.error('❌ Post-PDF background error:', err.message);
@@ -202,7 +339,7 @@ module.exports = (
 
       const calculatedData = await fulfillmentCalculator.calculate(order);
       calculatedData.header.isManuallyEdited = order.isManuallyEdited || false;
-      calculatedData.header.isEZCater        = order.isEZCater        || false;
+      calculatedData.header.isManualSheet    = order.isManualSheet    || false;
       calculatedData.header.pdfVersion       = order.pdfVersion || 1;
 
       const pdf = await fulfillmentGenerator.generate(calculatedData);
