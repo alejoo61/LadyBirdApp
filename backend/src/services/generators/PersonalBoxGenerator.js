@@ -19,8 +19,6 @@ class PersonalBoxGenerator extends BaseGenerator {
     let consolidatedPaperGoods = this._consolidatePaperGoods(paperGoods, hasBirdBox ? birdBoxResult.paperGoods : null);
     if (hasTacoBar) consolidatedPaperGoods = this._consolidatePaperGoods(consolidatedPaperGoods, tacoBarResult.paperGoods);
 
-
-
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
     <style>${this._baseCSS(badge.color)}</style></head><body>
     ${this._headerHTML(header, badge)}
@@ -67,7 +65,7 @@ class PersonalBoxGenerator extends BaseGenerator {
       </div>
     </div>` : ''}
 
-    ${this._renderAddons(addons || [], chipsRow, hasBirdBox ? birdBoxResult : null)}
+    ${this._renderAddons(addons || [], chipsRow, birdBoxResult, tacoBarResult)}
     ${this._renderDrinksConsolidated(drinks || [], header.guestCount)}
     ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
     ${this._renderQC([
@@ -92,7 +90,6 @@ class PersonalBoxGenerator extends BaseGenerator {
     if (!birdBoxPG || !birdBoxPG.included) return personalPG;
     if (!personalPG || !personalPG.included) return birdBoxPG;
 
-    // Normalizar nombres para poder mergear correctamente
     const normalize = (name) => {
       const n = (name || '').toLowerCase();
       if (n.includes('fork'))       return 'Forks';
@@ -114,12 +111,8 @@ class PersonalBoxGenerator extends BaseGenerator {
       }
     }
 
-    return {
-      included: true,
-      items:    Object.values(merged),
-    };
+    return { included: true, items: Object.values(merged) };
   }
-
 
   // ─── PERSONAL BOX GROUPS ──────────────────────────────────────────────────
   _renderBoxGroups(personalBoxes, totalBoxes) {
@@ -197,76 +190,33 @@ class PersonalBoxGenerator extends BaseGenerator {
     </div>`;
   }
 
-  // ─── CHIPS SUMMARY ───────────────────────────────────────────────────────
-  _renderChipsConsolidated(chipsRow, birdBoxResult, addons) {
-    const rows = [];
-    let totalPans = 0;
-
-    // Personal chips (individual boxes)
-    if (chipsRow && chipsRow.total > 0) {
-      rows.push(`
-        <tr>
-          <td>Personal Boxes (${chipsRow.total} boxes)</td>
-          <td style="font-weight:900">${chipsRow.total} each</td>
-        </tr>`);
-    }
-
-    // Bird Box chips
-    if (birdBoxResult?.chipsBreakdown?.length > 0) {
-      for (const c of birdBoxResult.chipsBreakdown) {
-        const match = (c.amount || '').match(/^(\d+)/);
-        if (match) totalPans += parseInt(match[1]);
-        rows.push(`
-          <tr>
-            <td>${c.label}</td>
-            <td style="font-weight:900">${c.amount}</td>
-          </tr>`);
-      }
-    }
-
-    // Addons que incluyen chips (Chips & Guacamole, Chips & Queso, etc.)
-    const chipAddons = (addons || []).filter(a => a.hasChipsPan && a.chipPans > 0);
-    for (const addon of chipAddons) {
-      totalPans += addon.chipPans;
-      rows.push(`
-        <tr>
-          <td>${addon.name} (×${addon.quantity || 1})</td>
-          <td style="font-weight:900">${addon.chipPans} Full Pan${addon.chipPans > 1 ? 's' : ''}</td>
-        </tr>`);
-    }
-
-    if (rows.length === 0) return '';
-
-    return `
-    <div class="section" style="margin-top:8px; border:2px solid #784212">
-      <div class="section-header" style="background:#784212; font-size:10px">Chips Summary</div>
-      <table>
-        <thead><tr><th>Description</th><th>Amount</th></tr></thead>
-        <tbody>
-          ${rows.join('')}
-          <tr style="background:#fef3c7; border-top:2px solid #784212">
-            <td style="font-weight:900; font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:#784212">TOTAL FULL PANS</td>
-            <td style="font-weight:900; font-size:12px; color:#784212">${totalPans} Full Pan${totalPans !== 1 ? 's' : ''}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>`;
-  }
-
   // ─── ADD-ONS ──────────────────────────────────────────────────────────────
-  _renderAddons(addons, chipsRow, birdBoxResult) {
+  // Cuenta chips de TODOS los eventos: personal boxes, bird box, taco bar, y addons standalone
+  _renderAddons(addons, chipsRow, birdBoxResult, tacoBarResult) {
     if (!addons || addons.length === 0) return '';
 
-    // Calcular total de Full Pans de chips
     let totalChipPans = 0;
+
+    // Chips del Bird Box (boxes con chips incluido)
     if (birdBoxResult?.chipsBreakdown?.length > 0) {
       for (const c of birdBoxResult.chipsBreakdown) {
         const match = (c.amount || '').match(/(\d+)/);
         if (match) totalChipPans += parseInt(match[1]);
       }
     }
-    // Chips de addons (Chips & Guacamole, etc.)
+
+    // Chips de addons standalone (Chips & Guacamole, Chips & Queso, etc.)
     for (const addon of addons) {
+      if (addon.hasChipsPan) totalChipPans += addon.chipPans || 0;
+    }
+
+    // Chips de addons del Taco Bar
+    for (const addon of (tacoBarResult?.addons || [])) {
+      if (addon.hasChipsPan) totalChipPans += addon.chipPans || 0;
+    }
+
+    // Chips de addons del Bird Box (standalone dentro del birdBoxResult)
+    for (const addon of (birdBoxResult?.addons || [])) {
       if (addon.hasChipsPan) totalChipPans += addon.chipPans || 0;
     }
 
@@ -284,7 +234,6 @@ class PersonalBoxGenerator extends BaseGenerator {
       </tr>`;
     }).join('');
 
-    // Fila de total chips si hay más de 0 pans
     const totalRow = totalChipPans > 0 ? `
       <tr style="background:#fef3c7; border-top:2px solid #784212">
         <td colspan="2" style="font-weight:900; font-size:9px; text-transform:uppercase; letter-spacing:0.08em; color:#784212">
