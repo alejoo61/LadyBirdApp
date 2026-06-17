@@ -46,7 +46,6 @@ class PersonalBoxGenerator extends BaseGenerator {
         ${bbGen._renderTacosByCombo(birdBoxResult.tacoRows || [])}
         ${bbGen._renderSidePacks(birdBoxResult.sidePacks || [])}
         ${bbGen._renderSalsas(birdBoxResult.salsas || [])}
-        ${bbGen._renderChipsTotal(birdBoxResult.chipsBreakdown || [], birdBoxResult.chipsAndSalsa || [], birdBoxResult.boxes || [], birdBoxResult.hasManuasSalsas)}
         ${bbGen._renderAddons(birdBoxResult.addons || [])}
       </div>
     </div>` : ''}
