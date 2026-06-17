@@ -6,7 +6,7 @@ class TacoBarGenerator extends BaseGenerator {
   build(data) {
     const {
       header, proteins, toppings, salsas, tortillas, snacks,
-      paperGoods, hotItems, coldItems, dryItems, salads,
+      paperGoods, hotItems, coldItems, dryItems, salads, addons,
     } = data;
     const badge = this._eventTypeBadge(header.eventType);
 
@@ -28,6 +28,7 @@ class TacoBarGenerator extends BaseGenerator {
         ${this._renderSection('Tortillas', tortillaItems,   '#4a235a')}
         ${this._renderSection('Snacks',    snacks    || [], '#784212')}
         ${this._renderSalads(salads || [])}
+        ${this._renderAddons(addons || [])}
       </div>
       <div class="right-col">
         ${this._renderPaperGoods(paperGoods)}
@@ -101,6 +102,43 @@ class TacoBarGenerator extends BaseGenerator {
         ⚠ Dressing served on the side — do not forget:
         ${dressings.map(d => `<span style="font-weight:700; color:#1a1a1a; margin-left:4px">${d}</span>`).join(' &nbsp;|&nbsp; ')}
       </div>
+    </div>`;
+  }
+  _renderAddons(addons) {
+    if (!addons || addons.length === 0) return '';
+
+    let totalChipPans = 0;
+    for (const a of addons) { if (a.hasChipsPan) totalChipPans += a.chipPans || 0; }
+
+    const rows = addons.map(addon => {
+      const qty    = addon.quantity || 1;
+      const amount = addon.totalAmount ? `${addon.totalAmount} ${addon.unit || ''}`.trim() : `${qty}x`;
+      const pkg    = addon.packaging || '—';
+      return `
+        <tr>
+          <td><strong>${addon.name}</strong>${qty > 1 ? `<span style="color:#6b21a8;font-weight:900;margin-left:4px">×${qty}</span>` : ''}</td>
+          <td style="text-align:center;font-weight:900">${qty}</td>
+          <td>${amount}</td>
+          <td>${pkg}</td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+        </tr>`;
+    }).join('');
+
+    const totalRow = totalChipPans > 0 ? `
+      <tr style="background:#fef3c7;border-top:2px solid #784212">
+        <td colspan="2" style="font-weight:900;font-size:9px;text-transform:uppercase;letter-spacing:0.08em;color:#784212">Total Chips</td>
+        <td colspan="2" style="font-weight:900;font-size:11px;color:#784212">${totalChipPans} Full Pans</td>
+        <td class="checkbox-cell"></td><td class="checkbox-cell"></td>
+      </tr>` : '';
+
+    return `
+    <div class="section">
+      <div class="section-header" style="background:#6b21a8">Add-ons</div>
+      <table>
+        <thead><tr><th>Item</th><th style="text-align:center">Qty</th><th>Amount</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th></tr></thead>
+        <tbody>${rows}${totalRow}</tbody>
+      </table>
     </div>`;
   }
 }

@@ -20,7 +20,7 @@ class BirdBoxGenerator extends BaseGenerator {
         ${this._renderTacosByCombo(tacoRows || [])}
         ${this._renderSidePacks(sidePacks || [])}
         ${this._renderSalsas(salsas || [])}
-        ${this._renderChipsTotal(chipsBreakdown || [], chipsAndSalsa || [], boxes || [], hasManuasSalsas)}
+
         ${this._renderAddons(addons || [])}
         ${this._renderSalads(salads || [])}
       </div>
@@ -192,44 +192,39 @@ class BirdBoxGenerator extends BaseGenerator {
   // ─── ADD-ONS ──────────────────────────────────────────────────────────────
   _renderAddons(addons) {
     if (!addons || addons.length === 0) return '';
+
+    // Total chip pans
+    let totalChipPans = 0;
+    for (const a of addons) { if (a.hasChipsPan) totalChipPans += a.chipPans || 0; }
+
     const rows = addons.map(addon => {
       const qty       = addon.quantity || 1;
-      const isChurro  = addon.unit === 'pan';
-      const amountStr = isChurro
-        ? `${qty} pan${qty > 1 ? 's' : ''}`
-        : `${addon.totalAmount || (32 * qty)} ${addon.unit}`;
-      const chipsStr  = `+ ${qty} pan${qty > 1 ? 's' : ''} chips`;
-      const servesStr = addon.servesCount
-        ? `Serves ${addon.servesCount}`
-        : (isChurro ? 'Serves 8–10' : `Serves ${20 * qty}`);
+      const amount    = addon.totalAmount ? `${addon.totalAmount} ${addon.unit || ''}`.trim() : `${qty}x`;
+      const pkg       = addon.packaging || '—';
       return `
         <tr>
-          <td>
-            <strong>${addon.name}</strong>
-            ${qty > 1 ? `<span style="color:#6b21a8; font-weight:900; margin-left:4px">×${qty}</span>` : ''}
-          </td>
-          <td>
-            ${amountStr}
-            ${!isChurro ? `<br><span style="font-size:8px; color:#666">${chipsStr}</span>` : ''}
-          </td>
-          <td style="font-size:8px; color:#555">${servesStr}</td>
-          <td>${addon.utensil || '—'}</td>
-          <td>${addon.packagingQty ? `${addon.packagingQty}x ${addon.packaging}` : (addon.packaging || '—')}</td>
+          <td><strong>${addon.name}</strong>${qty > 1 ? `<span style="color:#6b21a8;font-weight:900;margin-left:4px">×${qty}</span>` : ''}</td>
+          <td style="text-align:center;font-weight:900">${qty}</td>
+          <td>${amount}</td>
+          <td>${pkg}</td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
         </tr>`;
     }).join('');
+
+    const totalRow = totalChipPans > 0 ? `
+      <tr style="background:#fef3c7;border-top:2px solid #784212">
+        <td colspan="2" style="font-weight:900;font-size:9px;text-transform:uppercase;letter-spacing:0.08em;color:#784212">Total Chips</td>
+        <td colspan="2" style="font-weight:900;font-size:11px;color:#784212">${totalChipPans} Full Pans</td>
+        <td class="checkbox-cell"></td><td class="checkbox-cell"></td>
+      </tr>` : '';
+
     return `
     <div class="section">
-      <div class="section-header" style="background:#6b21a8">Add-on Packs</div>
+      <div class="section-header" style="background:#6b21a8">Add-ons</div>
       <table>
-        <thead>
-          <tr>
-            <th>Pack</th><th>Amount</th><th>Serves</th>
-            <th>Utensil</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
+        <thead><tr><th>Item</th><th style="text-align:center">Qty</th><th>Amount</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th></tr></thead>
+        <tbody>${rows}${totalRow}</tbody>
       </table>
     </div>`;
   }
