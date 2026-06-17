@@ -16,63 +16,11 @@ module.exports = (
 ) => {
 
   // ── CRUD básico ───────────────────────────────────────────────────────────
-  router.get('/',      (req, res) => cateringOrderController.getAll(req, res));
-  router.get('/:id',   (req, res) => cateringOrderController.getById(req, res));
-  router.post('/',     (req, res) => cateringOrderController.createManual(req, res));
-
-  router.patch('/:id/status',         (req, res) => cateringOrderController.updateStatus(req, res));
-  router.patch('/:id/override',       (req, res) => cateringOrderController.updateOverride(req, res));
-  router.patch('/:id/payment-status', (req, res) => cateringOrderController.overridePaymentStatus(req, res));
-
-  // ── Manual edit ───────────────────────────────────────────────────────────
-  router.patch('/:id/manual', async (req, res) => {
-    try {
-      const actor  = req.headers['x-user'] || 'unknown';
-      const before = await cateringOrderService.getOrderById(req.params.id);
-      const order  = await cateringOrderService.updateManual(req.params.id, req.body);
-      const dto    = CateringOrderMapper.toDTO(order);
-      res.json({ success: true, data: dto, message: 'Order updated manually' });
-
-      setImmediate(async () => {
-        try {
-          await auditService.logManualEdit(req.params.id, actor, before, req.body);
-          await toastSyncService._autoPdfAndCalendar(order.id, dto.storeCode, dto.storeName);
-        } catch (err) {
-          console.error('❌ Post-edit background error:', err.message);
-        }
-      });
-    } catch (error) {
-      const code = error.message.includes('not found') ? 404 : 500;
-      res.status(code).json({ success: false, error: error.message });
-    }
-  });
-
-  // ── Calendar sync manual ──────────────────────────────────────────────────
-  router.post('/:id/sync-calendar', async (req, res) => {
-    try {
-      const actor = req.headers['x-user'] || 'unknown';
-      const order = await cateringOrderService.getOrderById(req.params.id);
-      const storeResult = await pool.query(
-        'SELECT name, code FROM stores WHERE id = $1', [order.storeId]
-      );
-      order.storeName = storeResult.rows[0]?.name || '';
-      order.storeCode = storeResult.rows[0]?.code || '';
-      res.json({ success: true, message: 'Calendar sync started' });
-
-      setImmediate(async () => {
-        try {
-          await toastSyncService._autoPdfAndCalendar(order.id, order.storeCode, order.storeName);
-          await auditService.logCalendarSynced(order.id, actor, order.googleEventId);
-        } catch (err) {
-          console.error('❌ Manual Calendar sync:', err.message);
-        }
-      });
-    } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
+  router.get('/',    (req, res) => cateringOrderController.getAll(req, res));
+  router.get('/:id', (req, res) => cateringOrderController.getById(req, res));
 
   // ── Manual Fulfillment Sheet (sin Toast, sin Calendar) ────────────────────
+  // IMPORTANTE: debe ir antes de router.post('/') para que no sea capturado por /:id
   router.post('/manual-fulfillment', async (req, res) => {
     try {
       const {
@@ -89,7 +37,6 @@ module.exports = (
         });
       }
 
-      // Construir estimatedFulfillmentDate combinando fecha + hora
       const fulfillmentDate = eventTime
         ? new Date(`${eventDate}T${eventTime}`)
         : new Date(`${eventDate}T12:00:00`);
@@ -106,16 +53,10 @@ module.exports = (
       }
       const store = storeResult.rows[0];
 
-      // Armar parsedData con el formato que espera FulfillmentSheetCalculator
       const parsedData = {
-        items: [
-          ...items,
-          ...drinks,
-          ...addons,
-        ],
+        items: [...items, ...drinks, ...addons],
       };
 
-      // Insertar orden en DB con is_manual_sheet = true
       const displayNumber = `M-${Date.now()}`;
       const toastGuid     = `MANUAL-SHEET-${Date.now()}`;
 
@@ -150,7 +91,6 @@ module.exports = (
 
       const orderId = insertResult.rows[0].id;
 
-      // Construir objeto order para el generator
       const order = {
         id:                       orderId,
         storeId,
@@ -206,6 +146,61 @@ module.exports = (
     }
   });
 
+  // ── CRUD post/patch ───────────────────────────────────────────────────────
+  router.post('/', (req, res) => cateringOrderController.createManual(req, res));
+
+  router.patch('/:id/status',         (req, res) => cateringOrderController.updateStatus(req, res));
+  router.patch('/:id/override',       (req, res) => cateringOrderController.updateOverride(req, res));
+  router.patch('/:id/payment-status', (req, res) => cateringOrderController.overridePaymentStatus(req, res));
+
+  // ── Manual edit ───────────────────────────────────────────────────────────
+  router.patch('/:id/manual', async (req, res) => {
+    try {
+      const actor  = req.headers['x-user'] || 'unknown';
+      const before = await cateringOrderService.getOrderById(req.params.id);
+      const order  = await cateringOrderService.updateManual(req.params.id, req.body);
+      const dto    = CateringOrderMapper.toDTO(order);
+      res.json({ success: true, data: dto, message: 'Order updated manually' });
+
+      setImmediate(async () => {
+        try {
+          await auditService.logManualEdit(req.params.id, actor, before, req.body);
+          await toastSyncService._autoPdfAndCalendar(order.id, dto.storeCode, dto.storeName);
+        } catch (err) {
+          console.error('❌ Post-edit background error:', err.message);
+        }
+      });
+    } catch (error) {
+      const code = error.message.includes('not found') ? 404 : 500;
+      res.status(code).json({ success: false, error: error.message });
+    }
+  });
+
+  // ── Calendar sync manual ──────────────────────────────────────────────────
+  router.post('/:id/sync-calendar', async (req, res) => {
+    try {
+      const actor = req.headers['x-user'] || 'unknown';
+      const order = await cateringOrderService.getOrderById(req.params.id);
+      const storeResult = await pool.query(
+        'SELECT name, code FROM stores WHERE id = $1', [order.storeId]
+      );
+      order.storeName = storeResult.rows[0]?.name || '';
+      order.storeCode = storeResult.rows[0]?.code || '';
+      res.json({ success: true, message: 'Calendar sync started' });
+
+      setImmediate(async () => {
+        try {
+          await toastSyncService._autoPdfAndCalendar(order.id, order.storeCode, order.storeName);
+          await auditService.logCalendarSynced(order.id, actor, order.googleEventId);
+        } catch (err) {
+          console.error('❌ Manual Calendar sync:', err.message);
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // ── Fulfillment PDF ───────────────────────────────────────────────────────
   router.post('/:id/fulfillment-sheet', async (req, res) => {
     try {
@@ -251,7 +246,6 @@ module.exports = (
           );
           const existingEventId = orderRow.rows[0]?.google_event_id;
 
-          // Generar labels si es Personal Box
           let labelsPdf     = null;
           let labelsPdfName = null;
           if (order.eventType === 'PERSONAL_BOX') {
@@ -261,7 +255,6 @@ module.exports = (
             labelsPdfName    = fulfillmentGenerator.buildFilename(order, order.storeCode, 'labels');
           }
 
-          // Skip calendar para manual sheets
           if (!order.isManualSheet) {
             let calResult;
             if (existingEventId) {
