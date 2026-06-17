@@ -443,8 +443,8 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
       );
 
       if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(json.error || 'Failed to generate');
+        const text = await res.text().catch(() => '');
+        throw new Error(`${res.status}: ${text.slice(0, 300)}`);
       }
 
       const blob = await res.blob();
