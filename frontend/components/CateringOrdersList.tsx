@@ -1,12 +1,14 @@
 'use client';
 
+import { useState } from 'react';
 import type { Store } from '@/services/api/storesApi';
 import EditOrderModal from '@/components/EditOrderModal';
 import CateringOrderCard from '@/components/catering/CateringOrderCard';
 import CateringOrderFilters from '@/components/catering/CateringOrderFilters';
+import ManualFulfillmentWizard from '@/components/catering/ManualFulfillmentWizard';
 import { useCateringOrders } from '@/components/catering/useCateringOrders';
 import { StandaloneToast, TabGroup, PageHeader, EmptyState, LoadingSpinner } from '@/components/ui';
-import { Building2, Plus } from 'lucide-react';
+import { Building2, Plus, ClipboardList } from 'lucide-react';
 import Button from '@/components/ui/Button';
 
 export default function CateringOrdersList({
@@ -15,6 +17,7 @@ export default function CateringOrdersList({
   onNewOrder?: (stores: Store[]) => void;
 }) {
   const c = useCateringOrders();
+  const [showManualWizard, setShowManualWizard] = useState(false);
 
   return (
     <div className="space-y-6 relative">
@@ -33,6 +36,14 @@ export default function CateringOrdersList({
         />
       )}
 
+      {showManualWizard && (
+        <ManualFulfillmentWizard
+          stores={c.stores}
+          onClose={() => setShowManualWizard(false)}
+          onSuccess={() => c.loadOrders()}
+        />
+      )}
+
       <PageHeader
         title="Catering Orders"
         subtitle={
@@ -47,11 +58,19 @@ export default function CateringOrdersList({
           </>
         }
         actions={
-          <Button
-            icon={<Plus size={16} />}
-            onClick={() => onNewOrder?.(c.stores)}>
-            New Order
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              icon={<ClipboardList size={16} />}
+              variant="secondary"
+              onClick={() => setShowManualWizard(true)}>
+              Manual Sheet
+            </Button>
+            <Button
+              icon={<Plus size={16} />}
+              onClick={() => onNewOrder?.(c.stores)}>
+              New Order
+            </Button>
+          </div>
         }
       />
 
@@ -77,11 +96,13 @@ export default function CateringOrdersList({
         filterPayment={c.filterPayment}
         filterUpcoming={c.filterUpcoming}
         filterToday={c.filterToday}
+        filterManualSheet={c.filterManualSheet}
         hideUnpaid={c.hideUnpaid}
         dateRange={c.dateRange}
         hasFilters={c.hasFilters}
         unpaidCount={c.unpaidCount}
         todayCount={c.todayCount}
+        manualSheetCount={c.manualSheetCount}
         onSearchChange={c.setSearchTerm}
         onStoreChange={c.setFilterStoreId}
         onEventTypeChange={c.setFilterEventType}
@@ -90,6 +111,7 @@ export default function CateringOrdersList({
         onPaymentChange={c.setFilterPayment}
         onUpcomingToggle={() => c.setFilterUpcoming(!c.filterUpcoming)}
         onTodayToggle={() => c.setFilterToday(!c.filterToday)}
+        onManualSheetToggle={() => c.setFilterManualSheet(!c.filterManualSheet)}
         onHideUnpaidToggle={() => c.setHideUnpaid(!c.hideUnpaid)}
         onDateRangeChange={c.setDateRange}
         onClearFilters={c.clearFilters}

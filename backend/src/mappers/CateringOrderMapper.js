@@ -46,7 +46,7 @@ class CateringOrderMapper {
 
     entity.paymentStatus          = row.payment_status        || 'OPEN';
     entity.isManuallyEdited       = row.is_manually_edited    || false;
-    entity.isEZCater              = row.is_ez_cater           || false;
+    entity.isManualSheet          = row.is_manual_sheet       || false;
     entity.pdfVersion             = row.pdf_version           || 1;
     entity.pdfNeedsUpdate         = row.pdf_needs_update      || false;
     entity.calendarNeedsUpdate    = row.calendar_needs_update || false;
@@ -82,8 +82,8 @@ class CateringOrderMapper {
       isPaid:                   ['PAID', 'CLOSED'].includes(entity.paymentStatus),
       isHouseAccount:           entity.parsedData?.isHouseAccount || false,
       isSpaceRental,
-      isManuallyEdited:         entity.isManuallyEdited || false,
-      isEZCater:                entity.isEZCater        || false,
+      isManuallyEdited:         entity.isManuallyEdited  || false,
+      isManualSheet:            entity.isManualSheet     || false,
       pdfVersion:               entity.pdfVersion || 1,
       pdfNeedsUpdate:           entity.pdfNeedsUpdate || false,
       calendarNeedsUpdate:      entity.calendarNeedsUpdate || false,

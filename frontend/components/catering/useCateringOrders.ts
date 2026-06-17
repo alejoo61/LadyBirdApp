@@ -32,16 +32,17 @@ export function useCateringOrders() {
   const [syncingCalendar, setSyncingCalendar]   = useState<string | null>(null);
 
   // ── Filters ───────────────────────────────────────────────────────────────
-  const [searchTerm, setSearchTerm]           = useState('');
-  const [filterEventType, setFilterEventType] = useState('');
-  const [filterStatus, setFilterStatus]       = useState('');
-  const [filterMethod, setFilterMethod]       = useState('');
-  const [filterPayment, setFilterPayment]     = useState('');
-  const [filterStoreId, setFilterStoreId]     = useState('');
-  const [filterUpcoming, setFilterUpcoming]   = useState(false);
-  const [filterToday, setFilterToday]         = useState(false);
-  const [hideUnpaid, setHideUnpaid]           = useState(false);
-  const [dateRange, setDateRange]             = useState<DateRange | undefined>(undefined);
+  const [searchTerm, setSearchTerm]               = useState('');
+  const [filterEventType, setFilterEventType]     = useState('');
+  const [filterStatus, setFilterStatus]           = useState('');
+  const [filterMethod, setFilterMethod]           = useState('');
+  const [filterPayment, setFilterPayment]         = useState('');
+  const [filterStoreId, setFilterStoreId]         = useState('');
+  const [filterUpcoming, setFilterUpcoming]       = useState(false);
+  const [filterToday, setFilterToday]             = useState(false);
+  const [filterManualSheet, setFilterManualSheet] = useState(false);
+  const [hideUnpaid, setHideUnpaid]               = useState(false);
+  const [dateRange, setDateRange]                 = useState<DateRange | undefined>(undefined);
 
   // ── Toast helper ──────────────────────────────────────────────────────────
   const triggerToast = useCallback((msg: string) => {
@@ -186,6 +187,7 @@ export function useCateringOrders() {
     setDateRange(undefined);
     setFilterUpcoming(false);
     setFilterToday(false);
+    setFilterManualSheet(false);
     setHideUnpaid(false);
   }, []);
 
@@ -201,24 +203,26 @@ export function useCateringOrders() {
                   : needsReviewOrders;
 
   const filteredOrders = tabOrders.filter(o => {
-    const matchSearch     = !searchTerm ||
+    const matchSearch        = !searchTerm ||
       o.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       o.displayNumber?.includes(searchTerm) ||
       o.deliveryAddress?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchUpcoming   = !filterUpcoming || o.isUpcoming;
-    const matchToday      = !filterToday    || isToday(o.estimatedFulfillmentDate);
-    const matchHideUnpaid = !hideUnpaid     || o.paymentStatus !== 'OPEN';
-    return matchSearch && matchUpcoming && matchToday && matchHideUnpaid;
+    const matchUpcoming      = !filterUpcoming      || o.isUpcoming;
+    const matchToday         = !filterToday         || isToday(o.estimatedFulfillmentDate);
+    const matchHideUnpaid    = !hideUnpaid          || o.paymentStatus !== 'OPEN';
+    const matchManualSheet   = !filterManualSheet   || o.isManualSheet;
+    return matchSearch && matchUpcoming && matchToday && matchHideUnpaid && matchManualSheet;
   });
 
   const hasFilters = !!(filterStoreId || filterEventType || filterStatus || filterMethod ||
-    dateRange || filterUpcoming || filterPayment || filterToday || hideUnpaid);
+    dateRange || filterUpcoming || filterPayment || filterToday || hideUnpaid || filterManualSheet);
 
   // ── Counts ────────────────────────────────────────────────────────────────
-  const unpaidCount       = tabOrders.filter(o => o.paymentStatus === 'OPEN').length;
-  const houseAccountCount = orders.filter(o => o.isHouseAccount && o.paymentStatus === 'OPEN').length;
-  const spaceRentalUnpaid = spaceRentalOrders.filter(o => o.paymentStatus === 'OPEN').length;
-  const todayCount        = tabOrders.filter(o => isToday(o.estimatedFulfillmentDate)).length;
+  const unpaidCount        = tabOrders.filter(o => o.paymentStatus === 'OPEN').length;
+  const houseAccountCount  = orders.filter(o => o.isHouseAccount && o.paymentStatus === 'OPEN').length;
+  const spaceRentalUnpaid  = spaceRentalOrders.filter(o => o.paymentStatus === 'OPEN').length;
+  const todayCount         = tabOrders.filter(o => isToday(o.estimatedFulfillmentDate)).length;
+  const manualSheetCount   = tabOrders.filter(o => o.isManualSheet).length;
 
   const tabs = [
     { key: 'catering'       as OrderTabType, label: 'Catering Events', count: cateringOrders.length     },
@@ -246,11 +250,12 @@ export function useCateringOrders() {
     filterStoreId, setFilterStoreId,
     filterUpcoming, setFilterUpcoming,
     filterToday, setFilterToday,
+    filterManualSheet, setFilterManualSheet,
     hideUnpaid, setHideUnpaid,
     dateRange, setDateRange,
     hasFilters, clearFilters,
     // Counts
-    unpaidCount, houseAccountCount, todayCount,
+    unpaidCount, houseAccountCount, todayCount, manualSheetCount,
     // Tabs
     tabs,
     // Actions

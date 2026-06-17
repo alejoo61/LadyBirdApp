@@ -4,36 +4,39 @@ import { DateRange } from 'react-day-picker';
 import DateRangePicker from '@/components/DateRangePicker';
 import type { Store } from '@/services/api/storesApi';
 import type { OrderTabType } from './orderUtils';
-import { Filter, CalendarDays, EyeOff } from 'lucide-react';
+import { Filter, CalendarDays, EyeOff, ClipboardList } from 'lucide-react';
 import { SearchInput } from '@/components/ui';
 
 interface CateringOrderFiltersProps {
-  stores:           Store[];
-  activeTab:        OrderTabType;
-  searchTerm:       string;
-  filterStoreId:    string;
-  filterEventType:  string;
-  filterStatus:     string;
-  filterMethod:     string;
-  filterPayment:    string;
-  filterUpcoming:   boolean;
-  filterToday:      boolean;
-  hideUnpaid:       boolean;
-  dateRange:        DateRange | undefined;
-  hasFilters:       boolean;
-  unpaidCount:      number;
-  todayCount:       number;
-  onSearchChange:        (v: string) => void;
-  onStoreChange:         (v: string) => void;
-  onEventTypeChange:     (v: string) => void;
-  onStatusChange:        (v: string) => void;
-  onMethodChange:        (v: string) => void;
-  onPaymentChange:       (v: string) => void;
-  onUpcomingToggle:      () => void;
-  onTodayToggle:         () => void;
-  onHideUnpaidToggle:    () => void;
-  onDateRangeChange:     (range: DateRange | undefined) => void;
-  onClearFilters:        () => void;
+  stores:              Store[];
+  activeTab:           OrderTabType;
+  searchTerm:          string;
+  filterStoreId:       string;
+  filterEventType:     string;
+  filterStatus:        string;
+  filterMethod:        string;
+  filterPayment:       string;
+  filterUpcoming:      boolean;
+  filterToday:         boolean;
+  filterManualSheet:   boolean;
+  hideUnpaid:          boolean;
+  dateRange:           DateRange | undefined;
+  hasFilters:          boolean;
+  unpaidCount:         number;
+  todayCount:          number;
+  manualSheetCount:    number;
+  onSearchChange:          (v: string) => void;
+  onStoreChange:           (v: string) => void;
+  onEventTypeChange:       (v: string) => void;
+  onStatusChange:          (v: string) => void;
+  onMethodChange:          (v: string) => void;
+  onPaymentChange:         (v: string) => void;
+  onUpcomingToggle:        () => void;
+  onTodayToggle:           () => void;
+  onManualSheetToggle:     () => void;
+  onHideUnpaidToggle:      () => void;
+  onDateRangeChange:       (range: DateRange | undefined) => void;
+  onClearFilters:          () => void;
 }
 
 const selectCls = 'px-4 py-2 bg-bone rounded-xl text-[11px] font-black uppercase tracking-widest text-night/60 border-none outline-none cursor-pointer';
@@ -42,10 +45,11 @@ export default function CateringOrderFilters({
   stores, activeTab,
   searchTerm, filterStoreId, filterEventType, filterStatus,
   filterMethod, filterPayment, filterUpcoming, filterToday,
-  hideUnpaid, dateRange, hasFilters, unpaidCount, todayCount,
+  filterManualSheet, hideUnpaid, dateRange, hasFilters,
+  unpaidCount, todayCount, manualSheetCount,
   onSearchChange, onStoreChange, onEventTypeChange, onStatusChange,
   onMethodChange, onPaymentChange, onUpcomingToggle, onTodayToggle,
-  onHideUnpaidToggle, onDateRangeChange, onClearFilters,
+  onManualSheetToggle, onHideUnpaidToggle, onDateRangeChange, onClearFilters,
 }: CateringOrderFiltersProps) {
   return (
     <div className="bg-white p-4 rounded-[2rem] shadow-sm border border-tumbleweed space-y-3">
@@ -135,6 +139,20 @@ export default function CateringOrderFilters({
             filterUpcoming ? 'bg-night text-bone shadow-sm' : 'bg-bone text-night/40 hover:text-night'
           }`}>
           Upcoming Only
+        </button>
+
+        <button
+          onClick={onManualSheetToggle}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
+            filterManualSheet ? 'bg-emerald-700 text-white shadow-sm' : 'bg-bone text-night/40 hover:text-night'
+          }`}>
+          <ClipboardList size={12} />
+          Manual Sheets
+          {manualSheetCount > 0 && (
+            <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${filterManualSheet ? 'bg-white/20' : 'bg-emerald-100 text-emerald-700'}`}>
+              {manualSheetCount}
+            </span>
+          )}
         </button>
 
         {hasFilters && (
