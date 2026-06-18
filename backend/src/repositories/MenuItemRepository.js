@@ -14,6 +14,8 @@ const ORDER_CREATION_CATEGORIES = [
   'drink',
   'creamer',
   'drink_cups',
+  'individual_taco',
+  'salad',
 ];
 
 class MenuItemRepository {
@@ -71,19 +73,21 @@ class MenuItemRepository {
         )
       ORDER BY
         CASE category
-          WHEN 'menu_item'   THEN 1
-          WHEN 'size'        THEN 2
-          WHEN 'combo'       THEN 3
-          WHEN 'protein'     THEN 4
-          WHEN 'topping'     THEN 5
-          WHEN 'salsa'       THEN 6
-          WHEN 'tortilla'    THEN 7
-          WHEN 'snack'       THEN 8
-          WHEN 'chips_salsa' THEN 9
-          WHEN 'paper'       THEN 10
-          WHEN 'drink'       THEN 11
-          WHEN 'creamer'     THEN 12
-          WHEN 'drink_cups'  THEN 13
+          WHEN 'menu_item'      THEN 1
+          WHEN 'size'           THEN 2
+          WHEN 'combo'          THEN 3
+          WHEN 'protein'        THEN 4
+          WHEN 'topping'        THEN 5
+          WHEN 'salsa'          THEN 6
+          WHEN 'tortilla'       THEN 7
+          WHEN 'snack'          THEN 8
+          WHEN 'chips_salsa'    THEN 9
+          WHEN 'paper'          THEN 10
+          WHEN 'drink'          THEN 11
+          WHEN 'creamer'        THEN 12
+          WHEN 'drink_cups'     THEN 13
+          WHEN 'individual_taco' THEN 14
+          WHEN 'salad'          THEN 15
           ELSE 99
         END,
         sort_order ASC,
@@ -94,13 +98,12 @@ class MenuItemRepository {
 
   /**
    * Retorna el item base del evento (precio por persona).
-   * Ej: "Build Your Own Taco Bar" para TACO_BAR.
    */
   async findBaseItem(eventType) {
     const baseItemNames = {
       TACO_BAR:     'Build Your Own Taco Bar',
-      BIRD_BOX:     null, // Bird Box no tiene precio base por persona — usa size
-      PERSONAL_BOX: null, // Personal Box usa el precio del box directamente
+      BIRD_BOX:     null,
+      PERSONAL_BOX: null,
     };
 
     const baseName = baseItemNames[eventType];
