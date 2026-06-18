@@ -41,6 +41,9 @@ class FulfillmentSheetCalculator {
         result = await calculateTacoBar(cateringOrder, this.resolver);
     }
 
+    console.log('🧮 CALC RESULT snacks:', JSON.stringify(result.snacks?.map(s=>s.name)));
+    console.log('🧮 CALC RESULT addons:', JSON.stringify(result.addons?.map(a=>a.name)));
+    console.log('🧮 CALC RESULT totalChipPans:', result.totalChipPans);
     return { header, ...result };
   }
 
