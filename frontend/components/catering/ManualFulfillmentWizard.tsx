@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   X, Plus, Trash2, ChevronRight, ChevronLeft,
   FileText, ClipboardList, Coffee, UtensilsCrossed,
@@ -64,24 +64,9 @@ interface WizardProps {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const TACO_BAR_PROTEINS   = ['Salsa Verde Braised Chicken (taco bar)', 'House-smoked Brisket (taco bar)', 'Potato (taco bar)', 'Black Beans (taco bar)'];
-const TACO_BAR_TOPPINGS   = ['Monterrey Jack Cheese (taco bar)', 'Shredded Cabbage (taco bar)', 'Pico De Gallo (taco bar)', 'Pickled Red Onion (taco bar)'];
-const TACO_BAR_SALSAS     = ['Salsa Roja (mild)', 'Verde (mild-med)', 'Patron Spicy'];
-const TACO_BAR_EXTRAS     = ['Queso (taco bar)', 'Guac (taco bar)', 'Bunuelos (taco bar)', 'YES, I want paper goods'];
-const TACO_BAR_TORTILLAS  = ['Housemade Flour Tortilla (catering)', '50/50 Flour/Corn (catering)', 'Housemade Corn Tortillas'];
-
-const BB_BREAKFAST_TACOS  = ["#1 Bacon, Egg, & Cheese*", "#2 Potato, Egg, & Cheese*", "#3 Chorizo, Egg, & Cheese*", "#4 Egg & Cheese*", "#5 Egg, Refried Bean, Avocado, Potato*", "#6 Migas*"];
-const BB_LUNCH_TACOS      = ["#1 Chicken Tinga", "#2 Barbacoa", "#3 Al Pastor", "#4 Potato & Black Bean", "#5 Brisket"];
-const BB_TORTILLAS        = ['Housemade Flour Tortilla', 'Housemade Corn Tortillas', '50/50 Flour/Corn (catering)'];
-const BB_TACO_COUNTS      = [20, 30, 40];
-
-const PB_BREAKFAST_TACOS  = ["#1 Bacon, Egg, & Cheese*", "#2 Potato, Egg, & Cheese*", "#3 Chorizo, Egg, & Cheese*", "#4 Egg & Cheese*", "#5 Egg, Refried Bean, Avocado, Potato*", "#6 Migas*"];
-const PB_LUNCH_TACOS      = ["#1 Chicken Tinga", "#2 Barbacoa", "#3 Al Pastor", "#4 Potato & Black Bean", "#5 Brisket"];
-const PB_SALSAS           = ['Roja (mild) 0.75 oz cup', 'Verde (mild-med) 0.75 oz cup', 'Patron (spicy) 0.75 oz cup'];
-const PB_TORTILLAS        = ['Housemade Flour Tortilla', 'Housemade Corn Tortillas', '50/50 Flour/Corn (catering)'];
-
 const DRINKS              = ["June Drip Coffee", "Iced Coffee", "Cold Brew", "Lavender Limeade", "Hibiscus Lemonade", "Agua Fresca", "Half & Half"];
 const ADDONS              = ["Chips & Salsa", "Chips & Guacamole", "Chips & Queso", "Bunuelos (serves 10)"];
+const BB_TACO_COUNTS      = [20, 30, 40];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -152,7 +137,42 @@ function buildItems(events: EventBlock[], drinks: DrinkItem[], addons: AddonItem
 
 // ─── Sub-forms ────────────────────────────────────────────────────────────────
 
+// Carga items del menu API y los agrupa por categoría
+function useMenuItems(eventType: string) {
+  const [items, setItems] = useState<import('@/services/api/menuApi').MenuItem[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    import('@/services/api/menuApi').then(({ menuApi }) =>
+      menuApi.getForOrderCreation(eventType)
+    ).then(res => {
+      setItems(res.data.data);
+    }).catch(console.error)
+    .finally(() => setLoading(false));
+  }, [eventType]);
+
+  const byCategory = items.reduce<Record<string, string[]>>((acc, item) => {
+    if (!acc[item.category]) acc[item.category] = [];
+    acc[item.category].push(item.name);
+    return acc;
+  }, {});
+
+  return { byCategory, loading };
+}
+
 function TacoBarForm({ value, onChange }: { value: TacoBarConfig; onChange: (v: TacoBarConfig) => void }) {
+  const { byCategory, loading } = useMenuItems('TACO_BAR');
+
+  const proteins  = byCategory['protein']  || [];
+  const toppings  = byCategory['topping']  || [];
+  const salsas    = byCategory['salsa']    || [];
+  const tortillas = byCategory['tortilla'] || [];
+  // snacks = queso, guac, bunuelos + paper
+  const snacks    = byCategory['snack']    || [];
+  const papers    = byCategory['paper']    || [];
+  const extras    = [...snacks, ...papers.filter(p => p.toLowerCase().includes('paper') || p.toLowerCase().includes('goods'))];
+
   const toggle = (field: 'proteins' | 'toppings' | 'salsas' | 'extras', item: string) => {
     const arr = value[field];
     onChange({ ...value, [field]: arr.includes(item) ? arr.filter(x => x !== item) : [...arr, item] });
@@ -163,6 +183,8 @@ function TacoBarForm({ value, onChange }: { value: TacoBarConfig; onChange: (v: 
       active ? 'bg-night text-bone border-night' : 'bg-bone text-night/50 border-transparent hover:border-night/20'
     }`;
 
+  if (loading) return <div className="text-[11px] text-night/40 font-black uppercase tracking-widest animate-pulse">Loading menu...</div>;
+
   return (
     <div className="space-y-4">
       <div>
@@ -172,10 +194,10 @@ function TacoBarForm({ value, onChange }: { value: TacoBarConfig; onChange: (v: 
           className="w-24 px-3 py-2 bg-bone rounded-xl text-sm font-black text-night outline-none" />
       </div>
       {([
-        ['Proteins', 'proteins', TACO_BAR_PROTEINS],
-        ['Toppings', 'toppings', TACO_BAR_TOPPINGS],
-        ['Salsas',   'salsas',   TACO_BAR_SALSAS],
-        ['Extras',   'extras',   TACO_BAR_EXTRAS],
+        ['Proteins', 'proteins', proteins],
+        ['Toppings', 'toppings', toppings],
+        ['Salsas',   'salsas',   salsas],
+        ['Extras',   'extras',   extras],
       ] as [string, 'proteins'|'toppings'|'salsas'|'extras', string[]][]).map(([label, field, opts]) => (
         <div key={field}>
           <label className="text-[10px] font-black uppercase tracking-widest text-night/40 block mb-2">{label}</label>
@@ -187,7 +209,7 @@ function TacoBarForm({ value, onChange }: { value: TacoBarConfig; onChange: (v: 
       <div>
         <label className="text-[10px] font-black uppercase tracking-widest text-night/40 block mb-2">Tortilla</label>
         <div className="flex flex-wrap gap-2">
-          {TACO_BAR_TORTILLAS.map(t => <button key={t} type="button" onClick={() => onChange({ ...value, tortilla: t })} className={cls(value.tortilla === t)}>{t}</button>)}
+          {tortillas.map(t => <button key={t} type="button" onClick={() => onChange({ ...value, tortilla: t })} className={cls(value.tortilla === t)}>{t}</button>)}
         </div>
       </div>
     </div>
@@ -195,15 +217,31 @@ function TacoBarForm({ value, onChange }: { value: TacoBarConfig; onChange: (v: 
 }
 
 function BirdBoxForm({ value, onChange }: { value: BirdBoxConfig; onChange: (v: BirdBoxConfig) => void }) {
-  const tacoOpts = value.mealType === 'breakfast' ? BB_BREAKFAST_TACOS : BB_LUNCH_TACOS;
-  const toggle   = (taco: string) => onChange({
+  const eventType = value.mealType === 'breakfast' ? 'BIRD_BOX' : 'BIRD_BOX';
+  const { byCategory, loading } = useMenuItems(eventType);
+
+  const allCombos  = byCategory['combo'] || [];
+  const tortillas  = byCategory['tortilla'] || [];
+
+  const toggle = (taco: string) => onChange({
     ...value,
     tacos: value.tacos.includes(taco) ? value.tacos.filter(t => t !== taco) : [...value.tacos, taco],
   });
+
   const cls = (active: boolean) =>
     `px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-widest cursor-pointer transition-all border ${
       active ? 'bg-night text-bone border-night' : 'bg-bone text-night/50 border-transparent hover:border-night/20'
     }`;
+
+  // Filtrar combos por meal type basado en el nombre
+  const tacoOpts = allCombos.filter(c => {
+    const lc = c.toLowerCase();
+    return value.mealType === 'breakfast'
+      ? lc.includes('bacon') || lc.includes('egg') || lc.includes('potato') || lc.includes('chorizo') || lc.includes('migas') || lc.includes('avocado') || /^#[1-6]/.test(c)
+      : lc.includes('chicken') || lc.includes('barbacoa') || lc.includes('pastor') || lc.includes('brisket') || lc.includes('bean') || /^#[1-5]/.test(c);
+  });
+
+  if (loading) return <div className="text-[11px] text-night/40 font-black uppercase tracking-widest animate-pulse">Loading menu...</div>;
 
   return (
     <div className="space-y-4">
@@ -232,7 +270,7 @@ function BirdBoxForm({ value, onChange }: { value: BirdBoxConfig; onChange: (v: 
       <div>
         <label className="text-[10px] font-black uppercase tracking-widest text-night/40 block mb-2">Tortilla</label>
         <div className="flex flex-wrap gap-2">
-          {BB_TORTILLAS.map(t => <button key={t} type="button" onClick={() => onChange({ ...value, tortilla: t })} className={cls(value.tortilla === t)}>{t}</button>)}
+          {tortillas.map(t => <button key={t} type="button" onClick={() => onChange({ ...value, tortilla: t })} className={cls(value.tortilla === t)}>{t}</button>)}
         </div>
       </div>
       <div className="flex gap-4">
@@ -250,7 +288,19 @@ function BirdBoxForm({ value, onChange }: { value: BirdBoxConfig; onChange: (v: 
 }
 
 function PersonalBoxForm({ value, onChange }: { value: PersonalBoxConfig; onChange: (v: PersonalBoxConfig) => void }) {
-  const tacoOpts = value.mealType === 'breakfast' ? PB_BREAKFAST_TACOS : PB_LUNCH_TACOS;
+  const { byCategory, loading } = useMenuItems('PERSONAL_BOX');
+
+  const allCombos  = byCategory['combo'] || [];
+  const tortillas  = byCategory['tortilla'] || [];
+  const salsas     = byCategory['salsa'] || [];
+
+  const tacoOpts = allCombos.filter(c => {
+    const lc = c.toLowerCase();
+    return value.mealType === 'breakfast'
+      ? lc.includes('bacon') || lc.includes('egg') || lc.includes('potato') || lc.includes('chorizo') || lc.includes('migas') || lc.includes('avocado') || /^#[1-6]/.test(c)
+      : lc.includes('chicken') || lc.includes('barbacoa') || lc.includes('pastor') || lc.includes('brisket') || lc.includes('bean') || /^#[1-5]/.test(c);
+  });
+
   const cls = (active: boolean) =>
     `px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-widest cursor-pointer transition-all border ${
       active ? 'bg-night text-bone border-night' : 'bg-bone text-night/50 border-transparent hover:border-night/20'
@@ -260,13 +310,15 @@ function PersonalBoxForm({ value, onChange }: { value: PersonalBoxConfig; onChan
     const exists = value.tacos.find(t => t.name === name);
     onChange({
       ...value,
-      tacos: exists ? value.tacos.filter(t => t.name !== name) : [...value.tacos, { name, tortilla: PB_TORTILLAS[0] }],
+      tacos: exists ? value.tacos.filter(t => t.name !== name) : [...value.tacos, { name, tortilla: tortillas[0] || '' }],
     });
   };
 
   const setTortilla = (tacoName: string, tortilla: string) => {
     onChange({ ...value, tacos: value.tacos.map(t => t.name === tacoName ? { ...t, tortilla } : t) });
   };
+
+  if (loading) return <div className="text-[11px] text-night/40 font-black uppercase tracking-widest animate-pulse">Loading menu...</div>;
 
   return (
     <div className="space-y-4">
@@ -299,7 +351,7 @@ function PersonalBoxForm({ value, onChange }: { value: PersonalBoxConfig; onChan
             <div key={taco.name} className="flex items-center gap-3">
               <span className="text-[11px] font-bold text-night/60 w-48 truncate">{taco.name}</span>
               <div className="flex gap-2">
-                {PB_TORTILLAS.map(tort => (
+                {tortillas.map(tort => (
                   <button key={tort} type="button" onClick={() => setTortilla(taco.name, tort)} className={cls(taco.tortilla === tort)}>{tort}</button>
                 ))}
               </div>
@@ -310,19 +362,18 @@ function PersonalBoxForm({ value, onChange }: { value: PersonalBoxConfig; onChan
       <div>
         <label className="text-[10px] font-black uppercase tracking-widest text-night/40 block mb-2">Salsa</label>
         <div className="flex flex-wrap gap-2">
-          {PB_SALSAS.map(s => <button key={s} type="button" onClick={() => onChange({ ...value, salsa: s })} className={cls(value.salsa === s)}>{s}</button>)}
+          {salsas.map(s => <button key={s} type="button" onClick={() => onChange({ ...value, salsa: s })} className={cls(value.salsa === s)}>{s}</button>)}
         </div>
       </div>
     </div>
   );
 }
-
 // ─── Event Block Editor ───────────────────────────────────────────────────────
 
 function EventEditor({ ev, onChange, onRemove }: { ev: EventBlock; onChange: (v: EventBlock) => void; onRemove: () => void }) {
-  const defaultTacoBar: TacoBarConfig = { guestCount: 10, proteins: [], toppings: [], salsas: [], tortilla: TACO_BAR_TORTILLAS[0], extras: [] };
-  const defaultBirdBox: BirdBoxConfig = { tacoCount: 20, tacos: [], tortilla: BB_TORTILLAS[0], chipsIncluded: true, paperItems: true, mealType: 'breakfast' };
-  const defaultPersonalBox: PersonalBoxConfig = { quantity: 1, tacos: [], salsa: PB_SALSAS[0], mealType: 'breakfast' };
+  const defaultTacoBar: TacoBarConfig = { guestCount: 10, proteins: [], toppings: [], salsas: [], tortilla: '', extras: [] };
+  const defaultBirdBox: BirdBoxConfig = { tacoCount: 20, tacos: [], tortilla: '', chipsIncluded: true, paperItems: true, mealType: 'breakfast' };
+  const defaultPersonalBox: PersonalBoxConfig = { quantity: 1, tacos: [], salsa: '', mealType: 'breakfast' };
 
   const setType = (type: EventType) => {
     onChange({
@@ -386,7 +437,7 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
 
   // Step 2 — Events
   const [events, setEvents] = useState<EventBlock[]>([
-    { id: uid(), type: 'TACO_BAR', tacoBar: { guestCount: 10, proteins: [], toppings: [], salsas: [], tortilla: TACO_BAR_TORTILLAS[0], extras: [] } },
+    { id: uid(), type: 'TACO_BAR', tacoBar: { guestCount: 10, proteins: [], toppings: [], salsas: [], tortilla: '', extras: [] } },
   ]);
 
   // Step 3 — Extras
@@ -395,7 +446,7 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
 
   const addEvent = () => setEvents(prev => [...prev, {
     id: uid(), type: 'TACO_BAR',
-    tacoBar: { guestCount: 10, proteins: [], toppings: [], salsas: [], tortilla: TACO_BAR_TORTILLAS[0], extras: [] },
+    tacoBar: { guestCount: 10, proteins: [], toppings: [], salsas: [], tortilla: '', extras: [] },
   }]);
 
   const updateEvent = (id: string, ev: EventBlock) => setEvents(prev => prev.map(e => e.id === id ? ev : e));
@@ -424,9 +475,15 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
     setError(null);
     setLoading(true);
     try {
-      const guestCount = totalGuests || 1;
       const items = buildItems(events, drinks, addons);
-      const eventType = events.length === 1 ? events[0].type : 'TACO_BAR'; // primary type
+
+      // Si hay múltiples eventos, usar PERSONAL_BOX porque ese handler
+      // del calculator sabe combinar TACO_BAR + BIRD_BOX + PERSONAL_BOX en un solo sheet.
+      // Si hay un solo evento, usar su tipo directamente.
+      const eventType = events.length === 1 ? events[0].type : 'PERSONAL_BOX';
+
+      // guestCount: total de guests de todos los eventos
+      const guestCount = totalGuests || 1;
 
       const body = {
         storeId, clientName, clientPhone, clientEmail,
