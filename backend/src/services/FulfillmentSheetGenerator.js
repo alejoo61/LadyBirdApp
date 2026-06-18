@@ -22,6 +22,7 @@ class FulfillmentSheetGenerator {
   async generate(calculatedData) {
     const { header } = calculatedData;
     const generator  = GENERATORS[header.eventType] || GENERATORS.TACO_BAR;
+    console.log('🔍 eventType:', header.eventType, '| generator:', generator?.constructor?.name, '| has build:', typeof generator?.build);
     const html       = generator.build(calculatedData);
     return this.generateFromHtml(html);
   }
