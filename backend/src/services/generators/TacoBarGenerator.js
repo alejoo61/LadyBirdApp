@@ -7,6 +7,7 @@ class TacoBarGenerator extends BaseGenerator {
     const {
       header, proteins, toppings, salsas, tortillas, snacks,
       paperGoods, hotItems, coldItems, dryItems, salads, addons,
+      individualTacos,
     } = data;
     const badge = this._eventTypeBadge(header.eventType);
 
@@ -15,7 +16,6 @@ class TacoBarGenerator extends BaseGenerator {
       totalAmount: t.totalAmount ?? t.total,
       unit:        t.unit || 'each',
     }));
-
 
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
     <style>${this._baseCSS(badge.color)}</style></head><body>
@@ -27,6 +27,7 @@ class TacoBarGenerator extends BaseGenerator {
         ${this._renderSection('Salsas',    salsas    || [], '#7d5a00')}
         ${this._renderSection('Tortillas', tortillaItems,   '#4a235a')}
         ${this._renderSection('Snacks',    snacks    || [], '#784212')}
+        ${this._renderIndividualTacos(individualTacos || [])}
         ${this._renderSalads(salads || [])}
         ${this._renderAddons(addons || [])}
       </div>
@@ -35,7 +36,16 @@ class TacoBarGenerator extends BaseGenerator {
       </div>
     </div>
     ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
-    ${this._renderQC()}
+    ${this._renderQC(individualTacos && individualTacos.length > 0 ? [
+      'All HOT items temped and packed in correct packaging',
+      'All COLD items / condiments included',
+      'Individual tacos wrapped and labeled correctly',
+      'Serving utensils included (Tongs / Spoons / Ladles)',
+      'Paper goods / Cutlery matched to guest count',
+      'Delivery notes reviewed — special instructions followed',
+      'Order label applied to all boxes',
+      'Driver assigned and notified',
+    ] : null)}
     </body></html>`;
   }
 
@@ -51,9 +61,11 @@ class TacoBarGenerator extends BaseGenerator {
       const proteinDisplay = isNoProtein
         ? 'NO PROTEIN'
         : (salad.protein || '').replace(/^(small|large)\s+with\s+/i, '').toUpperCase();
-      const servesTotal = salad.serves
-        ? salad.serves * qty
-        : (salad.size === 'Large' ? 20 : 10) * qty;
+      const servesTotal = salad.size === 'Individual'
+        ? qty
+        : salad.serves
+          ? salad.serves * qty
+          : (salad.size === 'Large' ? 20 : 10) * qty;
 
       return `
         <tr>
@@ -104,6 +116,7 @@ class TacoBarGenerator extends BaseGenerator {
       </div>
     </div>`;
   }
+
   _renderAddons(addons) {
     if (!addons || addons.length === 0) return '';
 

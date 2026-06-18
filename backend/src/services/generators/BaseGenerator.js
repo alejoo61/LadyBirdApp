@@ -204,11 +204,48 @@ class BaseGenerator {
         <div class="info-row"><span class="info-label">Kitchen Finish</span><span class="info-value">${this._formatDate(header.kitchenFinishTime)}</span></div>
         ${header.distanceMiles ? `<div class="info-row"><span class="info-label">Distance</span><span class="info-value">${header.distanceMiles} miles</span></div>` : ''}
         ${phone ? `<div class="info-row"><span class="info-label">Phone</span><span class="info-value">${phone}</span></div>` : ''}
-
       </div>
     </div>
     ${header.deliveryNotes ? `<div class="notes-box"><h4>Delivery Notes</h4><p class="notes-text">${header.deliveryNotes}</p></div>` : ''}
     `;
+  }
+
+  // ─── INDIVIDUAL TACOS ─────────────────────────────────────────────────────
+  _renderIndividualTacos(individualTacos) {
+    if (!individualTacos || individualTacos.length === 0) return '';
+    const rows = individualTacos.map(item => {
+      const qty       = item.quantity || 1;
+      const tortilla  = item.tortilla || 'Flour Tortilla';
+      const packaging = item.packaging || `${qty}x Individual Wrap`;
+      return `
+        <tr>
+          <td><strong>${item.name}</strong></td>
+          <td style="text-align:center; font-weight:900">${qty}</td>
+          <td style="font-size:8px; font-weight:bold; color:#2e7d32">${tortilla}</td>
+          <td>Tongs Small</td>
+          <td>${packaging}</td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+        </tr>`;
+    }).join('');
+    return `
+    <div class="section" style="margin-top:6px">
+      <div class="section-header" style="background:#2e7d32">Individual Tacos</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Combo</th>
+            <th style="text-align:center">Qty</th>
+            <th>Tortilla</th>
+            <th>Utensil</th>
+            <th>Packaging</th>
+            <th>Packed?</th>
+            <th>Loaded?</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
   }
 
   _renderSection(title, items, color = '#2d3748') {
@@ -326,7 +363,6 @@ class BaseGenerator {
 
   // ─── UTENSILS ─────────────────────────────────────────────────────────────
   _collectUtensils(allItemArrays) {
-    // Extrae utensilios únicos de múltiples arrays de items
     const utensilMap = {};
     for (const items of allItemArrays) {
       for (const item of (items || [])) {
@@ -383,7 +419,6 @@ class BaseGenerator {
           <td class="checkbox-cell"><span class="checkbox"></span></td>
         </tr>`);
 
-      // Sub-drinks (Half & Half contents)
       if (drink.subDrinks?.length > 0) {
         const subLabel = drink.subDrinks.join(' + ');
         drinkRows.push(`
@@ -395,7 +430,6 @@ class BaseGenerator {
           </tr>`);
       }
 
-      // Creamers
       if (drink.creamers?.length > 0) {
         for (const cr of drink.creamers) {
           drinkRows.push(`
@@ -415,7 +449,6 @@ class BaseGenerator {
       }
     }
 
-    // Una sola fila consolidada de cups al final
     const cupRows = [];
     if (needsColdCups && guestCount) {
       cupRows.push(`

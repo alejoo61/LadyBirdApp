@@ -25,6 +25,9 @@ const BIRD_BOX_KEYWORDS = [
   'bird box',
 ];
 
+// Individual taco keywords — items sin modifiers que empiezan con #N
+const INDIVIDUAL_TACO_KEYWORDS = ['individual taco', 'individually wrapped'];
+
 const THREE_SALSAS_THRESHOLD = 30;
 const TACO_HALF_PAN_MAX      = 18;
 
@@ -70,6 +73,7 @@ class FulfillmentSheetCalculator {
     const grouped          = this._groupByCategory(withoutTortillas);
     const salads           = this._extractSalads(items);
     const snacks           = grouped.snack || [];
+    const individualTacos  = this._extractIndividualTacos(items);
 
     // Detectar addons standalone (Bunuelos, Chips & Guacamole, etc.)
     const addons = [];
@@ -77,6 +81,8 @@ class FulfillmentSheetCalculator {
       const itemNameLc = (item.displayName || item.name || '').toLowerCase();
       if (DRINK_KEYWORDS.some(k => itemNameLc.includes(k))) continue;
       if (item.modifiers && item.modifiers.length > 0) continue;
+      // Saltar individual tacos — ya los procesamos
+      if (this._isIndividualTaco(itemNameLc, item.modifiers || [])) continue;
       const dn            = item.displayName || item.name || '';
       const canonicalName = await this.resolver.resolveCanonicalName(dn);
       if (!canonicalName) continue;
@@ -98,7 +104,6 @@ class FulfillmentSheetCalculator {
       });
     }
 
-    // Construir contexto para paper goods
     const paperContext = this._buildPaperContext(calculated, tortillas, grouped.salsa || [], salads, wantsChips);
     const paperGoods   = wantsPaper
       ? await this.resolver.calculatePaperGoods('TACO_BAR', guestCount, paperContext)
@@ -106,11 +111,12 @@ class FulfillmentSheetCalculator {
 
     return {
       header:    this._buildHeader(cateringOrder, delivery),
+      individualTacos,
       proteins:  grouped.protein || [],
       toppings:  grouped.topping || [],
       salsas:    grouped.salsa   || [],
       snacks, tortillas, paperGoods, salads, addons,
-      hotItems:  [...(grouped.protein || []), ...tortillas],
+      hotItems:  [...individualTacos, ...(grouped.protein || []), ...tortillas],
       coldItems: [...(grouped.topping || []), ...(grouped.salsa || []), ...salads],
       dryItems:  [...snacks],
     };
@@ -130,11 +136,12 @@ class FulfillmentSheetCalculator {
     const delivery = parsedData?.delivery || {};
     const items    = parsedData?.items || [];
 
-    const personalBoxes = [];
-    const birdBoxItems  = [];
-    const tacoBarItems  = [];
-    const drinks        = [];
-    const addons        = [];
+    const personalBoxes  = [];
+    const birdBoxItems   = [];
+    const tacoBarItems   = [];
+    const drinks         = [];
+    const addons         = [];
+    const individualTacos = this._extractIndividualTacos(items);
     let totalBoxes = 0;
 
     for (const item of items) {
@@ -148,6 +155,9 @@ class FulfillmentSheetCalculator {
         continue;
       }
 
+      // ── Individual Tacos — ya extraídos, saltar ──
+      if (this._isIndividualTaco(itemNameLc, modifiers)) continue;
+
       // ── Personal Box ──
       if (PERSONAL_BOX_KEYWORDS.some(k => itemNameLc.includes(k))) {
         const tortillaMod = modifiers.find(m => {
@@ -155,7 +165,6 @@ class FulfillmentSheetCalculator {
           return n.includes('flour') || n.includes('corn') || n.includes('50/50');
         });
 
-        // Extraer salsa del modifier (ej: "Verde (mild) 0.75 oz cup" → "Salsa Verde")
         const salsaMod = modifiers.find(m => {
           const n = (m.displayName || '').toLowerCase();
           return (n.includes('roja') || n.includes('verde') || n.includes('patron') || n.includes('patrón') || n.includes('most popular')) && n.includes('oz');
@@ -169,7 +178,6 @@ class FulfillmentSheetCalculator {
           else                                                      salsaLabel = 'Salsa Roja';
         }
 
-        // Extraer notas especiales (ej: 'Please label Vegetarian')
         const noteMod = modifiers.find(m => {
           const n = (m.displayName || '').toLowerCase();
           return n.includes('please label') || n.includes('note:') || n.includes('allerg');
@@ -213,8 +221,7 @@ class FulfillmentSheetCalculator {
         continue;
       }
 
-      // ── Addons (Bunuelos, Chips & Guacamole, etc.) ──
-      // Intentar resolver packaging desde la DB
+      // ── Addons ──
       {
         const dn            = item.displayName || item.name || '';
         const canonicalName = await this.resolver.resolveCanonicalName(dn);
@@ -228,7 +235,6 @@ class FulfillmentSheetCalculator {
               : this.resolver.calculateAmount(formula, guestCount);
             const fixedUnit   = isFixedPack ? this._getFixedPackUnit(canonicalName) : formula.unit;
             const packaging   = this.resolver.getPackaging(formula, guestCount);
-            // Chips addons siempre incluyen 1 Full Pan de chips por unidad
             const hasChipsPan = isFixedPack && ['Chips & Guacamole', 'Chips & Queso', 'Chips & Salsa'].includes(canonicalName);
             addons.push({
               name:         canonicalName,
@@ -248,7 +254,6 @@ class FulfillmentSheetCalculator {
       }
     }
 
-    // ── Tacos agrupados por combo (Personal Boxes) ──
     const comboTotals = {};
     for (const box of personalBoxes) {
       for (const combo of box.combos) {
@@ -267,7 +272,7 @@ class FulfillmentSheetCalculator {
       tempType:     'hot',
     }));
 
-    const chipsRow = totalBoxes > 0 ? { name: 'Personal Chips',     total: totalBoxes, unit: 'each',              tempType: 'dry'  } : null;
+    const chipsRow = totalBoxes > 0 ? { name: 'Personal Chips',      total: totalBoxes, unit: 'each',              tempType: 'dry'  } : null;
     const salsaRow = totalBoxes > 0 ? { name: 'Personal Salsa Roja', total: totalBoxes, unit: 'each', detail: '4 oz cup', tempType: 'cold' } : null;
 
     const paperGoods = totalBoxes > 0 ? {
@@ -278,13 +283,11 @@ class FulfillmentSheetCalculator {
       ],
     } : { included: false, items: [] };
 
-    // ── Procesar Bird Box items si los hay ──
     let birdBoxResult = null;
     if (birdBoxItems.length > 0) {
       birdBoxResult = await this._processBirdBoxItems(birdBoxItems, guestCount, cateringOrder, delivery);
     }
 
-    // ── Procesar Taco Bar items si los hay ──
     let tacoBarResult = null;
     if (tacoBarItems.length > 0) {
       tacoBarResult = await this._processTacoBarItems(tacoBarItems, guestCount, cateringOrder, delivery);
@@ -294,6 +297,7 @@ class FulfillmentSheetCalculator {
 
     return {
       header:            this._buildHeader(cateringOrder, delivery),
+      individualTacos,
       personalBoxes,
       personalTacoRows,
       chipsRow,
@@ -305,7 +309,7 @@ class FulfillmentSheetCalculator {
       drinks:            allDrinks,
       addons,
       proteins: [], toppings: [], salsas: [], tortillas: [], snacks: [],
-      hotItems:  [...personalTacoRows, ...(birdBoxResult?.hotItems || []), ...(tacoBarResult?.hotItems || []), ...allDrinks.filter(d => d.tempType === 'hot')],
+      hotItems:  [...individualTacos, ...personalTacoRows, ...(birdBoxResult?.hotItems || []), ...(tacoBarResult?.hotItems || []), ...allDrinks.filter(d => d.tempType === 'hot')],
       coldItems: [...(salsaRow ? [salsaRow] : []), ...(birdBoxResult?.coldItems || []), ...(tacoBarResult?.coldItems || []), ...allDrinks.filter(d => d.tempType === 'cold')],
       dryItems:  [...(chipsRow ? [chipsRow] : []), ...(birdBoxResult?.dryItems || []), ...(tacoBarResult?.dryItems || [])],
     };
@@ -317,6 +321,8 @@ class FulfillmentSheetCalculator {
     const sidePacks    = [];
     const drinks       = [];
     const manualSalsas = [];
+    const addonItems   = [];
+    const individualTacos = this._extractIndividualTacos(items);
 
     for (const item of items) {
       const itemNameLc   = (item.displayName || item.name || '').toLowerCase();
@@ -324,6 +330,9 @@ class FulfillmentSheetCalculator {
       const hasModifiers = modifiers.length > 0;
 
       if (SALAD_KEYWORDS.some(k => itemNameLc.includes(k))) continue;
+
+      // ── Individual Tacos — ya extraídos, saltar ──
+      if (this._isIndividualTaco(itemNameLc, modifiers)) continue;
 
       if (itemNameLc.includes(SIDE_PACK_KEYWORD)) {
         const qty      = item.quantity || 1;
@@ -434,7 +443,6 @@ class FulfillmentSheetCalculator {
       });
     }
 
-    // ── Combos + tortillas ──
     const comboTotals = {};
     let totalTacos    = 0;
 
@@ -470,10 +478,7 @@ class FulfillmentSheetCalculator {
       };
     });
 
-    // ── Salsas ──
-    const anyWantsChips = boxes.some(b => b.wantsChips);
-
-    // Usar totalTacos/2 como guest count efectivo para salsas y paper goods
+    const anyWantsChips   = boxes.some(b => b.wantsChips);
     const effectiveGuests = totalTacos > 0 ? Math.round(totalTacos / 2) : guestCount;
     const numSalsas       = effectiveGuests >= THREE_SALSAS_THRESHOLD ? 3 : 1;
     const ozPerSalsa      = Math.ceil(effectiveGuests / numSalsas);
@@ -491,7 +496,6 @@ class FulfillmentSheetCalculator {
       : [];
 
     const manualSalsaItems = manualSalsas.filter(i => i.category === 'salsa');
-    const addonItems       = manualSalsas.filter(i => i.category === 'addon');
     const chipsBoxCount    = boxes.filter(b => b.wantsChips).length;
 
     const chipsAndSalsa = anyWantsChips
@@ -503,11 +507,7 @@ class FulfillmentSheetCalculator {
     let paperGoods        = { included: false, items: [] };
 
     if (anyWantsPaper) {
-      // Usar tacos para inferir guests — más confiable que guestCount de la orden
       const tacoBoatCount = Math.ceil((totalTacos / 2 + 10) / 10) * 10;
-
-      // Contexto para paper goods del Bird Box
-      const allBirdBoxItems = [...tacoRows, ...manualSalsas];
       const bbContext = {
         hasQueso:         manualSalsas.some(i => (i.name||'').toLowerCase().includes('queso')),
         hasGuac:          manualSalsas.some(i => (i.name||'').toLowerCase().includes('guac')),
@@ -521,10 +521,7 @@ class FulfillmentSheetCalculator {
         saladCount:       0,
         spoonServingCount: 0,
       };
-
       paperGoods = await this.resolver.calculatePaperGoods('BIRD_BOX', effectiveGuests, bbContext);
-
-      // Override taco boats con el cálculo basado en tacos reales
       paperGoods.items = (paperGoods.items || []).map(pg => {
         const nameLc = (pg.name || '').toLowerCase();
         if (nameLc.includes('taco boat') || nameLc.includes('boat')) return { ...pg, qty: tacoBoatCount };
@@ -542,10 +539,11 @@ class FulfillmentSheetCalculator {
 
     return {
       header: this._buildHeader(cateringOrder, delivery),
+      individualTacos,
       boxes, sidePacks, tacoRows, chipsAndSalsa, chipsBreakdown,
       salsas: [...includedSalsas, ...manualSalsaItems], addons: addonItems,
       hasManuasSalsas, drinks, paperGoods, totalTacos, salads, summaryItems: [],
-      hotItems:  [...tacoRows, ...drinks.filter(d => d.tempType === 'hot'), ...addonItems.filter(i => i.tempType === 'hot'), ...sidePacks.flatMap(sp => sp.contents.filter(c => c.tempType === 'hot'))],
+      hotItems:  [...individualTacos, ...tacoRows, ...drinks.filter(d => d.tempType === 'hot'), ...addonItems.filter(i => i.tempType === 'hot'), ...sidePacks.flatMap(sp => sp.contents.filter(c => c.tempType === 'hot'))],
       coldItems: [...includedSalsas, ...drinks.filter(d => d.tempType === 'cold'), ...manualSalsaItems, ...addonItems.filter(i => i.tempType === 'cold'), ...salads, ...sidePacks.flatMap(sp => sp.contents.filter(c => c.tempType === 'cold')), ...drinks.flatMap(d => (d.creamers||[]).map(cr => ({ ...cr, tempType: 'cold' })))],
       dryItems:  [...chipsAndSalsa.filter(i => i.tempType === 'dry'), ...addonItems.filter(i => i.tempType === 'dry')],
       proteins: [], toppings: [], tortillas: [], snacks: [],
@@ -554,13 +552,9 @@ class FulfillmentSheetCalculator {
 
   // ─── TACO BAR ITEMS PROCESSOR ────────────────────────────────────────────
   async _processTacoBarItems(items, guestCount, cateringOrder, delivery) {
-    // Crear una orden virtual con solo los items de Taco Bar
     const virtualOrder = {
       ...cateringOrder,
-      parsedData: {
-        ...(cateringOrder.parsedData || {}),
-        items,
-      },
+      parsedData: { ...(cateringOrder.parsedData || {}), items },
     };
 
     const { ingredients, wantsPaper } =
@@ -596,6 +590,48 @@ class FulfillmentSheetCalculator {
     };
   }
 
+  // ─── HELPER: detectar individual taco ────────────────────────────────────
+  _isIndividualTaco(nameLc, modifiers) {
+    // Keyword explícito
+    if (INDIVIDUAL_TACO_KEYWORDS.some(k => nameLc.includes(k))) return true;
+    // Patrón #N con solo modifiers de tortilla (o sin modifiers)
+    if (/^#\d+\s/.test(nameLc)) {
+      const onlyTortillaModifiers = modifiers.every(m => {
+        const mn = (m.displayName || '').toLowerCase();
+        return mn.includes('flour') || mn.includes('corn') || mn.includes('50/50');
+      });
+      return onlyTortillaModifiers;
+    }
+    return false;
+  }
+
+  // ─── HELPER: extraer individual tacos ────────────────────────────────────
+  _extractIndividualTacos(items) {
+    const result = [];
+    for (const item of items) {
+      const nameLc    = (item.displayName || item.name || '').toLowerCase();
+      const modifiers = item.modifiers || [];
+      if (!this._isIndividualTaco(nameLc, modifiers)) continue;
+
+      const qty         = item.quantity || 1;
+      const tortillaMod = modifiers.find(m => {
+        const n = (m.displayName || '').toLowerCase();
+        return n.includes('flour') || n.includes('corn') || n.includes('50/50');
+      });
+      const is5050 = (tortillaMod?.displayName || '').toLowerCase().includes('50/50');
+
+      result.push({
+        name:      item.displayName || item.name,
+        quantity:  qty,
+        tortilla:  tortillaMod?.displayName || 'Housemade Flour Tortilla',
+        is5050,
+        packaging: `${qty}x Individual Wrap`,
+        tempType:  'hot',
+      });
+    }
+    return result;
+  }
+
   // ─── HELPER: parsear bebida ───────────────────────────────────────────────
   _parseDrink(item, modifiers, qty) {
     const itemNameLc = (item.displayName || item.name || '').toLowerCase();
@@ -623,7 +659,6 @@ class FulfillmentSheetCalculator {
       };
     }
 
-    // Bebidas con sub-drinks (Half & Half, mixtas)
     const subDrinkKeywords = ['limeade', 'agua', 'fresca', 'horchata', 'juice', 'watermelon', 'lavender'];
     const subDrinks = modifiers
       .filter(m => {
@@ -632,7 +667,6 @@ class FulfillmentSheetCalculator {
       })
       .map(m => m.displayName);
 
-    // Packaging según tamaño
     let packaging    = null;
     let packagingQty = qty;
     if (itemNameLc.includes('1/2 gal') || itemNameLc.includes('half gal')) {
@@ -686,11 +720,21 @@ class FulfillmentSheetCalculator {
       const proteinMod  = modifiers.find(m => { const n = (m.displayName||'').toLowerCase(); return n.includes('brisket') || n.includes('chicken') || n.includes('chorizo') || n.includes('without protein') || n.includes('no protein'); });
       const servesMatch = itemNameLc.match(/for\s+(\d+)/i);
       const isLarge     = itemNameLc.includes('large');
+      const isIndividual = itemNameLc.includes('individual');
       let saladType = 'Salad';
       if (itemNameLc.includes('city slicker')) saladType = 'City Slicker';
       else if (itemNameLc.includes('cowboy'))  saladType = 'The Cowboy';
       else if (itemNameLc.includes('farmer'))  saladType = 'The Farmer';
-      salads.push({ name: item.displayName || item.name, saladType, size: isLarge ? 'Large' : 'Small', protein: proteinMod?.displayName || null, serves: servesMatch ? parseInt(servesMatch[1]) : null, quantity: qty, packaging: isLarge ? '1 full pan' : '1 half pan', utensil: 'Tongs / Spoon', tempType: 'cold', dressing: this._getSaladDressing(saladType) });
+      salads.push({
+        name: item.displayName || item.name, saladType,
+        size: isIndividual ? 'Individual' : isLarge ? 'Large' : 'Small',
+        protein: proteinMod?.displayName || null,
+        serves: isIndividual ? 1 : servesMatch ? parseInt(servesMatch[1]) : null,
+        quantity: qty,
+        packaging: isIndividual ? `${qty}x Individual container` : isLarge ? '1 full pan' : '1 half pan',
+        utensil: 'Tongs / Spoon', tempType: 'cold',
+        dressing: this._getSaladDressing(saladType),
+      });
     }
     return salads;
   }
@@ -701,8 +745,6 @@ class FulfillmentSheetCalculator {
   }
 
   _getFixedPackAmount(canonicalName, qty) {
-    // Buñuelos: 1 pan = 40 piezas
-    // Chips & Guacamole/Queso/Salsa: 32 oz de dip
     const fixedAmounts = { 'Chips & Queso': 32, 'Chips & Guacamole': 32, 'Chips & Salsa': 32, 'Bunuelos': 40 };
     return (fixedAmounts[canonicalName] ?? 1) * qty;
   }
@@ -712,25 +754,14 @@ class FulfillmentSheetCalculator {
     return units[canonicalName] || 'each';
   }
 
-  // ─── PAPER GOODS CONTEXT BUILDER ────────────────────────────────────────
   _buildPaperContext(allItems, tortillas, salsas, salads, hasChips) {
     const names = allItems.map(i => (i.name || '').toLowerCase());
-
     const SPOON_SERVING_ITEMS = [
       'guacamole', 'esquites', 'black beans', 'pico de gallo', 'potato',
       'refried beans', 'scrambled eggs', 'salsa verde braised chicken', 'chorizo',
     ];
-
-    // Salsas: separar por packaging
-    const salsaSmall = salsas.filter(s => {
-      const pkg = (s.packaging || '').toLowerCase();
-      return pkg.includes('6 oz');
-    }).length;
-    const salsaLarge = salsas.filter(s => {
-      const pkg = (s.packaging || '').toLowerCase();
-      return pkg.includes('16 oz') || pkg.includes('32 oz');
-    }).length;
-
+    const salsaSmall = salsas.filter(s => (s.packaging || '').toLowerCase().includes('6 oz')).length;
+    const salsaLarge = salsas.filter(s => { const p = (s.packaging||'').toLowerCase(); return p.includes('16 oz') || p.includes('32 oz'); }).length;
     return {
       hasQueso:         names.some(n => n.includes('queso')),
       hasGuac:          names.some(n => n.includes('guacamole') || n.includes('guac')),

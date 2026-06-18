@@ -8,7 +8,7 @@ class PersonalBoxGenerator extends BaseGenerator {
     const {
       header, personalBoxes, personalTacoRows, chipsRow, salsaRow,
       totalBoxes, paperGoods, drinks, addons, birdBoxResult, tacoBarResult,
-      hotItems, coldItems, dryItems,
+      hotItems, coldItems, dryItems, individualTacos,
     } = data;
     const badge      = this._eventTypeBadge(header.eventType);
     const bbGen      = new BirdBoxGenerator();
@@ -65,6 +65,7 @@ class PersonalBoxGenerator extends BaseGenerator {
       </div>
     </div>` : ''}
 
+    ${this._renderIndividualTacos(individualTacos || [])}
     ${this._renderAddons(addons || [], chipsRow, birdBoxResult, tacoBarResult)}
     ${this._renderDrinksConsolidated(drinks || [], header.guestCount)}
     ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}

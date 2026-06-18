@@ -8,6 +8,7 @@ class BirdBoxGenerator extends BaseGenerator {
       header, summaryItems, boxes, tacoRows, chipsAndSalsa,
       chipsBreakdown, salsas, hasManuasSalsas, drinks, paperGoods,
       hotItems, coldItems, dryItems, addons, salads, sidePacks,
+      individualTacos,
     } = data;
 
     const badge = this._eventTypeBadge(header.eventType);
@@ -18,9 +19,9 @@ class BirdBoxGenerator extends BaseGenerator {
     <div class="main-grid">
       <div class="left-col">
         ${this._renderTacosByCombo(tacoRows || [])}
+        ${this._renderIndividualTacos(individualTacos || [])}
         ${this._renderSidePacks(sidePacks || [])}
         ${this._renderSalsas(salsas || [])}
-
         ${this._renderAddons(addons || [])}
         ${this._renderSalads(salads || [])}
       </div>
@@ -32,6 +33,7 @@ class BirdBoxGenerator extends BaseGenerator {
     ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
     ${this._renderQC([
       'All taco combos counted and packed correctly',
+      (individualTacos && individualTacos.length > 0) ? 'Individual tacos wrapped and labeled' : null,
       'Bird Box Side Pack prepared and labeled (Guac / Queso / Salsa / Chips)',
       'Add-on packs prepared and labeled (Queso / Guac / Salsa / Churro Chips)',
       'Salads packed with dressing on the side',
@@ -41,7 +43,7 @@ class BirdBoxGenerator extends BaseGenerator {
       'Delivery notes reviewed',
       'Order label applied to all boxes',
       'Driver assigned and notified',
-    ])}
+    ].filter(Boolean))}
     </body></html>`;
   }
 
@@ -122,10 +124,7 @@ class BirdBoxGenerator extends BaseGenerator {
             <th>Utensil</th><th>Packed?</th><th>Loaded?</th>
           </tr>
         </thead>
-        <tbody>
-          ${rows}
-          ${totalRow}
-        </tbody>
+        <tbody>${rows}${totalRow}</tbody>
       </table>
     </div>`;
   }
@@ -188,19 +187,17 @@ class BirdBoxGenerator extends BaseGenerator {
     </div>`;
   }
 
-
   // ─── ADD-ONS ──────────────────────────────────────────────────────────────
   _renderAddons(addons) {
     if (!addons || addons.length === 0) return '';
 
-    // Total chip pans
     let totalChipPans = 0;
     for (const a of addons) { if (a.hasChipsPan) totalChipPans += a.chipPans || 0; }
 
     const rows = addons.map(addon => {
-      const qty       = addon.quantity || 1;
-      const amount    = addon.totalAmount ? `${addon.totalAmount} ${addon.unit || ''}`.trim() : `${qty}x`;
-      const pkg       = addon.packaging || '—';
+      const qty    = addon.quantity || 1;
+      const amount = addon.totalAmount ? `${addon.totalAmount} ${addon.unit || ''}`.trim() : `${qty}x`;
+      const pkg    = addon.packaging || '—';
       return `
         <tr>
           <td><strong>${addon.name}</strong>${qty > 1 ? `<span style="color:#6b21a8;font-weight:900;margin-left:4px">×${qty}</span>` : ''}</td>
@@ -241,9 +238,11 @@ class BirdBoxGenerator extends BaseGenerator {
       const proteinDisplay = isNoProtein
         ? 'NO PROTEIN'
         : (salad.protein || '').replace(/^(small|large)\s+with\s+/i, '').toUpperCase();
-      const servesTotal = salad.serves
-        ? salad.serves * qty
-        : (salad.size === 'Large' ? 20 : 10) * qty;
+      const servesTotal = salad.size === 'Individual'
+        ? qty
+        : salad.serves
+          ? salad.serves * qty
+          : (salad.size === 'Large' ? 20 : 10) * qty;
       return `
         <tr>
           <td>
