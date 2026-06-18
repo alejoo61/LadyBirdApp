@@ -43,20 +43,33 @@ async function calculateTacoBar(cateringOrder, resolver) {
     return isDrink(nameLc) || isIndividualTaco(nameLc, mods);
   });
 
-  // Chips: always included in Taco Bar
-  const hasChipsAddon = addons.some(a => (a.name || '').toLowerCase().includes('chip'));
-  const chipPans      = Math.max(1, Math.ceil(guestCount / 30));
-  if (!hasChipsAddon) {
-    addons.unshift({
-      name:         'Chips',
-      quantity:     1,
-      totalAmount:  chipPans,
-      unit:         'Full Pan',
-      packaging:    'Full Pan',
-      packagingQty: chipPans,
-      tempType:     'dry',
-      hasChipsPan:  true,
-      chipPans,
+  // Unknown items (e.g. quesadillas) — items without modifiers that didn't resolve
+  // Add them as generic addons so they show up in the PDF
+  for (const item of items) {
+    const nameLc    = (item.displayName || item.name || '').toLowerCase();
+    const modifiers = item.modifiers || [];
+    if (modifiers.length > 0) continue;
+    if (isDrink(nameLc)) continue;
+    if (isIndividualTaco(nameLc, modifiers)) continue;
+    // Check if already in addons
+    const dn            = item.displayName || item.name || '';
+    const canonicalName = await resolver.resolveCanonicalName(dn);
+    const alreadyAdded  = addons.some(a => a.name === (canonicalName || dn));
+    if (alreadyAdded) continue;
+    // Skip known event items
+    const knownKeywords = ['taco bar', 'bird box', 'space rental', 'ez cater', 'open tax', 'salad', 'city slicker', 'cowboy', 'farmer'];
+    if (knownKeywords.some(k => nameLc.includes(k))) continue;
+    // Add as generic addon
+    addons.push({
+      name:         dn,
+      quantity:     item.quantity || 1,
+      totalAmount:  null,
+      unit:         'each',
+      packaging:    '—',
+      packagingQty: item.quantity || 1,
+      tempType:     'hot',
+      hasChipsPan:  false,
+      chipPans:     0,
     });
   }
 
@@ -64,6 +77,12 @@ async function calculateTacoBar(cateringOrder, resolver) {
   const paperGoods   = wantsPaper
     ? await resolver.calculatePaperGoods('TACO_BAR', guestCount, paperContext)
     : { included: false, items: [] };
+
+  // Total chip pans: chips from snack formula + chips from addons (Chips & Guac, etc.)
+  const snackChips     = (grouped.snack || []).filter(s => (s.name || '').toLowerCase().includes('chip'));
+  const snackChipPans  = snackChips.reduce((sum, s) => sum + Math.ceil(s.totalAmount || 0), 0);
+  const addonChipPans  = addons.reduce((sum, a) => sum + (a.chipPans || 0), 0);
+  const totalChipPans  = snackChipPans + addonChipPans;
 
   return {
     proteins:  grouped.protein || [],
@@ -75,6 +94,7 @@ async function calculateTacoBar(cateringOrder, resolver) {
     salads,
     addons,
     individualTacos,
+    totalChipPans,
     drinks:    [],
     hotItems:  [...individualTacos, ...(grouped.protein || []), ...tortillas],
     coldItems: [...(grouped.topping || []), ...(grouped.salsa || []), ...salads],

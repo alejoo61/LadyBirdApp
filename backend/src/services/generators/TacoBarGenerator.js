@@ -7,7 +7,7 @@ class TacoBarGenerator extends BaseGenerator {
     const {
       header, proteins, toppings, salsas, tortillas, snacks,
       paperGoods, hotItems, coldItems, dryItems, salads, addons,
-      individualTacos,
+      individualTacos, totalChipPans,
     } = data;
     const badge = this._eventTypeBadge(header.eventType);
 
@@ -29,7 +29,7 @@ class TacoBarGenerator extends BaseGenerator {
         ${this._renderSection('Snacks',    snacks    || [], '#784212')}
         ${this._renderIndividualTacos(individualTacos || [])}
         ${this._renderSalads(salads || [])}
-        ${this._renderAddons(addons || [])}
+        ${this._renderAddons(addons || [], totalChipPans || 0)}
       </div>
       <div class="right-col">
         ${this._renderPaperGoods(paperGoods)}
@@ -117,11 +117,11 @@ class TacoBarGenerator extends BaseGenerator {
     </div>`;
   }
 
-  _renderAddons(addons) {
-    if (!addons || addons.length === 0) return '';
+  _renderAddons(addons, totalChipPansOverride = 0) {
+    if (!addons || addons.length === 0 && totalChipPansOverride === 0) return '';
 
-    let totalChipPans = 0;
-    for (const a of addons) { if (a.hasChipsPan) totalChipPans += a.chipPans || 0; }
+    let totalChipPans = totalChipPansOverride;
+    for (const a of (addons || [])) { if (a.hasChipsPan) totalChipPans += a.chipPans || 0; }
 
     const rows = addons.map(addon => {
       const qty    = addon.quantity || 1;
