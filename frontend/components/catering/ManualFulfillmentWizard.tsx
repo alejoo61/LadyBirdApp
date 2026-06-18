@@ -460,8 +460,11 @@ function IndividualTacosForm({ value, onChange }: { value: IndividualTacosConfig
 
 function SaladsForm({ value, onChange }: { value: SaladsConfig; onChange: (v: SaladsConfig) => void }) {
   const { byCategory, loading } = useMenuItems('TACO_BAR');
-  const allSalads  = byCategory['salad'] || [];
-  const allSaladsMenu = [...allSalads, ...(byCategory['menu_item'] || []).filter(i => i.toLowerCase().includes('salad'))];
+  const allSalads     = byCategory['salad'] || [];
+  const allSaladsMenu = [
+    ...(byCategory['menu_item'] || []).filter(i => i.toLowerCase().includes('salad')),
+    ...allSalads,
+  ];
   const proteins   = ['Salsa Verde Braised Chicken', 'House-smoked Brisket', 'Chorizo', 'Without Protein'];
 
   const cls = (active: boolean) =>
@@ -601,6 +604,9 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
   const [deliveryMethod, setDeliveryMethod] = useState<'PICKUP'|'DELIVERY'>('PICKUP');
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [deliveryNotes, setDeliveryNotes]   = useState('');
+  const [company, setCompany]               = useState('');
+  const [distanceMiles, setDistanceMiles]   = useState('');
+  const [kitchenFinishTime, setKitchenFinishTime] = useState('');
 
   // Step 2 — Events
   const [events, setEvents] = useState<EventBlock[]>([
@@ -655,10 +661,13 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
 
       const body = {
         storeId, clientName, clientPhone, clientEmail,
+        company:          company || null,
         eventType, guestCount,
         deliveryMethod, deliveryAddress: deliveryMethod === 'DELIVERY' ? deliveryAddress : null,
-        deliveryNotes: deliveryNotes || null,
+        deliveryNotes:    deliveryNotes || null,
         eventDate, eventTime,
+        kitchenFinishTime: kitchenFinishTime || null,
+        distanceMiles:    distanceMiles ? parseFloat(distanceMiles) : null,
         items,
       };
 
@@ -744,6 +753,10 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
                   <input value={clientName} onChange={e => setClientName(e.target.value)} placeholder="Client name" className={inputCls} />
                 </div>
                 <div>
+                  <label className={labelCls}>Company</label>
+                  <input value={company} onChange={e => setCompany(e.target.value)} placeholder="Company name" className={inputCls} />
+                </div>
+                <div>
                   <label className={labelCls}>Phone</label>
                   <input value={clientPhone} onChange={e => setClientPhone(e.target.value)} placeholder="615-000-0000" className={inputCls} />
                 </div>
@@ -756,8 +769,16 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
                   <input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} className={inputCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>Event Time</label>
+                  <label className={labelCls}>Event Time *</label>
                   <input type="time" value={eventTime} onChange={e => setEventTime(e.target.value)} className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Kitchen Finish Time</label>
+                  <input type="time" value={kitchenFinishTime} onChange={e => setKitchenFinishTime(e.target.value)} className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Distance (miles)</label>
+                  <input type="number" step="0.1" min="0" value={distanceMiles} onChange={e => setDistanceMiles(e.target.value)} placeholder="0.0" className={inputCls} />
                 </div>
               </div>
 
