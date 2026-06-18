@@ -9,7 +9,7 @@ import type { Store } from '@/services/api/storesApi';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type EventType = 'TACO_BAR' | 'BIRD_BOX' | 'PERSONAL_BOX';
+type EventType = 'TACO_BAR' | 'BIRD_BOX' | 'PERSONAL_BOX' | 'INDIVIDUAL_TACOS' | 'SALADS';
 
 interface TacoBarConfig {
   guestCount: number;
@@ -37,11 +37,21 @@ interface PersonalBoxConfig {
 }
 
 interface EventBlock {
-  id:         string;
-  type:       EventType;
-  tacoBar?:   TacoBarConfig;
-  birdBox?:   BirdBoxConfig;
-  personalBox?: PersonalBoxConfig;
+  id:              string;
+  type:            EventType;
+  tacoBar?:        TacoBarConfig;
+  birdBox?:        BirdBoxConfig;
+  personalBox?:    PersonalBoxConfig;
+  individualTacos?: IndividualTacosConfig;
+  salads?:         SaladsConfig;
+}
+
+interface IndividualTacosConfig {
+  tacos: { name: string; quantity: number; tortilla: string }[];
+}
+
+interface SaladsConfig {
+  salads: { name: string; quantity: number; protein: string }[];
 }
 
 interface DrinkItem {
@@ -117,6 +127,24 @@ function buildItems(events: EventBlock[], drinks: DrinkItem[], addons: AddonItem
           { displayName: pb.salsa, quantity: 1, price: 0 },
         ];
         items.push({ guid: uid(), displayName: name, quantity: 1, price: 0, modifiers });
+      }
+    }
+
+    if (ev.type === 'INDIVIDUAL_TACOS' && ev.individualTacos) {
+      for (const taco of ev.individualTacos.tacos) {
+        const modifiers = taco.tortilla
+          ? [{ displayName: taco.tortilla, quantity: taco.quantity, price: 0 }]
+          : [];
+        items.push({ guid: uid(), displayName: taco.name, quantity: taco.quantity, price: 0, modifiers });
+      }
+    }
+
+    if (ev.type === 'SALADS' && ev.salads) {
+      for (const salad of ev.salads.salads) {
+        const modifiers = salad.protein
+          ? [{ displayName: salad.protein, quantity: 1, price: 0 }]
+          : [];
+        items.push({ guid: uid(), displayName: salad.name, quantity: salad.quantity, price: 0, modifiers });
       }
     }
   }
@@ -368,19 +396,146 @@ function PersonalBoxForm({ value, onChange }: { value: PersonalBoxConfig; onChan
     </div>
   );
 }
+// ─── Individual Tacos Form ───────────────────────────────────────────────────
+
+function IndividualTacosForm({ value, onChange }: { value: IndividualTacosConfig; onChange: (v: IndividualTacosConfig) => void }) {
+  const { byCategory, loading } = useMenuItems('TACO_BAR');
+  const allCombos = byCategory['individual_taco'] || [];
+  const tortillas = byCategory['tortilla'] || [];
+
+  const cls = (active: boolean) =>
+    `px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-widest cursor-pointer transition-all border ${
+      active ? 'bg-night text-bone border-night' : 'bg-bone text-night/50 border-transparent hover:border-night/20'
+    }`;
+
+  const toggleTaco = (name: string) => {
+    const exists = value.tacos.find(t => t.name === name);
+    onChange({
+      tacos: exists
+        ? value.tacos.filter(t => t.name !== name)
+        : [...value.tacos, { name, quantity: 1, tortilla: tortillas[0] || '' }],
+    });
+  };
+
+  const updateTaco = (name: string, field: 'quantity' | 'tortilla', val: string | number) => {
+    onChange({ tacos: value.tacos.map(t => t.name === name ? { ...t, [field]: val } : t) });
+  };
+
+  if (loading) return <div className="text-[11px] text-night/40 font-black uppercase tracking-widest animate-pulse">Loading combos...</div>;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="text-[10px] font-black uppercase tracking-widest text-night/40 block mb-2">Select Combos</label>
+        <div className="flex flex-wrap gap-2">
+          {allCombos.map(c => (
+            <button key={c} type="button" onClick={() => toggleTaco(c)} className={cls(!!value.tacos.find(t => t.name === c))}>{c}</button>
+          ))}
+        </div>
+      </div>
+      {value.tacos.length > 0 && (
+        <div className="space-y-2">
+          <label className="text-[10px] font-black uppercase tracking-widest text-night/40 block">Qty & Tortilla</label>
+          {value.tacos.map(taco => (
+            <div key={taco.name} className="flex items-center gap-3 py-1">
+              <span className="text-[11px] font-bold text-night/70 flex-1 truncate">{taco.name}</span>
+              <input type="number" min={1} value={taco.quantity}
+                onChange={e => updateTaco(taco.name, 'quantity', parseInt(e.target.value) || 1)}
+                className="w-16 px-2 py-1 bg-bone rounded-lg text-xs font-black text-night outline-none text-center" />
+              <div className="flex gap-1">
+                {tortillas.map(t => (
+                  <button key={t} type="button" onClick={() => updateTaco(taco.name, 'tortilla', t)}
+                    className={cls(taco.tortilla === t)}>{t}</button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Salads Form ──────────────────────────────────────────────────────────────
+
+function SaladsForm({ value, onChange }: { value: SaladsConfig; onChange: (v: SaladsConfig) => void }) {
+  const { byCategory, loading } = useMenuItems('TACO_BAR');
+  const allSalads  = byCategory['salad'] || [];
+  const allSaladsMenu = [...allSalads, ...(byCategory['menu_item'] || []).filter(i => i.toLowerCase().includes('salad'))];
+  const proteins   = ['Salsa Verde Braised Chicken', 'House-smoked Brisket', 'Chorizo', 'Without Protein'];
+
+  const cls = (active: boolean) =>
+    `px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-widest cursor-pointer transition-all border ${
+      active ? 'bg-night text-bone border-night' : 'bg-bone text-night/50 border-transparent hover:border-night/20'
+    }`;
+
+  const toggleSalad = (name: string) => {
+    const exists = value.salads.find(s => s.name === name);
+    onChange({
+      salads: exists
+        ? value.salads.filter(s => s.name !== name)
+        : [...value.salads, { name, quantity: 1, protein: '' }],
+    });
+  };
+
+  const updateSalad = (name: string, field: 'quantity' | 'protein', val: string | number) => {
+    onChange({ salads: value.salads.map(s => s.name === name ? { ...s, [field]: val } : s) });
+  };
+
+  if (loading) return <div className="text-[11px] text-night/40 font-black uppercase tracking-widest animate-pulse">Loading salads...</div>;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="text-[10px] font-black uppercase tracking-widest text-night/40 block mb-2">Select Salads</label>
+        <div className="flex flex-wrap gap-2">
+          {allSaladsMenu.map(s => (
+            <button key={s} type="button" onClick={() => toggleSalad(s)} className={cls(!!value.salads.find(x => x.name === s))}>{s}</button>
+          ))}
+        </div>
+      </div>
+      {value.salads.length > 0 && (
+        <div className="space-y-3">
+          {value.salads.map(salad => (
+            <div key={salad.name} className="space-y-1">
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] font-bold text-night/70 flex-1 truncate">{salad.name}</span>
+                <label className="text-[10px] font-black uppercase text-night/40">Qty</label>
+                <input type="number" min={1} value={salad.quantity}
+                  onChange={e => updateSalad(salad.name, 'quantity', parseInt(e.target.value) || 1)}
+                  className="w-16 px-2 py-1 bg-bone rounded-lg text-xs font-black text-night outline-none text-center" />
+              </div>
+              <div className="flex flex-wrap gap-2 pl-2">
+                {proteins.map(p => (
+                  <button key={p} type="button" onClick={() => updateSalad(salad.name, 'protein', p)}
+                    className={cls(salad.protein === p)}>{p}</button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Event Block Editor ───────────────────────────────────────────────────────
 
 function EventEditor({ ev, onChange, onRemove }: { ev: EventBlock; onChange: (v: EventBlock) => void; onRemove: () => void }) {
-  const defaultTacoBar: TacoBarConfig = { guestCount: 10, proteins: [], toppings: [], salsas: [], tortilla: '', extras: [] };
-  const defaultBirdBox: BirdBoxConfig = { tacoCount: 20, tacos: [], tortilla: '', chipsIncluded: true, paperItems: true, mealType: 'breakfast' };
+  const defaultTacoBar: TacoBarConfig        = { guestCount: 10, proteins: [], toppings: [], salsas: [], tortilla: '', extras: [] };
+  const defaultBirdBox: BirdBoxConfig        = { tacoCount: 20, tacos: [], tortilla: '', chipsIncluded: true, paperItems: true, mealType: 'breakfast' };
   const defaultPersonalBox: PersonalBoxConfig = { quantity: 1, tacos: [], salsa: '', mealType: 'breakfast' };
+  const defaultIndividualTacos: IndividualTacosConfig = { tacos: [] };
+  const defaultSalads: SaladsConfig          = { salads: [] };
 
   const setType = (type: EventType) => {
     onChange({
       ...ev, type,
-      tacoBar:     type === 'TACO_BAR'     ? defaultTacoBar     : undefined,
-      birdBox:     type === 'BIRD_BOX'     ? defaultBirdBox     : undefined,
-      personalBox: type === 'PERSONAL_BOX' ? defaultPersonalBox : undefined,
+      tacoBar:          type === 'TACO_BAR'          ? defaultTacoBar          : undefined,
+      birdBox:          type === 'BIRD_BOX'           ? defaultBirdBox          : undefined,
+      personalBox:      type === 'PERSONAL_BOX'       ? defaultPersonalBox      : undefined,
+      individualTacos:  type === 'INDIVIDUAL_TACOS'   ? defaultIndividualTacos  : undefined,
+      salads:           type === 'SALADS'             ? defaultSalads           : undefined,
     });
   };
 
@@ -393,9 +548,15 @@ function EventEditor({ ev, onChange, onRemove }: { ev: EventBlock; onChange: (v:
     <div className="border border-tumbleweed/40 rounded-2xl p-5 space-y-4 bg-bone/30">
       <div className="flex items-center justify-between">
         <div className="flex gap-2">
-          {(['TACO_BAR','BIRD_BOX','PERSONAL_BOX'] as EventType[]).map(t => (
+          {([
+            ['TACO_BAR', 'Taco Bar'],
+            ['BIRD_BOX', "'Bird Box"],
+            ['PERSONAL_BOX', 'Personal Box'],
+            ['INDIVIDUAL_TACOS', 'Individual Tacos'],
+            ['SALADS', 'Salads'],
+          ] as [EventType, string][]).map(([t, label]) => (
             <button key={t} type="button" onClick={() => setType(t)} className={typeCls(t)}>
-              {t === 'TACO_BAR' ? 'Taco Bar' : t === 'BIRD_BOX' ? "'Bird Box" : 'Personal Box'}
+              {label}
             </button>
           ))}
         </div>
@@ -412,6 +573,12 @@ function EventEditor({ ev, onChange, onRemove }: { ev: EventBlock; onChange: (v:
       )}
       {ev.type === 'PERSONAL_BOX' && ev.personalBox && (
         <PersonalBoxForm value={ev.personalBox} onChange={v => onChange({ ...ev, personalBox: v })} />
+      )}
+      {ev.type === 'INDIVIDUAL_TACOS' && ev.individualTacos && (
+        <IndividualTacosForm value={ev.individualTacos} onChange={v => onChange({ ...ev, individualTacos: v })} />
+      )}
+      {ev.type === 'SALADS' && ev.salads && (
+        <SaladsForm value={ev.salads} onChange={v => onChange({ ...ev, salads: v })} />
       )}
     </div>
   );
@@ -454,8 +621,9 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
 
   const totalGuests = events.reduce((acc, ev) => {
     if (ev.type === 'TACO_BAR')     return acc + (ev.tacoBar?.guestCount || 0);
-    if (ev.type === 'BIRD_BOX')     return acc + 0; // BB guest count comes from tacoCount
+    if (ev.type === 'BIRD_BOX')     return acc + 0;
     if (ev.type === 'PERSONAL_BOX') return acc + (ev.personalBox?.quantity || 0);
+    // INDIVIDUAL_TACOS and SALADS don't count as guests
     return acc;
   }, 0);
 
