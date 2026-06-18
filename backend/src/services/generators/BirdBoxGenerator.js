@@ -1,272 +1,183 @@
-// src/services/generators/BaseGenerator.js
+// src/services/generators/BirdBoxGenerator.js
+const BaseGenerator = require('./BaseGenerator');
 
-class BaseGenerator {
+class BirdBoxGenerator extends BaseGenerator {
 
-  // ─── UTILS ────────────────────────────────────────────────────────────────
+  build(data) {
+    const {
+      header, summaryItems, boxes, tacoRows, chipsAndSalsa,
+      chipsBreakdown, salsas, hasManuasSalsas, drinks, paperGoods,
+      hotItems, coldItems, dryItems, addons, salads, sidePacks,
+      individualTacos,
+    } = data;
 
-  _formatDate(dateStr) {
-    if (!dateStr) return '—';
-    return new Date(dateStr).toLocaleString('en-US', {
-      weekday: 'short', month: 'short', day: 'numeric',
-      year: 'numeric', hour: '2-digit', minute: '2-digit',
-      timeZone: 'America/Chicago',
-    });
-  }
+    const badge = this._eventTypeBadge(header.eventType);
 
-  _formatPhone(phone) {
-    if (!phone) return null;
-    const cleaned = String(phone).replace(/\D/g, '');
-    if (cleaned.length === 10)
-      return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
-    if (cleaned.length === 11 && cleaned[0] === '1')
-      return `(${cleaned.slice(1,4)}) ${cleaned.slice(4,7)}-${cleaned.slice(7)}`;
-    return phone;
-  }
-
-  _eventTypeBadge(eventType) {
-    const map = {
-      TACO_BAR:     { color: '#c0392b', label: 'TACO BAR'      },
-      BIRD_BOX:     { color: '#457b9d', label: "'BIRD BOX"     },
-      PERSONAL_BOX: { color: '#b7791f', label: 'PERSONAL BOX'  },
-      FOODA:        { color: '#2d3748', label: 'FOODA'          },
-      SPACE_RENTAL: { color: '#7b2d8b', label: 'SPACE RENTAL'  },
-      NEEDS_REVIEW: { color: '#f4a261', label: 'NEEDS REVIEW'  },
-    };
-    return map[eventType] || { color: '#2d3748', label: eventType };
-  }
-
-  // ─── CSS ──────────────────────────────────────────────────────────────────
-
-  _baseCSS(badgeColor) {
-    return `
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: Arial, sans-serif; font-size: 10px; color: #1a1a1a; background: white; }
-
-    .doc-header {
-      background: #c0392b; color: white; padding: 10px 14px;
-      display: flex; justify-content: space-between; align-items: center;
-      border-bottom: 4px solid #922b21;
-    }
-    .doc-header h1 { font-size: 15px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
-    .header-right { display: flex; align-items: center; gap: 6px; }
-
-    .method-pill {
-      padding: 3px 8px; border-radius: 3px; font-size: 9px; font-weight: 900;
-      text-transform: uppercase; letter-spacing: 0.1em;
-      border: 2px solid rgba(255,255,255,0.6); color: white;
-    }
-    .method-pill.pickup   { background: #1565c0; border-color: #1565c0; }
-    .method-pill.delivery { background: rgba(255,255,255,0.15); }
-
-    .event-badge {
-      padding: 3px 10px; border-radius: 3px; font-size: 9px; font-weight: 900;
-      text-transform: uppercase; letter-spacing: 0.12em;
-      background: white; color: ${badgeColor}; border: 2px solid white;
-    }
-    .ezcater-badge {
-      padding: 3px 8px; border-radius: 3px; font-size: 8px; font-weight: 900;
-      text-transform: uppercase; letter-spacing: 0.1em;
-      background: #ff6b00; color: white; border: 2px solid #ff8c00;
-    }
-    .edited-badge {
-      padding: 3px 8px; border-radius: 3px; font-size: 8px; font-weight: 900;
-      text-transform: uppercase; letter-spacing: 0.1em;
-      background: #fbbf24; color: #1a1a1a; border: 2px solid #f59e0b;
-    }
-    .test-badge {
-      padding: 3px 8px; border-radius: 3px; font-size: 8px; font-weight: 900;
-      text-transform: uppercase; letter-spacing: 0.1em;
-      background: #d946ef; color: white; border: 2px solid #a21caf;
-    }
-    .version-badge {
-      padding: 3px 8px; border-radius: 3px; font-size: 8px; font-weight: 900;
-      text-transform: uppercase; letter-spacing: 0.1em;
-      background: rgba(255,255,255,0.2); color: white; border: 2px solid rgba(255,255,255,0.4);
-    }
-
-    .order-info {
-      display: grid; grid-template-columns: 1fr 1fr;
-      background: #fef9c3; border: 1px solid #f0c040; border-top: none;
-    }
-    .info-left, .info-right { padding: 8px 12px; }
-    .info-right { border-left: 1px solid #f0c040; }
-    .info-row { display: flex; gap: 6px; margin-bottom: 4px; align-items: baseline; }
-    .info-label { font-size: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a00; min-width: 100px; }
-    .info-value { font-size: 10px; font-weight: 700; color: #1a1a1a; }
-    .info-value.highlight { font-size: 12px; font-weight: 900; color: #c0392b; }
-
-    .notes-box {
-      background: #fff3cd; border: 1px solid #f0c040; border-top: none; padding: 6px 12px;
-    }
-    .notes-box h4 { font-size: 8px; font-weight: 900; text-transform: uppercase; color: #7a6a00; margin-bottom: 2px; }
-    .notes-text { font-size: 9px; color: #1a1a1a; }
-
-    .edited-banner {
-      background: #fef3c7; border: 1px solid #f59e0b; border-top: none;
-      padding: 4px 12px; font-size: 8px; font-weight: 900;
-      text-transform: uppercase; letter-spacing: 0.1em; color: #92400e;
-    }
-    .ezcater-banner {
-      background: #fff3e0; border: 1px solid #ff8c00; border-top: none;
-      padding: 4px 12px; font-size: 8px; font-weight: 900;
-      text-transform: uppercase; letter-spacing: 0.1em; color: #e65100;
-    }
-
-    .main-grid { display: grid; grid-template-columns: 1fr 260px; gap: 8px; margin-top: 8px; }
-
-    .section { margin-bottom: 6px; border: 1px solid #bbb; }
-    .section-header { padding: 4px 8px; color: white; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; }
-
-    table { width: 100%; border-collapse: collapse; }
-    thead tr { background: #e8e8e8; }
-    th { padding: 3px 6px; font-size: 8px; font-weight: 900; text-transform: uppercase; color: #333; text-align: left; border: 1px solid #ccc; }
-    td { padding: 3px 6px; border: 1px solid #ddd; font-size: 9px; vertical-align: middle; }
-    tr:nth-child(even) td { background: #f9f9f9; }
-    .checkbox-cell { text-align: center; width: 44px; }
-    .checkbox { display: inline-block; width: 11px; height: 11px; border: 1.5px solid #555; background: white; }
-    .yes-no { font-weight: 900; }
-    .yes-no.yes { color: #1e6b3a; }
-    .yes-no.no  { color: #c0392b; }
-
-    .right-col { display: flex; flex-direction: column; gap: 6px; }
-
-    .paper-goods { background: #fef9c3; border: 1px solid #f0c040; }
-    .paper-goods-header { background: #f0c040; padding: 4px 8px; font-size: 9px; font-weight: 900; text-transform: uppercase; color: #1a1a1a; }
-    .paper-goods table { background: #fef9c3; }
-    .paper-goods th { background: #fde68a; border-color: #f0c040; color: #7a6a00; }
-    .paper-goods td { border-color: #f0c040; font-size: 9px; }
-    .paper-opted-out { padding: 8px; font-size: 9px; color: #999; font-style: italic; }
-
-    .drinks-checklist { background: #e8f0fe; border: 1px solid #90caf9; }
-    .drinks-checklist-header { background: #1565c0; color: white; padding: 4px 8px; font-size: 9px; font-weight: 900; text-transform: uppercase; }
-    .drinks-checklist th { background: #bbdefb; border-color: #90caf9; color: #0d47a1; }
-    .drinks-checklist td { border-color: #90caf9; font-size: 9px; }
-
-    .food-summary { display: grid; grid-template-columns: 1fr 1fr 1fr; border: 2px solid #1a1a1a; margin-top: 8px; }
-    .food-type { padding: 6px; text-align: center; border-right: 1px solid #1a1a1a; }
-    .food-type:last-child { border-right: none; }
-    .food-type.hot  { background: #fde8e8; }
-    .food-type.cold { background: #e8f0fe; }
-    .food-type.dry  { background: #e8f5e9; }
-    .food-type .count { font-size: 18px; font-weight: 900; }
-    .food-type.hot  .count { color: #c0392b; }
-    .food-type.cold .count { color: #1565c0; }
-    .food-type.dry  .count { color: #2e7d32; }
-    .food-type .label { font-size: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; color: #555; margin-top: 2px; }
-
-    .qc-section { margin-top: 8px; border: 2px solid #1a1a1a; }
-    .qc-header { background: #1a1a1a; color: white; padding: 4px 10px; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; }
-    .qc-body { padding: 8px 10px; background: white; }
-    .qc-item { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; font-size: 9px; }
-    .qc-checkbox { width: 12px; height: 12px; border: 1.5px solid #1a1a1a; background: white; flex-shrink: 0; }
-
-    @media print { body { -webkit-print-color-adjust: exact; } }
-    `;
-  }
-
-  // ─── SHARED HTML BLOCKS ───────────────────────────────────────────────────
-
-  _headerHTML(header, badge) {
-    const method   = (header.deliveryMethod || '').toUpperCase();
-    const isPickup = method === 'PICKUP';
-    const phone    = this._formatPhone(header.clientPhone);
-    const isTest   = (header.toastOrderGuid || '').startsWith('MANUAL-') && !header.isManualSheet;
-    const version  = header.pdfVersion || 1;
-
-    let methodLabel = isPickup ? '🏪 Pickup' : '🚗 Delivery';
-    if (header.isEZCater) {
-      methodLabel = isPickup ? '🏪 EZ Pickup' : '🚗 EZ Delivery';
-    }
-
-    return `
-    <div class="doc-header">
-      <h1>Ladybird Taco &mdash; Fulfillment Sheet</h1>
-      <div class="header-right">
-        ${isTest ? '<span class="test-badge">TEST</span>' : ''}
-        ${header.isManuallyEdited ? '<span class="edited-badge">⚠ Edited</span>' : ''}
-        ${header.isEZCater ? '<span class="ezcater-badge">EZ Cater</span>' : ''}
-        <span class="version-badge">V${version}</span>
-        <span class="method-pill ${isPickup ? 'pickup' : 'delivery'}">${methodLabel}</span>
-        <span class="event-badge">${badge.label}</span>
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <style>${this._baseCSS(badge.color)}</style></head><body>
+    ${this._headerHTML(header, badge)}
+    <div class="main-grid">
+      <div class="left-col">
+        ${this._renderTacosByCombo(tacoRows || [])}
+        ${this._renderIndividualTacos(individualTacos || [])}
+        ${this._renderSidePacks(sidePacks || [])}
+        ${this._renderSalsas(salsas || [])}
+        ${this._renderAddons(addons || [])}
+        ${this._renderSalads(salads || [])}
+      </div>
+      <div class="right-col">
+        ${this._renderPaperGoods(paperGoods)}
       </div>
     </div>
-    ${header.isManuallyEdited ? '<div class="edited-banner">⚠ This order was manually edited — not synced with Toast</div>' : ''}
-    ${header.isEZCater ? '<div class="ezcater-banner">📦 EZCater Order — verify guest count and delivery details with EZCater confirmation</div>' : ''}
-    <div class="order-info">
-      <div class="info-left">
-        <div class="info-row"><span class="info-label">Client</span><span class="info-value">${header.clientName || '—'}</span></div>
-        <div class="info-row"><span class="info-label">Store</span><span class="info-value">${header.storeName || '—'} (${header.storeCode || '—'})</span></div>
-        <div class="info-row"><span class="info-label">Guest Count</span><span class="info-value highlight">${header.guestCount}</span></div>
-        ${!isPickup && header.deliveryAddress ? `<div class="info-row"><span class="info-label">Address</span><span class="info-value">${header.deliveryAddress}</span></div>` : ''}
-      </div>
-      <div class="info-right">
-        <div class="info-row"><span class="info-label">Event Time</span><span class="info-value highlight">${this._formatDate(header.estimatedFulfillmentDate)}</span></div>
-        <div class="info-row"><span class="info-label">Kitchen Finish</span><span class="info-value">${this._formatDate(header.kitchenFinishTime)}</span></div>
-        ${header.distanceMiles ? `<div class="info-row"><span class="info-label">Distance</span><span class="info-value">${header.distanceMiles} miles</span></div>` : ''}
-        ${phone ? `<div class="info-row"><span class="info-label">Phone</span><span class="info-value">${phone}</span></div>` : ''}
-      </div>
-    </div>
-    ${header.deliveryNotes ? `<div class="notes-box"><h4>Delivery Notes</h4><p class="notes-text">${header.deliveryNotes}</p></div>` : ''}
-    `;
+    ${this._renderDrinksConsolidated(drinks || [], header.guestCount)}
+    ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
+    ${this._renderQC([
+      'All taco combos counted and packed correctly',
+      (individualTacos && individualTacos.length > 0) ? 'Individual tacos wrapped and labeled' : null,
+      'Bird Box Side Pack prepared and labeled (Guac / Queso / Salsa / Chips)',
+      'Add-on packs prepared and labeled (Queso / Guac / Salsa / Churro Chips)',
+      'Salads packed with dressing on the side',
+      'Chips & Salsa included if requested',
+      'Drinks packed with cups & lids if requested',
+      'Paper goods / taco boats matched to guest count',
+      'Delivery notes reviewed',
+      'Order label applied to all boxes',
+      'Driver assigned and notified',
+    ].filter(Boolean))}
+    </body></html>`;
   }
 
-  // ─── INDIVIDUAL TACOS ─────────────────────────────────────────────────────
-  _renderIndividualTacos(individualTacos) {
-    if (!individualTacos || individualTacos.length === 0) return '';
-    const rows = individualTacos.map(item => {
-      const qty       = item.quantity || 1;
-      const tortilla  = item.tortilla || 'Flour Tortilla';
-      const packaging = item.packaging || `${qty}x Individual Wrap`;
-      return `
+  // ─── SIDE PACK ────────────────────────────────────────────────────────────
+  _renderSidePacks(sidePacks) {
+    if (!sidePacks || sidePacks.length === 0) return '';
+
+    const contentRows = sidePacks.map((sp, idx) => {
+      const subHeader = sidePacks.length > 1
+        ? `<tr style="background:#ede9fe">
+             <td colspan="6" style="font-size:8px; font-weight:900; color:#7b2d8b; text-transform:uppercase; letter-spacing:0.08em; padding:3px 8px">
+               Pack ${idx + 1} — ${sp.salsaName}${sp.quantity > 1 ? ` ×${sp.quantity}` : ''}
+             </td>
+           </tr>`
+        : '';
+
+      const rows = sp.contents.map(c => `
         <tr>
-          <td><strong>${item.name}</strong></td>
-          <td style="text-align:center; font-weight:900">${qty}</td>
-          <td style="font-size:8px; font-weight:bold; color:#2e7d32">${tortilla}</td>
-          <td>Tongs Small</td>
-          <td>${packaging}</td>
+          <td><strong>${c.item}</strong></td>
+          <td>${c.amount}</td>
+          <td>${c.packaging}</td>
+          <td>${c.utensil || '—'}</td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
-        </tr>`;
+        </tr>`).join('');
+
+      return subHeader + rows;
     }).join('');
+
     return `
-    <div class="section" style="margin-top:6px">
-      <div class="section-header" style="background:#2e7d32">Individual Tacos</div>
+    <div class="section">
+      <div class="section-header" style="background:#7b2d8b">'Bird Box Side Pack</div>
       <table>
         <thead>
           <tr>
-            <th>Combo</th>
-            <th style="text-align:center">Qty</th>
-            <th>Tortilla</th>
-            <th>Utensil</th>
-            <th>Packaging</th>
-            <th>Packed?</th>
-            <th>Loaded?</th>
+            <th>Item</th><th>Amount</th><th>Packaging</th>
+            <th>Utensil</th><th>Packed?</th><th>Loaded?</th>
           </tr>
         </thead>
-        <tbody>${rows}</tbody>
+        <tbody>${contentRows}</tbody>
       </table>
     </div>`;
   }
 
-  _renderSection(title, items, color = '#2d3748') {
-    if (!items || items.length === 0) return '';
+  // ─── CHIPS CONSOLIDADO ────────────────────────────────────────────────────
+  _renderChipsTotal(chipsBreakdown, chipsAndSalsa, boxes, hasManuasSalsas) {
+    if (!chipsBreakdown || chipsBreakdown.length === 0) return '';
+
+    const totalPans = chipsBreakdown.reduce((sum, c) => {
+      const match = (c.amount || '').match(/^(\d+)/);
+      return sum + (match ? parseInt(match[1]) : 1);
+    }, 0);
+
+    const rows = chipsBreakdown.map(c => `
+      <tr>
+        <td style="font-size:8px; color:#555">${c.label}</td>
+        <td><strong>${c.amount}</strong></td>
+        <td>${c.packaging}</td>
+        <td>${c.utensil || 'Tongs Large'}</td>
+        <td class="checkbox-cell"><span class="checkbox"></span></td>
+        <td class="checkbox-cell"><span class="checkbox"></span></td>
+      </tr>`).join('');
+
+    const totalRow = chipsBreakdown.length > 1 ? `
+      <tr style="background:#fef3c7; border-top:2px solid #784212">
+        <td style="font-weight:900; font-size:9px; text-transform:uppercase; letter-spacing:0.08em; color:#784212">TOTAL</td>
+        <td style="font-weight:900; color:#784212">${totalPans} Full Pan${totalPans > 1 ? 's' : ''}</td>
+        <td colspan="4"></td>
+      </tr>` : '';
+
     return `
     <div class="section">
-      <div class="section-header" style="background:${color}">${title}</div>
+      <div class="section-header" style="background:#784212">Chips</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Description</th><th>Amount</th><th>Packaging</th>
+            <th>Utensil</th><th>Packed?</th><th>Loaded?</th>
+          </tr>
+        </thead>
+        <tbody>${rows}${totalRow}</tbody>
+      </table>
+    </div>`;
+  }
+
+  // ─── TACOS BY COMBO ───────────────────────────────────────────────────────
+  _renderTacosByCombo(tacoRows) {
+    if (!tacoRows || tacoRows.length === 0) return '';
+    return `
+    <div class="section">
+      <div class="section-header" style="background:#457b9d">Individually Wrapped Tacos</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th><th>Tacos</th><th>Tortillas</th>
+            <th>Utensil</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tacoRows.map(item => `
+            <tr>
+              <td>${item.name}</td>
+              <td>${item.total} ${item.unit || ''}</td>
+              <td style="font-size:8px; font-weight:bold; color:#457b9d">${item.tortillaLabel || '—'}</td>
+              <td>${item.utensil || '—'}</td>
+              <td>${item.packagingQty ? `${item.packagingQty}x ${item.packaging}` : (item.packaging || '—')}</td>
+              <td class="checkbox-cell"><span class="checkbox"></span></td>
+              <td class="checkbox-cell"><span class="checkbox"></span></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  }
+
+  // ─── SALSAS ───────────────────────────────────────────────────────────────
+  _renderSalsas(salsas) {
+    if (!salsas || salsas.length === 0) return '';
+    return `
+    <div class="section">
+      <div class="section-header" style="background:#7d5a00">Salsas</div>
       <table>
         <thead><tr><th>Item</th><th>Amount</th><th>Utensil</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th></tr></thead>
         <tbody>
-          ${items.map(item => {
-            const amount = item.totalAmount ?? item.total ?? '—';
-            const unit   = item.unit || '';
-            const pkgQty = item.packagingQty;
-            const pkg    = item.packaging || '—';
+          ${salsas.map(item => {
+            const pkgStr = item.packagingQty && item.packagingQty > 1
+              ? `${item.packagingQty}x ${item.packaging}`
+              : (item.packaging || '—');
             return `
             <tr>
               <td>${item.name}</td>
-              <td>${amount} ${unit}</td>
+              <td>${item.totalAmount || '—'} ${item.unit || ''}</td>
               <td>${item.utensil || '—'}</td>
-              <td>${pkgQty ? `${pkgQty}x ${pkg}` : pkg}</td>
+              <td>${pkgStr}</td>
               <td class="checkbox-cell"><span class="checkbox"></span></td>
               <td class="checkbox-cell"><span class="checkbox"></span></td>
             </tr>`;
@@ -276,225 +187,110 @@ class BaseGenerator {
     </div>`;
   }
 
-  _renderPaperGoods(paperGoods) {
-    if (!paperGoods || !paperGoods.included) {
+  // ─── ADD-ONS ──────────────────────────────────────────────────────────────
+  _renderAddons(addons) {
+    if (!addons || addons.length === 0) return '';
+
+    let totalChipPans = 0;
+    for (const a of addons) { if (a.hasChipsPan) totalChipPans += a.chipPans || 0; }
+
+    const rows = addons.map(addon => {
+      const qty    = addon.quantity || 1;
+      const amount = addon.totalAmount ? `${addon.totalAmount} ${addon.unit || ''}`.trim() : `${qty}x`;
+      const pkg    = addon.packaging || '—';
       return `
-      <div class="paper-goods">
-        <div class="paper-goods-header">Paper Goods</div>
-        <p class="paper-opted-out">Client opted out.</p>
-      </div>`;
-    }
+        <tr>
+          <td><strong>${addon.name}</strong>${qty > 1 ? `<span style="color:#6b21a8;font-weight:900;margin-left:4px">×${qty}</span>` : ''}</td>
+          <td style="text-align:center;font-weight:900">${qty}</td>
+          <td>${amount}</td>
+          <td>${pkg}</td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+        </tr>`;
+    }).join('');
+
+    const totalRow = totalChipPans > 0 ? `
+      <tr style="background:#fef3c7;border-top:2px solid #784212">
+        <td colspan="2" style="font-weight:900;font-size:9px;text-transform:uppercase;letter-spacing:0.08em;color:#784212">Total Chips</td>
+        <td colspan="2" style="font-weight:900;font-size:11px;color:#784212">${totalChipPans} Full Pans</td>
+        <td class="checkbox-cell"></td><td class="checkbox-cell"></td>
+      </tr>` : '';
+
     return `
-    <div class="paper-goods">
-      <div class="paper-goods-header">Paper Goods</div>
+    <div class="section">
+      <div class="section-header" style="background:#6b21a8">Add-ons</div>
       <table>
-        <thead><tr><th>Item</th><th>Qty</th><th>Packed?</th><th>Loaded?</th></tr></thead>
-        <tbody>
-          ${paperGoods.items.filter(item => !item.name.toLowerCase().includes('serving utensil')).map(item => `
-            <tr>
-              <td>${item.name}</td>
-              <td>${item.qty} ${item.unit || item.package || 'each'}</td>
-              <td class="checkbox-cell"><span class="checkbox"></span></td>
-              <td class="checkbox-cell"><span class="checkbox"></span></td>
-            </tr>
-          `).join('')}
-        </tbody>
+        <thead><tr><th>Item</th><th style="text-align:center">Qty</th><th>Amount</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th></tr></thead>
+        <tbody>${rows}${totalRow}</tbody>
       </table>
     </div>`;
   }
 
-  _renderDrinksChecklist(drinks = []) {
-    if (!drinks || drinks.length === 0) return '';
-    const rows = [];
-    for (const drink of drinks) {
-      rows.push(`${drink.name} (x${drink.quantity})`);
-      if (drink.wantsCups) rows.push(`↳ Cups & Lids`);
-    }
+  // ─── SALADS ───────────────────────────────────────────────────────────────
+  _renderSalads(salads) {
+    if (!salads || salads.length === 0) return '';
+    const rows = salads.map(salad => {
+      const qty         = salad.quantity || 1;
+      const isNoProtein = !salad.protein ||
+        salad.protein.toLowerCase().includes('without') ||
+        salad.protein.toLowerCase().includes('no protein');
+      const proteinColor   = isNoProtein ? '#888888' : '#c0392b';
+      const proteinDisplay = isNoProtein
+        ? 'NO PROTEIN'
+        : (salad.protein || '').replace(/^(small|large)\s+with\s+/i, '').toUpperCase();
+      const servesTotal = salad.size === 'Individual'
+        ? qty
+        : salad.serves
+          ? salad.serves * qty
+          : (salad.size === 'Large' ? 20 : 10) * qty;
+      return `
+        <tr>
+          <td>
+            <strong>${salad.saladType}</strong>
+            <span style="font-size:8px; color:#555; margin-left:4px">(${salad.size})</span>
+            ${qty > 1 ? `<span style="color:#2e7d32; font-weight:900; margin-left:4px">×${qty}</span>` : ''}
+          </td>
+          <td style="text-align:center">
+            <span style="
+              display:inline-block; padding:3px 8px; border-radius:3px;
+              font-size:9px; font-weight:900; letter-spacing:0.08em;
+              background:${isNoProtein ? '#f0f0f0' : '#fde8e8'};
+              color:${proteinColor};
+              border:1.5px solid ${isNoProtein ? '#ccc' : '#f5aaaa'};
+            ">${proteinDisplay}</span>
+          </td>
+          <td style="text-align:center; font-weight:700">${servesTotal} ppl</td>
+          <td style="font-size:8px; color:#555; font-style:italic">${salad.dressing || '—'}</td>
+          <td>${salad.packaging || '—'}</td>
+          <td>${salad.utensil || '—'}</td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+        </tr>`;
+    }).join('');
+    const dressings = [...new Set(salads.map(s => s.dressing).filter(Boolean))];
     return `
-    <div class="drinks-checklist">
-      <div class="drinks-checklist-header">Drinks & Add-ons</div>
+    <div class="section">
+      <div class="section-header" style="background:#2e7d32">Salads</div>
       <table>
-        <thead><tr><th>Item</th><th>Packed?</th><th>Loaded?</th></tr></thead>
-        <tbody>
-          ${rows.map(label => `
-            <tr>
-              <td>${label}</td>
-              <td class="checkbox-cell"><span class="checkbox"></span></td>
-              <td class="checkbox-cell"><span class="checkbox"></span></td>
-            </tr>
-          `).join('')}
-        </tbody>
+        <thead>
+          <tr>
+            <th>Salad</th><th style="text-align:center">Protein</th>
+            <th style="text-align:center">Serves</th><th>Dressing</th>
+            <th>Packaging</th><th>Utensil</th><th>Packed?</th><th>Loaded?</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
       </table>
-    </div>`;
-  }
-
-  _renderFoodSummary(hotItems, coldItems, dryItems) {
-    return `
-    <div class="food-summary">
-      <div class="food-type hot"><div class="count">${hotItems.length}</div><div class="label">Hot Foods</div></div>
-      <div class="food-type cold"><div class="count">${coldItems.length}</div><div class="label">Cold Foods</div></div>
-      <div class="food-type dry"><div class="count">${dryItems.length}</div><div class="label">Dry Foods</div></div>
-    </div>`;
-  }
-
-  _renderQC(items) {
-    const defaults = [
-      'All HOT items temped and packed in correct packaging',
-      'All COLD items / condiments included',
-      'Serving utensils included (Tongs / Spoons / Ladles)',
-      'Paper goods / Cutlery matched to guest count',
-      'Delivery notes reviewed — special instructions followed',
-      'Order label applied to all boxes',
-      'Driver assigned and notified',
-    ];
-    return `
-    <div class="qc-section">
-      <div class="qc-header">Final QC Checklist</div>
-      <div class="qc-body">
-        ${(items || defaults).map(item => `
-          <div class="qc-item">
-            <div class="qc-checkbox"></div>
-            <span>${item}</span>
-          </div>
-        `).join('')}
+      <div style="
+        background:#f0faf0; border-top:1px solid #a5d6a7;
+        padding:5px 10px; font-size:8px; font-weight:900;
+        color:#2e7d32; text-transform:uppercase; letter-spacing:0.08em;
+      ">
+        ⚠ Dressing served on the side — do not forget:
+        ${dressings.map(d => `<span style="font-weight:700; color:#1a1a1a; margin-left:4px">${d}</span>`).join(' &nbsp;|&nbsp; ')}
       </div>
     </div>`;
   }
-
-  // ─── UTENSILS ─────────────────────────────────────────────────────────────
-  _collectUtensils(allItemArrays) {
-    const utensilMap = {};
-    for (const items of allItemArrays) {
-      for (const item of (items || [])) {
-        const utensil = item.utensil;
-        if (!utensil || utensil === '—' || utensil === '-') continue;
-        if (!utensilMap[utensil]) utensilMap[utensil] = [];
-        utensilMap[utensil].push(item.name);
-      }
-    }
-    return utensilMap;
-  }
-
-  _renderUtensils(utensilMap) {
-    if (!utensilMap || Object.keys(utensilMap).length === 0) return '';
-    const rows = Object.entries(utensilMap).map(([utensil, items]) => `
-      <tr>
-        <td><strong>${utensil}</strong></td>
-        <td style="font-size:8px; color:#555">${items.join(', ')}</td>
-        <td class="checkbox-cell"><span class="checkbox"></span></td>
-        <td class="checkbox-cell"><span class="checkbox"></span></td>
-      </tr>`).join('');
-    return `
-    <div class="section" style="margin-top:8px">
-      <div class="section-header" style="background:#2d3748">Utensils</div>
-      <table>
-        <thead><tr><th>Utensil</th><th>Used For</th><th>Packed?</th><th>Loaded?</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
-  }
-
-  // ─── DRINKS CONSOLIDADO ──────────────────────────────────────────────────
-  _consolidateDrinks(drinks, guestCount) {
-    const drinkRows = [];
-    let needsColdCups = false;
-    let needsHotCups  = false;
-
-    for (const drink of drinks) {
-      const isHot     = drink.tempType === 'hot';
-      const pkgStr    = drink.packaging
-        ? `${drink.packagingQty ? `${drink.packagingQty}x ` : ''}${drink.packaging}`
-        : `${drink.quantity}x each`;
-      const amountStr = drink.totalOz ? `${drink.totalOz} oz` : `${drink.quantity} each`;
-
-      drinkRows.push(`
-        <tr>
-          <td style="white-space:nowrap">
-            <strong>${drink.name}</strong>
-            ${drink.quantity > 1 ? `<span style="color:#1565c0;font-weight:900;margin-left:4px">×${drink.quantity}</span>` : ''}
-          </td>
-          <td>${amountStr}</td>
-          <td>${pkgStr}</td>
-          <td class="checkbox-cell"><span class="checkbox"></span></td>
-          <td class="checkbox-cell"><span class="checkbox"></span></td>
-        </tr>`);
-
-      if (drink.subDrinks?.length > 0) {
-        const subLabel = drink.subDrinks.join(' + ');
-        drinkRows.push(`
-          <tr style="background:#f0f4ff">
-            <td style="padding-left:20px;color:#444">↳ ${subLabel}</td>
-            <td>—</td><td>—</td>
-            <td class="checkbox-cell"><span class="checkbox"></span></td>
-            <td class="checkbox-cell"><span class="checkbox"></span></td>
-          </tr>`);
-      }
-
-      if (drink.creamers?.length > 0) {
-        for (const cr of drink.creamers) {
-          drinkRows.push(`
-            <tr style="background:#f0f4ff">
-              <td style="padding-left:20px;color:#444">↳ ${cr.name}</td>
-              <td>${cr.totalOz} oz</td>
-              <td>${cr.packaging}</td>
-              <td class="checkbox-cell"><span class="checkbox"></span></td>
-              <td class="checkbox-cell"><span class="checkbox"></span></td>
-            </tr>`);
-        }
-      }
-
-      if (drink.wantsCups) {
-        if (isHot)  needsHotCups  = true;
-        else        needsColdCups = true;
-      }
-    }
-
-    const cupRows = [];
-    if (needsColdCups && guestCount) {
-      cupRows.push(`
-        <tr style="background:#e8f5e9; border-top:2px solid #2e7d32">
-          <td style="padding-left:20px;color:#2e7d32;font-weight:900">↳ 16 oz Cold Cups / Lids</td>
-          <td>${guestCount} each</td>
-          <td>${guestCount}x 16 oz cold cups/lids</td>
-          <td class="checkbox-cell"><span class="checkbox"></span></td>
-          <td class="checkbox-cell"><span class="checkbox"></span></td>
-        </tr>`);
-    }
-    if (needsHotCups && guestCount) {
-      cupRows.push(`
-        <tr style="background:#fde8e8; border-top:2px solid #c0392b">
-          <td style="padding-left:20px;color:#c0392b;font-weight:900">↳ 8 oz Hot Cups / Lids</td>
-          <td>${guestCount} each</td>
-          <td>${guestCount}x 8 oz hot cups/lids</td>
-          <td class="checkbox-cell"><span class="checkbox"></span></td>
-          <td class="checkbox-cell"><span class="checkbox"></span></td>
-        </tr>`);
-    }
-
-    return { drinkRows, cupRow: cupRows.join('') };
-  }
-
-  _renderDrinksConsolidated(drinks, guestCount) {
-    if (!drinks || drinks.length === 0) return '';
-    const { drinkRows, cupRow } = this._consolidateDrinks(drinks, guestCount);
-    if (!drinkRows.length) return '';
-    return `
-    <div class="section" style="margin-top:8px">
-      <div class="section-header" style="background:#1565c0">Drinks</div>
-      <table>
-        <thead><tr><th>Item</th><th>Amount</th><th>Packaging</th><th>Packed?</th><th>Loaded?</th></tr></thead>
-        <tbody>
-          ${drinkRows.join('')}
-          ${cupRow}
-        </tbody>
-      </table>
-    </div>`;
-  }
-
-  // ─── ABSTRACT ─────────────────────────────────────────────────────────────
-  build(data) {
-    throw new Error('build() must be implemented by subclass');
-  }
 }
 
-module.exports = BaseGenerator;
+module.exports = BirdBoxGenerator;
