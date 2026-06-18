@@ -35,6 +35,26 @@ async function calculateTacoBar(cateringOrder, resolver) {
   const tortillas        = _calculateTortillas(ingredients, guestCount, resolver);
   const withoutTortillas = calculated.filter(i => !['Flour Tortillas', 'Corn Tortillas'].includes(i.name));
   const grouped          = _groupByCategory(withoutTortillas);
+
+  // Chips always included in Taco Bar — add if not already resolved from ingredients
+  if (!(grouped.snack || []).some(s => (s.name || '').toLowerCase() === 'chips')) {
+    const chipsFormula = await resolver.getFormula('Chips', 'TACO_BAR');
+    if (chipsFormula) {
+      const totalAmount  = resolver.calculateAmount(chipsFormula, guestCount);
+      const packaging    = resolver.getPackaging(chipsFormula, guestCount);
+      if (!grouped.snack) grouped.snack = [];
+      grouped.snack.unshift({
+        name:         'Chips',
+        category:     'snack',
+        tempType:     chipsFormula.temp_type || 'dry',
+        unit:         chipsFormula.unit,
+        utensil:      'Tongs Large',
+        totalAmount,
+        packaging:    packaging.package || 'Full Pan',
+        packagingQty: packaging.qty || Math.ceil(totalAmount),
+      });
+    }
+  }
   const salads           = resolveSalads(items);
   const individualTacos  = resolveIndividualTacos(items);
 
@@ -59,6 +79,7 @@ async function calculateTacoBar(cateringOrder, resolver) {
     // Skip known event items
     const knownKeywords = ['taco bar', 'bird box', 'space rental', 'ez cater', 'open tax', 'salad', 'city slicker', 'cowboy', 'farmer'];
     if (knownKeywords.some(k => nameLc.includes(k))) continue;
+    console.log('🔍 UNKNOWN ITEM fallback:', dn, 'qty:', item.quantity, 'alreadyAdded:', alreadyAdded);
     // Add as generic addon
     addons.push({
       name:         dn,
