@@ -25,8 +25,10 @@ module.exports = (
     try {
       const {
         storeId, clientName, clientPhone, clientEmail,
-        eventType, guestCount, deliveryMethod, deliveryAddress,
-        deliveryNotes, eventDate, eventTime,
+        company, eventType, guestCount,
+        deliveryMethod, deliveryAddress, deliveryNotes,
+        eventDate, eventTime, kitchenFinishTime,
+        distanceMiles,
         items = [], drinks = [], addons = [],
       } = req.body;
 
@@ -44,6 +46,10 @@ module.exports = (
       if (isNaN(fulfillmentDate.getTime())) {
         return res.status(400).json({ success: false, error: 'Invalid eventDate or eventTime' });
       }
+
+      const kitchenFinish = kitchenFinishTime
+        ? new Date(`${eventDate}T${kitchenFinishTime}`)
+        : null;
 
       const storeResult = await pool.query(
         'SELECT id, name, code FROM stores WHERE id = $1', [storeId]
@@ -64,16 +70,20 @@ module.exports = (
         INSERT INTO catering_orders (
           store_id, toast_order_guid, display_number,
           event_type, status, client_name, client_email, client_phone,
-          estimated_fulfillment_date, delivery_method, delivery_address, delivery_notes,
+          estimated_fulfillment_date, kitchen_finish_time,
+          delivery_method, delivery_address, delivery_notes,
           parsed_data, guest_count, total_amount,
+          delivery_distance_miles,
           is_manually_edited, is_manual_sheet,
           payment_status, pdf_version,
           created_at, updated_at
         ) VALUES (
           $1, $2, $3,
           $4, 'confirmed', $5, $6, $7,
-          $8, $9, $10, $11,
-          $12, $13, 0,
+          $8, $9,
+          $10, $11, $12,
+          $13, $14, 0,
+          $15,
           true, true,
           'PAID', 1,
           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
@@ -82,11 +92,13 @@ module.exports = (
         storeId, toastGuid, displayNumber,
         eventType, clientName, clientEmail || null, clientPhone || null,
         fulfillmentDate.toISOString(),
+        kitchenFinish ? kitchenFinish.toISOString() : null,
         deliveryMethod || 'PICKUP',
         deliveryAddress || null,
         deliveryNotes || null,
         JSON.stringify(parsedData),
         guestCount,
+        distanceMiles || null,
       ]);
 
       const orderId = insertResult.rows[0].id;
@@ -104,7 +116,7 @@ module.exports = (
         clientEmail:              clientEmail || null,
         clientPhone:              clientPhone || null,
         estimatedFulfillmentDate: fulfillmentDate.toISOString(),
-        kitchenFinishTime:        null,
+        kitchenFinishTime:        kitchenFinish ? kitchenFinish.toISOString() : null,
         deliveryMethod:           deliveryMethod || 'PICKUP',
         deliveryAddress:          deliveryAddress || null,
         deliveryNotes:            deliveryNotes || null,
@@ -118,8 +130,8 @@ module.exports = (
         isManualSheet:            true,
         pdfVersion:               1,
         paymentStatus:            'PAID',
-        distanceMiles:            null,
-        getKitchenFinishTime:     () => null,
+        distanceMiles:            distanceMiles || null,
+        getKitchenFinishTime:     () => kitchenFinish ? kitchenFinish.toISOString() : null,
         getEventTypeLabel:        () => eventType,
         getStatusLabel:           () => 'Confirmed',
         isUpcoming:               () => fulfillmentDate > new Date(),
