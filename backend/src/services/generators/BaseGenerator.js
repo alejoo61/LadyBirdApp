@@ -170,7 +170,7 @@ class BaseGenerator {
     const method   = (header.deliveryMethod || '').toUpperCase();
     const isPickup = method === 'PICKUP';
     const phone    = this._formatPhone(header.clientPhone);
-    const isTest   = (header.toastOrderGuid || '').startsWith('MANUAL-');
+    const isTest   = (header.toastOrderGuid || '').startsWith('MANUAL-') && !header.isManualSheet;
     const version  = header.pdfVersion || 1;
 
     let methodLabel = isPickup ? '🏪 Pickup' : '🚗 Delivery';
