@@ -56,7 +56,6 @@ async function calculateTacoBar(cateringOrder, resolver, pool) {
       });
     }
   }
-  const salads           = resolveSalads(items);
   const individualTacos  = resolveIndividualTacos(items);
 
   // Standalone addons — skip drinks and individual tacos
@@ -69,6 +68,8 @@ async function calculateTacoBar(cateringOrder, resolver, pool) {
     const unknowns = await resolveUnknownItems(items, resolver, addons, pool);
     addons.push(...unknowns);
   }
+
+  const salads       = resolveSalads(items);
 
   const paperContext = buildUtensilContext({
     proteins:  grouped.protein || [],

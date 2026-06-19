@@ -193,6 +193,8 @@ async function _processBirdBoxItems(items, guestCount, cateringOrder, delivery, 
     : [{ name: 'Chips & Salsa', included: 'No', tempType: 'dry' }];
 
   const anyWantsPaper = boxes.some(b => b.wantsPaper);
+  const salads       = resolveSalads(items);
+
   // Always calculate — serving utensils always included, cutlery only if wantsPaper
   const tacoBoatCount = Math.ceil((totalTacos / 2 + 10) / 10) * 10;
   const bbContext = buildUtensilContext({
@@ -213,8 +215,6 @@ async function _processBirdBoxItems(items, guestCount, cateringOrder, delivery, 
       return { ...pg, qty: tacoBoatCount };
     return pg;
   });
-
-  const salads       = resolveSalads(items);
 
   // Unknown items — check menu_items table for any item not resolved by formulas
   if (pool) {
