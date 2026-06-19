@@ -55,10 +55,10 @@ interface SaladsConfig {
 }
 
 interface DrinkItem {
-  name:     string;
-  quantity: number;
-  milks?:   string[];
-  cups?:    boolean;
+  name:      string;
+  quantity:  number;
+  creamers?: string[];  // selected creamers from DB
+  wantsCups?: boolean;  // yes/no cups
 }
 
 interface AddonItem {
@@ -80,7 +80,8 @@ interface WizardProps {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const DRINKS              = ["June Drip Coffee", "Iced Coffee", "Cold Brew", "Lavender Limeade", "Hibiscus Lemonade", "Agua Fresca", "Half & Half"];
+// Drinks now loaded from DB via useMenuItems — DRINKS_FALLBACK used if DB empty
+const DRINKS_FALLBACK = ["Hot Drip Coffee - 96oz", "Crema Drip Coffee - 96oz", "Watermelon Aqua Fresca", "Lavender Limeade", "Hibiscus Lemonade", "Agua Fresca"];
 const ADDONS              = ["Chips & Salsa", "Chips & Guacamole", "Chips & Queso", "Bunuelos (serves 10)"];
 const BB_TACO_COUNTS      = [30, 40, 50];
 
@@ -206,8 +207,8 @@ function buildItems(events: EventBlock[], drinks: DrinkItem[], addons: AddonItem
 
   for (const d of drinks) {
     const modifiers: object[] = [];
-    if (d.milks?.length)  d.milks.forEach(m  => modifiers.push({ displayName: m, quantity: 1, price: 0 }));
-    if (d.cups)           modifiers.push({ displayName: 'Yes, I want cups and lids included', quantity: 1, price: 0 });
+    if (d.creamers?.length) d.creamers.forEach(c => modifiers.push({ displayName: c, quantity: 1, price: 0 }));
+    if (d.wantsCups)        modifiers.push({ displayName: 'Yes, I want cups and lids included', quantity: 1, price: 0 });
     items.push({ guid: uid(), displayName: d.name, quantity: d.quantity, price: 0, modifiers });
   }
 
@@ -670,6 +671,124 @@ function EventEditor({ ev, onChange, onRemove }: { ev: EventBlock; onChange: (v:
   );
 }
 
+
+// ─── Drinks Section ───────────────────────────────────────────────────────────
+// Carga drinks y creamers desde la DB via useMenuItems
+
+function DrinksSection({
+  drinks,
+  setDrinks,
+}: {
+  drinks: DrinkItem[];
+  setDrinks: React.Dispatch<React.SetStateAction<DrinkItem[]>>;
+}) {
+  const { byCategory, loading } = useMenuItems('TACO_BAR');
+
+  // Drinks de la DB — fallback si viene vacío
+  const drinkOpts    = byCategory['drink']?.length
+    ? byCategory['drink']
+    : DRINKS_FALLBACK;
+
+  // Creamers: category='creamer' + Local Whole Milk (menu_item)
+  const creamerOpts  = [
+    ...(byCategory['creamer'] || []),
+    ...(byCategory['menu_item'] || []).filter(i => i === 'Local Whole Milk'),
+  ];
+
+  const isCoffee = (name: string) => name.toLowerCase().includes('coffee');
+
+  const toggle = (name: string) => {
+    const exists = drinks.find(d => d.name === name);
+    if (exists) setDrinks(prev => prev.filter(d => d.name !== name));
+    else        setDrinks(prev => [...prev, {
+      name, quantity: 1,
+      wantsCups: isCoffee(name),
+      creamers: [],
+    }]);
+  };
+
+  const update = (name: string, field: keyof DrinkItem, val: unknown) =>
+    setDrinks(prev => prev.map(d => d.name === name ? { ...d, [field]: val } : d));
+
+  const toggleCreamer = (drinkName: string, creamer: string) => {
+    setDrinks(prev => prev.map(d => {
+      if (d.name !== drinkName) return d;
+      const current = d.creamers || [];
+      return {
+        ...d,
+        creamers: current.includes(creamer)
+          ? current.filter(c => c !== creamer)
+          : [...current, creamer],
+      };
+    }));
+  };
+
+  const cls = (active: boolean) =>
+    `px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-widest cursor-pointer transition-all border ${
+      active ? 'bg-night text-bone border-night' : 'bg-bone text-night/50 border-transparent hover:border-night/20'
+    }`;
+
+  if (loading) return <div className="text-[11px] text-night/40 font-black uppercase tracking-widest animate-pulse">Loading drinks...</div>;
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3">
+        <Coffee size={14} className="text-night/40" />
+        <span className="text-[10px] font-black uppercase tracking-widest text-night/40">Drinks</span>
+      </div>
+
+      {/* Drink selector */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        {drinkOpts.map(d => (
+          <button key={d} type="button" onClick={() => toggle(d)}
+            className={cls(!!drinks.find(x => x.name === d))}>
+            {d}
+          </button>
+        ))}
+      </div>
+
+      {/* Per-drink config */}
+      {drinks.map(d => (
+        <div key={d.name} className="mb-4 p-3 bg-bone/50 rounded-xl border border-tumbleweed/20">
+          <div className="flex items-center gap-3 mb-2">
+            <span className="text-[11px] font-bold text-night flex-1">{d.name}</span>
+            <label className="text-[10px] font-black uppercase text-night/40">Qty</label>
+            <input type="number" min={1} value={d.quantity}
+              onChange={e => update(d.name, 'quantity', parseInt(e.target.value) || 1)}
+              className="w-16 px-2 py-1 bg-white rounded-lg text-xs font-black text-night outline-none text-center" />
+          </div>
+
+          {/* Cups — solo para coffee */}
+          {isCoffee(d.name) && (
+            <label className="flex items-center gap-2 cursor-pointer mb-2">
+              <input type="checkbox" checked={d.wantsCups || false}
+                onChange={e => update(d.name, 'wantsCups', e.target.checked)}
+                className="accent-night" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-night/50">Cups & Lids</span>
+            </label>
+          )}
+
+          {/* Creamers — solo para coffee */}
+          {isCoffee(d.name) && creamerOpts.length > 0 && (
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-night/40 mb-2">Creamers</p>
+              <div className="flex flex-wrap gap-2">
+                {creamerOpts.map(c => (
+                  <button key={c} type="button"
+                    onClick={() => toggleCreamer(d.name, c)}
+                    className={cls((d.creamers || []).includes(c))}>
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Main Wizard ──────────────────────────────────────────────────────────────
 
 export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: WizardProps) {
@@ -720,7 +839,7 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
   const toggleDrink = (name: string) => {
     const exists = drinks.find(d => d.name === name);
     if (exists) setDrinks(prev => prev.filter(d => d.name !== name));
-    else        setDrinks(prev => [...prev, { name, quantity: 1, cups: true, milks: name.includes('Coffee') ? ['Local Whole Milk'] : undefined }]);
+    else        setDrinks(prev => [...prev, { name, quantity: 1, wantsCups: name.toLowerCase().includes('coffee'), creamers: [] }]);
   };
 
   const toggleAddon = (name: string) => {
@@ -922,37 +1041,10 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
           {/* ── Step 3 ── */}
           {step === 3 && (
             <div className="space-y-6">
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Coffee size={14} className="text-night/40" />
-                  <label className={labelCls + ' mb-0'}>Drinks</label>
-                </div>
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {DRINKS.map(d => (
-                    <button key={d} type="button" onClick={() => toggleDrink(d)}
-                      className={`px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-widest cursor-pointer transition-all border ${
-                        drinks.find(x => x.name === d) ? 'bg-night text-bone border-night' : 'bg-bone text-night/50 border-transparent hover:border-night/20'
-                      }`}>{d}</button>
-                  ))}
-                </div>
-                {drinks.map((d, i) => (
-                  <div key={d.name} className="flex items-center gap-3 py-2 border-b border-tumbleweed/10">
-                    <span className="text-[11px] font-bold text-night flex-1">{d.name}</span>
-                    <label className="text-[10px] font-black uppercase text-night/40">Qty</label>
-                    <input type="number" min={1} value={d.quantity}
-                      onChange={e => setDrinks(prev => prev.map((x,j) => j === i ? { ...x, quantity: parseInt(e.target.value)||1 } : x))}
-                      className="w-16 px-2 py-1 bg-bone rounded-lg text-xs font-black text-night outline-none text-center" />
-                    {d.name.includes('Coffee') && (
-                      <label className="flex items-center gap-1.5 text-[10px] font-black uppercase text-night/40">
-                        <input type="checkbox" checked={d.cups || false}
-                          onChange={e => setDrinks(prev => prev.map((x,j) => j === i ? { ...x, cups: e.target.checked } : x))}
-                          className="accent-night" />
-                        Cups
-                      </label>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <DrinksSection
+                drinks={drinks}
+                setDrinks={setDrinks}
+              />
 
               <div>
                 <div className="flex items-center gap-2 mb-3">
