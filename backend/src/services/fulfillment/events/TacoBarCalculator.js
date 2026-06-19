@@ -40,18 +40,18 @@ async function calculateTacoBar(cateringOrder, resolver) {
   if (!(grouped.snack || []).some(s => (s.name || '').toLowerCase() === 'chips')) {
     const chipsFormula = await resolver.getFormula('Chips', 'TACO_BAR');
     if (chipsFormula) {
-      const totalAmount  = resolver.calculateAmount(chipsFormula, guestCount);
-      const packaging    = resolver.getPackaging(chipsFormula, guestCount);
+      const rawAmount    = resolver.calculateAmount(chipsFormula, guestCount);
+      const chipPanCount = Math.ceil(rawAmount);
       if (!grouped.snack) grouped.snack = [];
       grouped.snack.unshift({
         name:         'Chips',
         category:     'snack',
         tempType:     chipsFormula.temp_type || 'dry',
-        unit:         chipsFormula.unit,
+        unit:         'Full Pan',
         utensil:      'Tongs Large',
-        totalAmount,
-        packaging:    packaging.package || 'Full Pan',
-        packagingQty: packaging.qty || Math.ceil(totalAmount),
+        totalAmount:  chipPanCount,
+        packaging:    'Full Pan',
+        packagingQty: chipPanCount,
       });
     }
   }
@@ -68,7 +68,12 @@ async function calculateTacoBar(cateringOrder, resolver) {
   for (const item of items) {
     const nameLc    = (item.displayName || item.name || '').toLowerCase();
     const modifiers = item.modifiers || [];
-    if (modifiers.length > 0) continue;
+    // Skip items with non-tortilla modifiers (they are event-specific items)
+    const onlyTortillaModifiers = modifiers.every(m => {
+      const mn = (m.displayName || '').toLowerCase();
+      return mn.includes('flour') || mn.includes('corn') || mn.includes('50/50') || mn.includes('tortilla');
+    });
+    if (modifiers.length > 0 && !onlyTortillaModifiers) continue;
     if (isDrink(nameLc)) continue;
     if (isIndividualTaco(nameLc, modifiers)) continue;
     // Check if already in addons
@@ -101,7 +106,7 @@ async function calculateTacoBar(cateringOrder, resolver) {
 
   // Total chip pans: chips from snack formula + chips from addons (Chips & Guac, etc.)
   const snackChips     = (grouped.snack || []).filter(s => (s.name || '').toLowerCase().includes('chip'));
-  const snackChipPans  = snackChips.reduce((sum, s) => sum + Math.ceil(s.totalAmount || 0), 0);
+  const snackChipPans  = snackChips.reduce((sum, s) => sum + (s.packagingQty || Math.ceil(s.totalAmount || 0)), 0);
   const addonChipPans  = addons.reduce((sum, a) => sum + (a.chipPans || 0), 0);
   const totalChipPans  = snackChipPans + addonChipPans;
 
