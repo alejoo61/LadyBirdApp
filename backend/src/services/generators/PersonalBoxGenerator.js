@@ -26,7 +26,7 @@ class PersonalBoxGenerator extends BaseGenerator {
     ${totalBoxes > 0 ? `
     <div class="main-grid">
       <div class="left-col">
-        ${this._renderBoxGroups(personalBoxes || [], totalBoxes)}
+        ${this._renderBoxGroups(this._sortPersonalBoxes(personalBoxes || []), totalBoxes)}
         ${this._renderPersonalTacoRows(this._sortByComboNumber(personalTacoRows || []))}
         ${this._renderChipsAndSalsa(chipsRow, salsaRow)}
       </div>
@@ -113,6 +113,16 @@ class PersonalBoxGenerator extends BaseGenerator {
     }
 
     return { included: true, items: Object.values(merged) };
+  }
+
+  // ─── SORT PERSONAL BOXES BY FIRST COMBO NUMBER ───────────────────────────
+  _sortPersonalBoxes(personalBoxes) {
+    if (!personalBoxes || personalBoxes.length === 0) return personalBoxes;
+    return [...personalBoxes].sort((a, b) => {
+      const numA = parseInt((a.comboLabel || a.combos?.[0] || '').match(/#(\d+)/)?.[1] ?? '999');
+      const numB = parseInt((b.comboLabel || b.combos?.[0] || '').match(/#(\d+)/)?.[1] ?? '999');
+      return numA - numB;
+    });
   }
 
   // ─── PERSONAL BOX GROUPS ──────────────────────────────────────────────────
