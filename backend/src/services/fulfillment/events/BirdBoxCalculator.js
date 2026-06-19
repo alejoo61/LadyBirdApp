@@ -192,28 +192,26 @@ async function _processBirdBoxItems(items, guestCount, cateringOrder, delivery, 
     : [{ name: 'Chips & Salsa', included: 'No', tempType: 'dry' }];
 
   const anyWantsPaper = boxes.some(b => b.wantsPaper);
-  let paperGoods      = { included: false, items: [] };
-
-  if (anyWantsPaper) {
-    const tacoBoatCount = Math.ceil((totalTacos / 2 + 10) / 10) * 10;
-    const bbContext = {
-      hasQueso:         manualSalsas.some(i => (i.name||'').toLowerCase().includes('queso')),
-      hasGuac:          manualSalsas.some(i => (i.name||'').toLowerCase().includes('guac')),
-      hasBunuelos:      manualSalsas.some(i => (i.name||'').toLowerCase().includes('bunuelo')),
-      hasChips:         anyWantsChips,
-      hasTortillaFlour: tacoRows.some(t => (t.tortillaLabel||'').toLowerCase().includes('flour') || (t.flourTortillas||0) > 0),
-      hasTortillaCorn:  tacoRows.some(t => (t.tortillaLabel||'').toLowerCase().includes('corn')  || (t.cornTortillas||0) > 0),
-      salsaCount:       includedSalsas.filter(s => (s.packaging||'').includes('6 oz')).length,
-      salsaLargeCount:  includedSalsas.filter(s => (s.packaging||'').includes('32 oz') || (s.packaging||'').includes('16 oz')).length,
-      dressingCount: 0, saladCount: 0, spoonServingCount: 0,
-    };
-    paperGoods = await resolver.calculatePaperGoods('BIRD_BOX', effectiveGuests, bbContext);
-    paperGoods.items = (paperGoods.items || []).map(pg => {
-      if ((pg.name || '').toLowerCase().includes('taco boat') || (pg.name || '').toLowerCase().includes('boat'))
-        return { ...pg, qty: tacoBoatCount };
-      return pg;
-    });
-  }
+  // Always calculate — serving utensils always included, cutlery only if wantsPaper
+  const tacoBoatCount = Math.ceil((totalTacos / 2 + 10) / 10) * 10;
+  const bbContext = {
+    hasQueso:         manualSalsas.some(i => (i.name||'').toLowerCase().includes('queso')),
+    hasGuac:          manualSalsas.some(i => (i.name||'').toLowerCase().includes('guac')),
+    hasBunuelos:      manualSalsas.some(i => (i.name||'').toLowerCase().includes('bunuelo')),
+    hasChips:         anyWantsChips,
+    hasTortillaFlour: tacoRows.some(t => (t.tortillaLabel||'').toLowerCase().includes('flour') || (t.flourTortillas||0) > 0),
+    hasTortillaCorn:  tacoRows.some(t => (t.tortillaLabel||'').toLowerCase().includes('corn')  || (t.cornTortillas||0) > 0),
+    salsaCount:       includedSalsas.filter(s => (s.packaging||'').includes('6 oz')).length,
+    salsaLargeCount:  includedSalsas.filter(s => (s.packaging||'').includes('32 oz') || (s.packaging||'').includes('16 oz')).length,
+    dressingCount: 0, saladCount: 0, spoonServingCount: 0,
+    wantsPaper: anyWantsPaper,
+  };
+  let paperGoods = await resolver.calculatePaperGoods('BIRD_BOX', effectiveGuests, bbContext);
+  paperGoods.items = (paperGoods.items || []).map(pg => {
+    if ((pg.name || '').toLowerCase().includes('taco boat') || (pg.name || '').toLowerCase().includes('boat'))
+      return { ...pg, qty: tacoBoatCount };
+    return pg;
+  });
 
   const salads       = resolveSalads(items);
 

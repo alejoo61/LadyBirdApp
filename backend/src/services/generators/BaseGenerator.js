@@ -286,16 +286,21 @@ class BaseGenerator {
   }
 
   _renderPaperGoods(paperGoods) {
-    if (!paperGoods || !paperGoods.included) {
+    if (!paperGoods || (!paperGoods.included && (!paperGoods.items || paperGoods.items.length === 0))) {
       return `
       <div class="paper-goods">
         <div class="paper-goods-header">Paper Goods</div>
         <p class="paper-opted-out">Client opted out.</p>
       </div>`;
     }
+    // Show opted out note if client didn't request cutlery but serving utensils are still included
+    const optedOutNote = (!paperGoods.wantsPaper && paperGoods.items?.length > 0)
+      ? '<p class="paper-opted-out" style="margin-bottom:6px">No cutlery requested — serving utensils only.</p>'
+      : '';
     return `
     <div class="paper-goods">
       <div class="paper-goods-header">Paper Goods</div>
+      ${optedOutNote}
       <table>
         <thead><tr><th>Item</th><th>Qty</th><th>Packed?</th><th>Loaded?</th></tr></thead>
         <tbody>
