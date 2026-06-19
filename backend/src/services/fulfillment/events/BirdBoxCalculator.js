@@ -49,9 +49,9 @@ async function _processBirdBoxItems(items, guestCount, cateringOrder, delivery, 
       sidePacks.push({
         name: item.displayName || item.name, quantity: qty, salsaName,
         contents: [
-          { item: 'Guacamole', amount: `${32*qty} oz`, packaging: `${qty}x 32 oz container`, utensil: 'Spoon',        tempType: 'cold' },
-          { item: 'Queso',     amount: `${32*qty} oz`, packaging: `${qty}x 32 oz container`, utensil: 'Ladle',        tempType: 'hot'  },
-          { item: salsaName,   amount: `${32*qty} oz`, packaging: `${qty}x 32 oz container`, utensil: 'Ladle',        tempType: 'cold' },
+          { item: 'Guacamole', amount: `${32*qty} oz`, packaging: `${qty}x 32 oz container`, utensil: 'Spoon Serving', tempType: 'cold' },
+          { item: 'Queso',     amount: `${32*qty} oz`, packaging: `${qty}x 32 oz container`, utensil: 'Ladle',         tempType: 'hot'  },
+          { item: salsaName,   amount: `${32*qty} oz`, packaging: `${qty}x 32 oz container`, utensil: 'Ladle',         tempType: 'cold' },
         ],
       });
       continue;
@@ -111,7 +111,7 @@ async function _processBirdBoxItems(items, guestCount, cateringOrder, delivery, 
       continue;
     }
 
-    // Bird Box with tacos
+    // Bird Box con tacos
     const sizeMod   = modifiers.find(m => resolver.isSizeModifier(m.displayName || ''));
     const tacoCount = sizeMod
       ? parseInt((sizeMod.displayName || '').match(/(\d+)\s*tacos?/i)?.[1] || 0)
@@ -193,19 +193,47 @@ async function _processBirdBoxItems(items, guestCount, cateringOrder, delivery, 
     : [{ name: 'Chips & Salsa', included: 'No', tempType: 'dry' }];
 
   const anyWantsPaper = boxes.some(b => b.wantsPaper);
-  const salads       = resolveSalads(items);
+  const salads        = resolveSalads(items);
 
-  // Always calculate — serving utensils always included, cutlery only if wantsPaper
-  const tacoBoatCount = Math.ceil((totalTacos / 2 + 10) / 10) * 10;
+  // ─── Tortillas para utensil context ──────────────────────────────────────
+  // En Bird Box los tacos vienen pre-armados. Los combo ingredients (brisket,
+  // avocado, rajas, etc.) NO triggerean utensils — van dentro del taco.
+  // Solo las tortillas necesitan Tong Small (para manipularlas en cocina).
+  // Se derivan de tacoRows que ya tienen el conteo por tipo (flour/corn).
+  const tortillaTypes = [];
+  if (tacoRows.some(r => r.flourTortillas > 0)) tortillaTypes.push({ name: 'Flour Tortillas' });
+  if (tacoRows.some(r => r.cornTortillas  > 0)) tortillaTypes.push({ name: 'Corn Tortillas'  });
+
+  // ─── Side pack salsas para ladle count ───────────────────────────────────
+  // Los side packs tienen Queso y Salsa en 32oz → triggerean Ladle.
+  // Se pasan como salsas separadas para que buildUtensilContext los cuente.
+  const sidePackSalsas = sidePacks.flatMap(sp =>
+    sp.contents
+      .filter(c => c.utensil === 'Ladle')
+      .map(c => ({ name: c.item, packaging: '32 oz deli cup' }))
+  );
+
   const bbContext = buildUtensilContext({
-    // Bird Box tacos come pre-packed — no serving utensils needed for combo ingredients
-    // Only salsas, addons, side packs and salads need utensils
-    salsas:     [...includedSalsas, ...manualSalsas.filter(s => s.category === 'salsa')],
-    addons:     [...addonItems, ...sidePacks.flatMap(sp => sp.contents.map(c => ({ name: c.item })))],
+    // Salsas standalone + side pack salsas (todas en 32oz → Ladle)
+    salsas:    [
+      ...includedSalsas,
+      ...manualSalsas.filter(s => s.category === 'salsa'),
+      ...sidePackSalsas,
+    ],
+    // Addons standalone: Bunuelos → Tong Large, Guac → Spoon Serving
+    addons:    addonItems,
     salads,
-    extraNames: [anyWantsChips ? 'chip' : ''],
+    // Tortillas: 1 Tong Small por tipo (flour/corn)
+    tortillas: tortillaTypes,
+    // Si hay chips en boxes → Tong Large (evitar doble conteo: no pasar si
+    // chips ya está en addonItems con nombre que contiene 'chip')
+    extraNames: anyWantsChips && !addonItems.some(a => (a.name||'').toLowerCase().includes('chip'))
+      ? ['chip']
+      : [],
     wantsPaper: anyWantsPaper,
   });
+
+  const tacoBoatCount = Math.ceil((totalTacos / 2 + 10) / 10) * 10;
   let paperGoods = await resolver.calculatePaperGoods('BIRD_BOX', effectiveGuests, bbContext);
   paperGoods.items = (paperGoods.items || []).map(pg => {
     if ((pg.name || '').toLowerCase().includes('taco boat') || (pg.name || '').toLowerCase().includes('boat'))
@@ -213,7 +241,7 @@ async function _processBirdBoxItems(items, guestCount, cateringOrder, delivery, 
     return pg;
   });
 
-  // Unknown items — check menu_items table for any item not resolved by formulas
+  // Unknown items — check menu_items table
   if (pool) {
     const unknowns = await resolveUnknownItems(items, resolver, addonItems, pool);
     addonItems.push(...unknowns);
