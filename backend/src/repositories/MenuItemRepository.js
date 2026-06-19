@@ -70,6 +70,7 @@ class MenuItemRepository {
         AND (
           category = ANY($2::text[])
           OR (category = 'menu_item' AND price > 0)
+          OR (category = 'menu_item' AND name ILIKE '%salad%')
         )
       ORDER BY
         CASE category
