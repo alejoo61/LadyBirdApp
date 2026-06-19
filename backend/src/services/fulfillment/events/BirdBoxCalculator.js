@@ -196,17 +196,23 @@ async function _processBirdBoxItems(items, guestCount, cateringOrder, delivery, 
   const salads        = resolveSalads(items);
 
   // ─── Tortillas para utensil context ──────────────────────────────────────
-  // En Bird Box los tacos vienen pre-armados. Los combo ingredients (brisket,
-  // avocado, rajas, etc.) NO triggerean utensils — van dentro del taco.
-  // Solo las tortillas necesitan Tong Small (para manipularlas en cocina).
-  // Se derivan de tacoRows que ya tienen el conteo por tipo (flour/corn).
+  // En Bird Box los tacos vienen pre-armados. Solo las tortillas necesitan
+  // Tong Small (1 por tipo flour/corn). Los combo ingredients NO se pasan.
   const tortillaTypes = [];
   if (tacoRows.some(r => r.flourTortillas > 0)) tortillaTypes.push({ name: 'Flour Tortillas' });
   if (tacoRows.some(r => r.cornTortillas  > 0)) tortillaTypes.push({ name: 'Corn Tortillas'  });
 
-  // ─── Side pack salsas para ladle count ───────────────────────────────────
-  // Los side packs tienen Queso y Salsa en 32oz → triggerean Ladle.
-  // Se pasan como salsas separadas para que buildUtensilContext los cuente.
+  // ─── Chips para utensil context ───────────────────────────────────────────
+  // Si hay chips incluidos en boxes → Tong Large.
+  // Se pasa como snack con nombre 'Chips' (sin 'churro'/'bunuelo') para que
+  // hasChips=true en UtensilContextBuilder sin interferir con hasBunuelos.
+  // NO usar extraNames — causa doble conteo cuando anyWantsChips=true y
+  // addonItems ya tiene Bunuelos (ambos triggerean Tong Large por separado).
+  const chipsSnack = anyWantsChips
+    ? [{ name: 'Chips' }]
+    : [];
+
+  // ─── Side pack salsas → Ladle ─────────────────────────────────────────────
   const sidePackSalsas = sidePacks.flatMap(sp =>
     sp.contents
       .filter(c => c.utensil === 'Ladle')
@@ -214,23 +220,13 @@ async function _processBirdBoxItems(items, guestCount, cateringOrder, delivery, 
   );
 
   const bbContext = buildUtensilContext({
-    // Salsas standalone + side pack salsas (todas en 32oz → Ladle)
-    salsas:    [
-      ...includedSalsas,
-      ...manualSalsas.filter(s => s.category === 'salsa'),
-      ...sidePackSalsas,
-    ],
-    // Addons standalone: Bunuelos → Tong Large, Guac → Spoon Serving
-    addons:    addonItems,
+    salsas:    [...includedSalsas, ...manualSalsas.filter(s => s.category === 'salsa'), ...sidePackSalsas],
+    addons:    addonItems,       // Bunuelos, Chips & Queso, etc. — standalone
+    snacks:    chipsSnack,       // Chips del box → hasChips sin contaminar hasBunuelos
     salads,
-    // Tortillas: 1 Tong Small por tipo (flour/corn)
-    tortillas: tortillaTypes,
-    // Si hay chips en boxes → Tong Large (evitar doble conteo: no pasar si
-    // chips ya está en addonItems con nombre que contiene 'chip')
-    extraNames: anyWantsChips && !addonItems.some(a => (a.name||'').toLowerCase().includes('chip'))
-      ? ['chip']
-      : [],
+    tortillas: tortillaTypes,    // Tong Small por tipo
     wantsPaper: anyWantsPaper,
+    // extraNames: [] — nunca usar 'chip' como string suelto, causa doble conteo
   });
 
   const tacoBoatCount = Math.ceil((totalTacos / 2 + 10) / 10) * 10;

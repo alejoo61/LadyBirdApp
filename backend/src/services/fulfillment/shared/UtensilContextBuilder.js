@@ -20,21 +20,26 @@
 // ─── REGLAS POR EVENTO ────────────────────────────────────────────────────
 //
 // TACO BAR:
-//   Todos los ingredientes (proteins, toppings, salsas, tortillas, snacks)
-//   triggerean utensils porque se sirven en bandejas/bowls para self-service.
+//   Todos los ingredientes triggerean utensils (self-service en bandejas).
 //
 // BIRD BOX:
-//   Tacos vienen pre-armados. Solo triggerean utensils:
-//   - tortillas (Tong Small, para manipular en cocina)
-//   - salsas standalone (Ladle/Spoon Small)
-//   - addons standalone: Bunuelos, Chips (Tong Large)
-//   - salads (Fork Serving, Spoon Small para dressing)
-//   NO se pasan combo ingredients (brisket, avocado, etc.) — van dentro del taco.
+//   Tacos pre-armados. Solo triggerean utensils:
+//   - tortillas  → Tong Small
+//   - salsas standalone → Ladle / Spoon Small
+//   - addons standalone (Bunuelos, Chips) → Tong Large
+//   - salads → Fork Serving, Spoon Small
+//   NO se pasan combo ingredients — van dentro del taco.
 //
 // PERSONAL BOX:
-//   Similar a Bird Box para la parte de tacos.
-//   Siempre wantsPaper = true (Fork Small + Napkins per box).
-//   Sub-eventos BirdBox/TacoBar calculan sus propios utensils.
+//   Similar a Bird Box. wantsPaper=true siempre (Fork Small + Napkins per box).
+//
+// ─── IMPORTANTE: Churro Chips / Bunuelos ─────────────────────────────────
+// "Churro Chips" en Toast contiene 'chip' Y 'churro'.
+// hasBunuelos matchea 'churro' → Tong Large +1
+// hasChips    matchea 'chip'   → Tong Large +1  ← DOBLE CONTEO
+//
+// Fix: hasChips excluye nombres que también son bunuelos/churros.
+// Solo cuenta 'chip' si el nombre NO incluye 'churro' ni 'bunuelo'.
 
 function buildUtensilContext({
   proteins   = [],
@@ -44,13 +49,12 @@ function buildUtensilContext({
   snacks     = [],
   addons     = [],
   salads     = [],
-  tacoRows   = [],    // Taco Bar: combo rows con nombres de ingredientes
-  extraNames = [],    // strings adicionales a scanear (filtrados de falsy)
+  tacoRows   = [],
+  extraNames = [],
   wantsPaper = false,
 } = {}) {
 
-  // Todos los nombres aplanados en una lista searchable.
-  // extraNames filtra strings vacíos/falsy para evitar que '' matchee todo.
+  // Todos los nombres aplanados. extraNames filtra falsy para evitar '' matchee todo.
   const nameLcs = [
     ...proteins.map(i   => (i.name || '').toLowerCase()),
     ...toppings.map(i   => (i.name || '').toLowerCase()),
@@ -63,8 +67,7 @@ function buildUtensilContext({
     ...extraNames.filter(Boolean).map(n => n.toLowerCase()),
   ];
 
-  // has() retorna boolean — cada TYPE se detecta UNA sola vez
-  // aunque el item aparezca en múltiples listas. No suma duplicados.
+  // has() — boolean, detecta si algún nombre contiene alguno de los keywords
   const has = (...keywords) => nameLcs.some(n => keywords.some(k => n.includes(k)));
 
   // ── Salsa packaging breakdown ─────────────────────────────────────────────
@@ -75,10 +78,8 @@ function buildUtensilContext({
   }).length;
 
   // ── Tong Small triggers ───────────────────────────────────────────────────
-  // 1 por tipo de tortilla (flour/corn son tipos distintos)
   const hasTortillaFlour  = tortillas.some(t => (t.name || '').toLowerCase().includes('flour'));
   const hasTortillaCorn   = tortillas.some(t => (t.name || '').toLowerCase().includes('corn'));
-  // 1 por item standalone presente
   const hasAvocado        = has('avocado');
   const hasPickledOnions  = has('pickled onion');
   const hasShredredCheese = has('shredded cheese', 'monterrey jack');
@@ -93,9 +94,12 @@ function buildUtensilContext({
     (hasCabbage         ? 1 : 0);
 
   // ── Tong Large triggers ───────────────────────────────────────────────────
-  // 1 por TYPE presente — has() es boolean, no acumula aunque el item
-  // aparezca en addons Y extraNames simultáneamente.
-  const hasChips    = has('chip');
+  // ⚠ hasChips: excluir nombres que contienen 'churro' o 'bunuelo' para evitar
+  //   doble conteo cuando el item en Toast se llama "Churro Chips".
+  //   "Churro Chips" es Bunuelos — triggerean UN solo Tong Large via hasBunuelos.
+  const hasChips = nameLcs.some(n =>
+    n.includes('chip') && !n.includes('churro') && !n.includes('bunuelo') && !n.includes('buñuelo')
+  );
   const hasBunuelos = has('bunuelo', 'buñuelo', 'churro');
   const hasRajas    = has('rajas');
   const hasBrisket  = has('brisket');
@@ -111,8 +115,6 @@ function buildUtensilContext({
     (hasBacon    ? 1 : 0);
 
   // ── Spoon Serving triggers ────────────────────────────────────────────────
-  // Solo aplica si los items vienen como ADDON standalone (no dentro de un taco).
-  // En Bird Box/Personal Box, el caller solo pasa addons standalone al contexto.
   const SPOON_SERVING_KEYWORDS = [
     'guacamole', 'guac', 'esquites', 'black beans', 'pico',
     'potato', 'refried beans', 'scrambled eggs', 'egg',
@@ -123,17 +125,14 @@ function buildUtensilContext({
   ).length;
 
   // ── Spoon Small triggers ──────────────────────────────────────────────────
-  // 1 por salsa en 6oz cup + 1 por salad dressing + 1 si cotija standalone
   const hasCotija     = has('cotija');
   const spoonSmallQty = salsaSmall + salads.length + (hasCotija ? 1 : 0);
 
   // ── Ladle triggers ────────────────────────────────────────────────────────
-  // 1 si hay Queso + 1 por cada salsa en deli cup 16/32oz
   const hasQueso = has('queso');
   const ladleQty = (hasQueso ? 1 : 0) + salsaLarge;
 
   // ── Fork Serving ──────────────────────────────────────────────────────────
-  // 2 por salad
   const forkServingQty = salads.length * 2;
 
   // ── Flags para boat doubling ──────────────────────────────────────────────
