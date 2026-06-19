@@ -211,6 +211,15 @@ class BaseGenerator {
   }
 
   // ─── INDIVIDUAL TACOS ─────────────────────────────────────────────────────
+  _sortByComboNumber(rows) {
+    if (!rows || rows.length === 0) return rows;
+    return [...rows].sort((a, b) => {
+      const numA = parseInt((a.name || '').match(/^#(\d+)/)?.[1] ?? '999');
+      const numB = parseInt((b.name || '').match(/^#(\d+)/)?.[1] ?? '999');
+      return numA - numB;
+    });
+  }
+
   _renderIndividualTacos(individualTacos) {
     if (!individualTacos || individualTacos.length === 0) return '';
     const rows = individualTacos.map(item => {

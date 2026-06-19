@@ -132,12 +132,7 @@ class BirdBoxGenerator extends BaseGenerator {
   // ─── TACOS BY COMBO ───────────────────────────────────────────────────────
   _renderTacosByCombo(tacoRows) {
     if (!tacoRows || tacoRows.length === 0) return '';
-    // Sort by combo number (#1, #2, ... #12)
-    tacoRows = [...tacoRows].sort((a, b) => {
-      const numA = parseInt((a.name || '').match(/^#(\d+)/)?.[1] ?? '999');
-      const numB = parseInt((b.name || '').match(/^#(\d+)/)?.[1] ?? '999');
-      return numA - numB;
-    });
+    tacoRows = this._sortByComboNumber(tacoRows);
     return `
     <div class="section">
       <div class="section-header" style="background:#457b9d">Individually Wrapped Tacos</div>

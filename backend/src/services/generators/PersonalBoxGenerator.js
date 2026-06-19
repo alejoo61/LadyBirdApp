@@ -27,7 +27,7 @@ class PersonalBoxGenerator extends BaseGenerator {
     <div class="main-grid">
       <div class="left-col">
         ${this._renderBoxGroups(personalBoxes || [], totalBoxes)}
-        ${this._renderPersonalTacoRows(personalTacoRows || [])}
+        ${this._renderPersonalTacoRows(this._sortByComboNumber(personalTacoRows || []))}
         ${this._renderChipsAndSalsa(chipsRow, salsaRow)}
       </div>
       <div class="right-col">
