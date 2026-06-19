@@ -198,14 +198,11 @@ async function _processBirdBoxItems(items, guestCount, cateringOrder, delivery, 
   // Always calculate — serving utensils always included, cutlery only if wantsPaper
   const tacoBoatCount = Math.ceil((totalTacos / 2 + 10) / 10) * 10;
   const bbContext = buildUtensilContext({
+    // Bird Box tacos come pre-packed — no serving utensils needed for combo ingredients
+    // Only salsas, addons, side packs and salads need utensils
     salsas:     [...includedSalsas, ...manualSalsas.filter(s => s.category === 'salsa')],
-    addons:     addonItems,
+    addons:     [...addonItems, ...sidePacks.flatMap(sp => sp.contents.map(c => ({ name: c.item })))],
     salads,
-    tacoRows,
-    tortillas:  [
-      ...(tacoRows.some(t => (t.flourTortillas||0) > 0) ? [{ name: 'Flour Tortillas' }] : []),
-      ...(tacoRows.some(t => (t.cornTortillas||0)  > 0) ? [{ name: 'Corn Tortillas'  }] : []),
-    ],
     extraNames: [anyWantsChips ? 'chip' : ''],
     wantsPaper: anyWantsPaper,
   });
