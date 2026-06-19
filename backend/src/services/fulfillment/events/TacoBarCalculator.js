@@ -69,7 +69,12 @@ async function calculateTacoBar(cateringOrder, resolver, pool) {
     addons.push(...unknowns);
   }
 
-    // Total chip pans: chips from snack formula + chips from addons (Chips & Guac, etc.)
+  const paperContext = _buildPaperContext(calculated, tortillas, grouped.salsa || [], salads, true);
+  const paperGoods   = wantsPaper
+    ? await resolver.calculatePaperGoods('TACO_BAR', guestCount, paperContext)
+    : { included: false, items: [] };
+
+  // Total chip pans: chips from snack formula + chips from addons (Chips & Guac, etc.)
   const snackChips     = (grouped.snack || []).filter(s => (s.name || '').toLowerCase().includes('chip'));
   const snackChipPans  = snackChips.reduce((sum, s) => sum + (s.packagingQty || Math.ceil(s.totalAmount || 0)), 0);
   const addonChipPans  = addons.reduce((sum, a) => sum + (a.chipPans || 0), 0);
