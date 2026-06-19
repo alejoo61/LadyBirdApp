@@ -13,7 +13,8 @@ async function calculateTacoBar(cateringOrder, resolver, pool) {
   const delivery        = parsedData?.delivery || {};
   const items           = parsedData?.items || [];
 
-  // Use item quantity as effective guest count (more reliable than order.guestCount)
+  // Usar la quantity del item "Taco Bar" como guest count efectivo
+  // (más confiable que order.guestCount)
   const tacoBarItem = items.find(i =>
     TACO_BAR_KEYWORDS.some(k => (i.displayName || i.name || '').toLowerCase().includes(k))
   );
@@ -37,7 +38,7 @@ async function calculateTacoBar(cateringOrder, resolver, pool) {
   const withoutTortillas = calculated.filter(i => !['Flour Tortillas', 'Corn Tortillas'].includes(i.name));
   const grouped          = _groupByCategory(withoutTortillas);
 
-  // Chips always included in Taco Bar — add if not already resolved from ingredients
+  // Chips siempre incluidos en Taco Bar — agregar si no vino en ingredients
   if (!(grouped.snack || []).some(s => (s.name || '').toLowerCase() === 'chips')) {
     const chipsFormula = await resolver.getFormula('Chips', 'TACO_BAR');
     if (chipsFormula) {
@@ -56,21 +57,26 @@ async function calculateTacoBar(cateringOrder, resolver, pool) {
       });
     }
   }
-  const individualTacos  = resolveIndividualTacos(items);
 
-  // Standalone addons — skip drinks and individual tacos
+  const individualTacos = resolveIndividualTacos(items);
+
+  // Standalone addons — skip drinks e individual tacos
   const addons = await resolveAddons(items, resolver, 'TACO_BAR', guestCount, (nameLc, mods) => {
     return isDrink(nameLc) || isIndividualTaco(nameLc, mods);
   });
 
-  // Unknown items — check menu_items table for any item not resolved by formulas
+  // Unknown items — check menu_items table
   if (pool) {
     const unknowns = await resolveUnknownItems(items, resolver, addons, pool);
     addons.push(...unknowns);
   }
 
-  const salads       = resolveSalads(items);
+  const salads = resolveSalads(items);
 
+  // ─── Taco Bar: todos los ingredientes triggerean utensils ─────────────────
+  // En Taco Bar todo se sirve en bandejas/bowls para self-service.
+  // proteins, toppings, salsas, tortillas, snacks — todos pasan al contexto.
+  // extraNames vacío — chips ya viene en grouped.snack con nombre 'Chips'.
   const paperContext = buildUtensilContext({
     proteins:  grouped.protein || [],
     toppings:  grouped.topping || [],
@@ -80,14 +86,15 @@ async function calculateTacoBar(cateringOrder, resolver, pool) {
     addons,
     salads,
     wantsPaper,
+    // extraNames no necesario — chips ya está en snacks con nombre 'Chips'
   });
   const paperGoods = await resolver.calculatePaperGoods('TACO_BAR', guestCount, paperContext);
 
-  // Total chip pans: chips from snack formula + chips from addons (Chips & Guac, etc.)
-  const snackChips     = (grouped.snack || []).filter(s => (s.name || '').toLowerCase().includes('chip'));
-  const snackChipPans  = snackChips.reduce((sum, s) => sum + (s.packagingQty || Math.ceil(s.totalAmount || 0)), 0);
-  const addonChipPans  = addons.reduce((sum, a) => sum + (a.chipPans || 0), 0);
-  const totalChipPans  = snackChipPans + addonChipPans;
+  // Total chip pans: chips del snack formula + chips de addons (Chips & Guac, etc.)
+  const snackChips    = (grouped.snack || []).filter(s => (s.name || '').toLowerCase().includes('chip'));
+  const snackChipPans = snackChips.reduce((sum, s) => sum + (s.packagingQty || Math.ceil(s.totalAmount || 0)), 0);
+  const addonChipPans = addons.reduce((sum, a) => sum + (a.chipPans || 0), 0);
+  const totalChipPans = snackChipPans + addonChipPans;
 
   return {
     proteins:  grouped.protein || [],
@@ -149,6 +156,5 @@ function _groupByCategory(items) {
     return acc;
   }, {});
 }
-
 
 module.exports = { calculateTacoBar };
