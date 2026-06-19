@@ -112,7 +112,7 @@ class PersonalBoxGenerator extends BaseGenerator {
       }
     }
 
-    return { included: true, items: Object.values(merged) };
+    return { included: true, wantsPaper: personalPG.wantsPaper || birdBoxPG.wantsPaper || false, items: Object.values(merged) };
   }
 
   // ─── SORT PERSONAL BOXES BY FIRST COMBO NUMBER ───────────────────────────
