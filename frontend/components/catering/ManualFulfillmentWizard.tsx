@@ -308,10 +308,11 @@ function BirdBoxForm({ value, onChange }: { value: BirdBoxConfig; onChange: (v: 
   const eventType = value.mealType === 'breakfast' ? 'BIRD_BOX_BREAKFAST' : 'BIRD_BOX';
   const { byCategory, loading } = useMenuItems('BIRD_BOX');
 
-  const allCombos  = byCategory['combo'] || [];
+  // Los combos reales están en category='individual_taco' en la DB
+  // category='combo' solo tiene entries de tortilla (basura de Toast sync)
+  const allCombos    = byCategory['individual_taco'] || [];
   const rawTortillas = byCategory['tortilla'] || [];
-  // Normalizar tortillas: la DB puede tener múltiples variantes del mismo tipo
-  const tortillas  = normalizeTortillas(rawTortillas);
+  const tortillas    = normalizeTortillas(rawTortillas);
 
   const toggle = (taco: string) => onChange({
     ...value,
@@ -323,13 +324,10 @@ function BirdBoxForm({ value, onChange }: { value: BirdBoxConfig; onChange: (v: 
       active ? 'bg-night text-bone border-night' : 'bg-bone text-night/50 border-transparent hover:border-night/20'
     }`;
 
-  // Filtrar combos por meal type usando el número de combo como referencia:
-  // Breakfast: #1-#6 (BB Breakfast Tacos)
-  // Lunch: #7+ (BB Lunch Tacos)
-  // Si la DB no trae combos con ese patrón, mostrar todos
+  // Breakfast: #1-#6 | Lunch: #7-#12
   const tacoOpts = allCombos.filter(c => {
     const match = c.match(/^#(\d+)/);
-    if (!match) return true; // sin número → mostrar siempre
+    if (!match) return true;
     const num = parseInt(match[1]);
     return value.mealType === 'breakfast' ? num <= 6 : num > 6;
   });
@@ -386,12 +384,12 @@ function BirdBoxForm({ value, onChange }: { value: BirdBoxConfig; onChange: (v: 
 function PersonalBoxForm({ value, onChange }: { value: PersonalBoxConfig; onChange: (v: PersonalBoxConfig) => void }) {
   const { byCategory, loading } = useMenuItems('PERSONAL_BOX');
 
-  const allCombos    = byCategory['combo'] || [];
+  // Los combos reales están en category='individual_taco' en la DB
+  const allCombos    = byCategory['individual_taco'] || [];
   const rawTortillas = byCategory['tortilla'] || [];
   const salsas       = byCategory['salsa'] || [];
 
-  // Filtrar por meal type usando número de combo:
-  // Breakfast: #1-#6, Lunch: #7+
+  // Breakfast: #1-#6 | Lunch: #7-#12
   const tacoOpts = allCombos.filter(c => {
     const match = c.match(/^#(\d+)/);
     if (!match) return true;
