@@ -11,6 +11,7 @@ const { calculatePersonalBox }   = require('./fulfillment/events/PersonalBoxCalc
 class FulfillmentSheetCalculator {
   constructor(ingredientFormulaRepository, pool) {
     this.formulaRepo = ingredientFormulaRepository;
+    this.pool        = pool;
     this.resolver    = new IngredientResolverService(pool);
   }
 
@@ -23,13 +24,13 @@ class FulfillmentSheetCalculator {
 
     switch (eventType) {
       case 'TACO_BAR':
-        result = await calculateTacoBar(cateringOrder, this.resolver);
+        result = await calculateTacoBar(cateringOrder, this.resolver, this.pool);
         break;
       case 'BIRD_BOX':
-        result = await calculateBirdBox(cateringOrder, this.resolver);
+        result = await calculateBirdBox(cateringOrder, this.resolver, this.pool);
         break;
       case 'PERSONAL_BOX':
-        result = await calculatePersonalBox(cateringOrder, this.resolver);
+        result = await calculatePersonalBox(cateringOrder, this.resolver, this.pool);
         break;
       case 'FOODA':
         result = await this._calculateFooda(cateringOrder);
@@ -38,12 +39,9 @@ class FulfillmentSheetCalculator {
         result = await this._calculateSpaceRental(cateringOrder);
         break;
       default:
-        result = await calculateTacoBar(cateringOrder, this.resolver);
+        result = await calculateTacoBar(cateringOrder, this.resolver, this.pool);
     }
 
-    console.log('🧮 CALC RESULT snacks:', JSON.stringify(result.snacks?.map(s=>s.name)));
-    console.log('🧮 CALC RESULT addons:', JSON.stringify(result.addons?.map(a=>a.name)));
-    console.log('🧮 CALC RESULT totalChipPans:', result.totalChipPans);
     return { header, ...result };
   }
 

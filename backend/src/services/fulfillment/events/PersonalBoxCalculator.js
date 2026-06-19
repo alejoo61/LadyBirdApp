@@ -4,6 +4,7 @@ const { resolveSalads }                           = require('../shared/SaladsRes
 const { resolveIndividualTacos, isIndividualTaco } = require('../shared/IndividualTacosResolver');
 const { isDrink, parseDrink }                     = require('../shared/DrinksResolver');
 const { _processBirdBoxItems }                    = require('./BirdBoxCalculator');
+const { resolveUnknownItems }                      = require('../shared/AddonsResolver');
 const { calculateTacoBar }                        = require('./TacoBarCalculator');
 
 const PERSONAL_BOX_KEYWORDS = [
@@ -22,7 +23,7 @@ const BIRD_BOX_KEYWORDS = [
   'bird box',
 ];
 
-async function calculatePersonalBox(cateringOrder, resolver) {
+async function calculatePersonalBox(cateringOrder, resolver, pool) {
   const { guestCount, parsedData } = cateringOrder;
   const delivery  = parsedData?.delivery || {};
   const items     = parsedData?.items || [];
@@ -153,7 +154,7 @@ async function calculatePersonalBox(cateringOrder, resolver) {
 
   let birdBoxResult = null;
   if (birdBoxItems.length > 0) {
-    birdBoxResult = await _processBirdBoxItems(birdBoxItems, guestCount, cateringOrder, delivery, resolver);
+    birdBoxResult = await _processBirdBoxItems(birdBoxItems, guestCount, cateringOrder, delivery, resolver, pool);
   }
 
   let tacoBarResult = null;
@@ -175,6 +176,12 @@ async function calculatePersonalBox(cateringOrder, resolver) {
       coldItems: tbResult.coldItems,
       dryItems:  tbResult.dryItems,
     };
+  }
+
+  // Unknown items — check menu_items table
+  if (pool) {
+    const unknowns = await resolveUnknownItems(items, resolver, addons, pool);
+    addons.push(...unknowns);
   }
 
   const allDrinks = [...drinks, ...(birdBoxResult?.drinks || []), ...(tacoBarResult?.drinks || [])];
