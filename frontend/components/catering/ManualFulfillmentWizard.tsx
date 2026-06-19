@@ -66,6 +66,12 @@ interface AddonItem {
   quantity: number;
 }
 
+interface ExtrasItem {
+  name:     string;
+  quantity: number;
+  category: 'equipment' | 'space_rental' | 'kids';
+}
+
 interface WizardProps {
   stores:   Store[];
   onClose:  () => void;
@@ -76,13 +82,62 @@ interface WizardProps {
 
 const DRINKS              = ["June Drip Coffee", "Iced Coffee", "Cold Brew", "Lavender Limeade", "Hibiscus Lemonade", "Agua Fresca", "Half & Half"];
 const ADDONS              = ["Chips & Salsa", "Chips & Guacamole", "Chips & Queso", "Bunuelos (serves 10)"];
-const BB_TACO_COUNTS      = [20, 30, 40];
+const BB_TACO_COUNTS      = [30, 40, 50];
+
+// ─── Equipment / Space Rental / Kids — nombres exactos de Toast/DB ────────
+const EQUIPMENT_ITEMS = [
+  "Chafing dishes, Sternos, Serving Utensils",
+  "Sternos Only",
+  "Hot Box Rental (refundable deposit)",
+  "Branded Catering Tent Rental (refundable deposit)",
+];
+const SPACE_RENTAL_ITEMS = [
+  "Space Rental (2-HR) with food",
+  "Space Rental (2-HR) without food",
+  "Space Rental - Additional Hour",
+];
+const KIDS_ITEMS = [
+  "Kids' Bean & Cheese Taco",
+  "Kids' Cheese Quesadilla",
+  "Kids' Special",
+];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
-function buildItems(events: EventBlock[], drinks: DrinkItem[], addons: AddonItem[]) {
+// Normaliza las variantes de tortilla de Toast/DB a las 3 opciones canónicas
+// La DB puede tener: "Housemade Flour Tortilla", "Flour Tortillas (Catering)", etc.
+function normalizeTortillas(rawTortillas: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const t of rawTortillas) {
+    const lc = t.toLowerCase();
+    let canonical: string;
+    if (lc.includes('50/50') || (lc.includes('50') && lc.includes('corn'))) {
+      canonical = '50/50 Flour/Corn';
+    } else if (lc.includes('corn')) {
+      canonical = 'Corn Tortillas';
+    } else if (lc.includes('flour')) {
+      canonical = 'Flour Tortillas';
+    } else {
+      canonical = t; // fallback: mostrar tal cual
+    }
+    if (!seen.has(canonical)) {
+      seen.add(canonical);
+      result.push(canonical);
+    }
+  }
+  // Orden fijo: Flour → Corn → 50/50
+  const order = ['Flour Tortillas', 'Corn Tortillas', '50/50 Flour/Corn'];
+  return result.sort((a, b) => {
+    const ia = order.indexOf(a);
+    const ib = order.indexOf(b);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+}
+
+function buildItems(events: EventBlock[], drinks: DrinkItem[], addons: AddonItem[], extras: ExtrasItem[] = []) {
   const items: object[] = [];
 
   for (const ev of events) {
@@ -158,6 +213,10 @@ function buildItems(events: EventBlock[], drinks: DrinkItem[], addons: AddonItem
 
   for (const a of addons) {
     items.push({ guid: uid(), displayName: a.name, quantity: a.quantity, price: 0, modifiers: [] });
+  }
+
+  for (const e of extras) {
+    items.push({ guid: uid(), displayName: e.name, quantity: e.quantity, price: 0, modifiers: [] });
   }
 
   return items;
@@ -245,11 +304,14 @@ function TacoBarForm({ value, onChange }: { value: TacoBarConfig; onChange: (v: 
 }
 
 function BirdBoxForm({ value, onChange }: { value: BirdBoxConfig; onChange: (v: BirdBoxConfig) => void }) {
-  const eventType = value.mealType === 'breakfast' ? 'BIRD_BOX' : 'BIRD_BOX';
-  const { byCategory, loading } = useMenuItems(eventType);
+  // Usar mealType para traer los combos correctos de la DB
+  const eventType = value.mealType === 'breakfast' ? 'BIRD_BOX_BREAKFAST' : 'BIRD_BOX';
+  const { byCategory, loading } = useMenuItems('BIRD_BOX');
 
   const allCombos  = byCategory['combo'] || [];
-  const tortillas  = byCategory['tortilla'] || [];
+  const rawTortillas = byCategory['tortilla'] || [];
+  // Normalizar tortillas: la DB puede tener múltiples variantes del mismo tipo
+  const tortillas  = normalizeTortillas(rawTortillas);
 
   const toggle = (taco: string) => onChange({
     ...value,
@@ -261,12 +323,15 @@ function BirdBoxForm({ value, onChange }: { value: BirdBoxConfig; onChange: (v: 
       active ? 'bg-night text-bone border-night' : 'bg-bone text-night/50 border-transparent hover:border-night/20'
     }`;
 
-  // Filtrar combos por meal type basado en el nombre
+  // Filtrar combos por meal type usando el número de combo como referencia:
+  // Breakfast: #1-#6 (BB Breakfast Tacos)
+  // Lunch: #7+ (BB Lunch Tacos)
+  // Si la DB no trae combos con ese patrón, mostrar todos
   const tacoOpts = allCombos.filter(c => {
-    const lc = c.toLowerCase();
-    return value.mealType === 'breakfast'
-      ? lc.includes('bacon') || lc.includes('egg') || lc.includes('potato') || lc.includes('chorizo') || lc.includes('migas') || lc.includes('avocado') || /^#[1-6]/.test(c)
-      : lc.includes('chicken') || lc.includes('barbacoa') || lc.includes('pastor') || lc.includes('brisket') || lc.includes('bean') || /^#[1-5]/.test(c);
+    const match = c.match(/^#(\d+)/);
+    if (!match) return true; // sin número → mostrar siempre
+    const num = parseInt(match[1]);
+    return value.mealType === 'breakfast' ? num <= 6 : num > 6;
   });
 
   if (loading) return <div className="text-[11px] text-night/40 font-black uppercase tracking-widest animate-pulse">Loading menu...</div>;
@@ -292,7 +357,10 @@ function BirdBoxForm({ value, onChange }: { value: BirdBoxConfig; onChange: (v: 
       <div>
         <label className="text-[10px] font-black uppercase tracking-widest text-night/40 block mb-2">Tacos</label>
         <div className="flex flex-wrap gap-2">
-          {tacoOpts.map(t => <button key={t} type="button" onClick={() => toggle(t)} className={cls(value.tacos.includes(t))}>{t}</button>)}
+          {tacoOpts.length > 0
+            ? tacoOpts.map(t => <button key={t} type="button" onClick={() => toggle(t)} className={cls(value.tacos.includes(t))}>{t}</button>)
+            : <span className="text-[11px] text-night/30 italic">No combos found for {value.mealType}</span>
+          }
         </div>
       </div>
       <div>
@@ -318,16 +386,21 @@ function BirdBoxForm({ value, onChange }: { value: BirdBoxConfig; onChange: (v: 
 function PersonalBoxForm({ value, onChange }: { value: PersonalBoxConfig; onChange: (v: PersonalBoxConfig) => void }) {
   const { byCategory, loading } = useMenuItems('PERSONAL_BOX');
 
-  const allCombos  = byCategory['combo'] || [];
-  const tortillas  = byCategory['tortilla'] || [];
-  const salsas     = byCategory['salsa'] || [];
+  const allCombos    = byCategory['combo'] || [];
+  const rawTortillas = byCategory['tortilla'] || [];
+  const salsas       = byCategory['salsa'] || [];
 
+  // Filtrar por meal type usando número de combo:
+  // Breakfast: #1-#6, Lunch: #7+
   const tacoOpts = allCombos.filter(c => {
-    const lc = c.toLowerCase();
-    return value.mealType === 'breakfast'
-      ? lc.includes('bacon') || lc.includes('egg') || lc.includes('potato') || lc.includes('chorizo') || lc.includes('migas') || lc.includes('avocado') || /^#[1-6]/.test(c)
-      : lc.includes('chicken') || lc.includes('barbacoa') || lc.includes('pastor') || lc.includes('brisket') || lc.includes('bean') || /^#[1-5]/.test(c);
+    const match = c.match(/^#(\d+)/);
+    if (!match) return true;
+    const num = parseInt(match[1]);
+    return value.mealType === 'breakfast' ? num <= 6 : num > 6;
   });
+
+  // Normalizar tortillas a 3 opciones canónicas (Flour / Corn / 50/50)
+  const tortillas = normalizeTortillas(rawTortillas);
 
   const cls = (active: boolean) =>
     `px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-widest cursor-pointer transition-all border ${
@@ -369,7 +442,10 @@ function PersonalBoxForm({ value, onChange }: { value: PersonalBoxConfig; onChan
       <div>
         <label className="text-[10px] font-black uppercase tracking-widest text-night/40 block mb-2">Tacos (select all that apply)</label>
         <div className="flex flex-wrap gap-2">
-          {tacoOpts.map(t => <button key={t} type="button" onClick={() => toggleTaco(t)} className={cls(!!value.tacos.find(x => x.name === t))}>{t}</button>)}
+          {tacoOpts.length > 0
+            ? tacoOpts.map(t => <button key={t} type="button" onClick={() => toggleTaco(t)} className={cls(!!value.tacos.find(x => x.name === t))}>{t}</button>)
+            : <span className="text-[11px] text-night/30 italic">No combos found for {value.mealType}</span>
+          }
         </div>
       </div>
       {value.tacos.length > 0 && (
@@ -460,10 +536,19 @@ function IndividualTacosForm({ value, onChange }: { value: IndividualTacosConfig
 
 function SaladsForm({ value, onChange }: { value: SaladsConfig; onChange: (v: SaladsConfig) => void }) {
   const { byCategory, loading } = useMenuItems('TACO_BAR');
-  const allSalads     = byCategory['salad'] || [];
+
+  // La DB tiene 3 variantes por tipo de salad:
+  // - category='salad'     → Individual (City Slicker Salad - Individual, etc.)
+  // - category='menu_item' → Small for 10 / Large for 20
+  // Combinamos ambas y las ordenamos: Individual → Small → Large
+  const saladsIndividual = byCategory['salad'] || [];
+  const saladsGrouped    = (byCategory['menu_item'] || []).filter(i =>
+    i.toLowerCase().includes('salad')
+  );
   const allSaladsMenu = [
-    ...(byCategory['menu_item'] || []).filter(i => i.toLowerCase().includes('salad')),
-    ...allSalads,
+    ...saladsIndividual,
+    ...saladsGrouped.filter(s => s.toLowerCase().includes('small')),
+    ...saladsGrouped.filter(s => s.toLowerCase().includes('large')),
   ];
   const proteins   = ['Salsa Verde Braised Chicken', 'House-smoked Brisket', 'Chorizo', 'Without Protein'];
 
@@ -526,7 +611,7 @@ function SaladsForm({ value, onChange }: { value: SaladsConfig; onChange: (v: Sa
 
 function EventEditor({ ev, onChange, onRemove }: { ev: EventBlock; onChange: (v: EventBlock) => void; onRemove: () => void }) {
   const defaultTacoBar: TacoBarConfig        = { guestCount: 10, proteins: [], toppings: [], salsas: [], tortilla: '', extras: [] };
-  const defaultBirdBox: BirdBoxConfig        = { tacoCount: 20, tacos: [], tortilla: '', chipsIncluded: true, paperItems: true, mealType: 'breakfast' };
+  const defaultBirdBox: BirdBoxConfig        = { tacoCount: 30, tacos: [], tortilla: '', chipsIncluded: true, paperItems: true, mealType: 'breakfast' };
   const defaultPersonalBox: PersonalBoxConfig = { quantity: 1, tacos: [], salsa: '', mealType: 'breakfast' };
   const defaultIndividualTacos: IndividualTacosConfig = { tacos: [] };
   const defaultSalads: SaladsConfig          = { salads: [] };
@@ -616,6 +701,7 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
   // Step 3 — Extras
   const [drinks, setDrinks] = useState<DrinkItem[]>([]);
   const [addons, setAddons] = useState<AddonItem[]>([]);
+  const [extras, setExtras] = useState<ExtrasItem[]>([]);
 
   const addEvent = () => setEvents(prev => [...prev, {
     id: uid(), type: 'TACO_BAR',
@@ -645,11 +731,17 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
     else        setAddons(prev => [...prev, { name, quantity: 1 }]);
   };
 
+  const toggleExtra = (name: string, category: ExtrasItem['category']) => {
+    const exists = extras.find(e => e.name === name);
+    if (exists) setExtras(prev => prev.filter(e => e.name !== name));
+    else        setExtras(prev => [...prev, { name, quantity: 1, category }]);
+  };
+
   const handleGenerate = async () => {
     setError(null);
     setLoading(true);
     try {
-      const items = buildItems(events, drinks, addons);
+      const items = buildItems(events, drinks, addons, extras);
 
       // Si hay múltiples eventos, usar PERSONAL_BOX porque ese handler
       // del calculator sabe combinar TACO_BAR + BIRD_BOX + PERSONAL_BOX en un solo sheet.
@@ -883,6 +975,81 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
                     <label className="text-[10px] font-black uppercase text-night/40">Qty</label>
                     <input type="number" min={1} value={a.quantity}
                       onChange={e => setAddons(prev => prev.map((x,j) => j === i ? { ...x, quantity: parseInt(e.target.value)||1 } : x))}
+                      className="w-16 px-2 py-1 bg-bone rounded-lg text-xs font-black text-night outline-none text-center" />
+                  </div>
+                ))}
+              </div>
+
+              {/* ── Equipment ── */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <UtensilsCrossed size={14} className="text-night/40" />
+                  <label className={labelCls + ' mb-0'}>Equipment</label>
+                </div>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {EQUIPMENT_ITEMS.map(e => (
+                    <button key={e} type="button" onClick={() => toggleExtra(e, 'equipment')}
+                      className={`px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-widest cursor-pointer transition-all border ${
+                        extras.find(x => x.name === e) ? 'bg-night text-bone border-night' : 'bg-bone text-night/50 border-transparent hover:border-night/20'
+                      }`}>{e}</button>
+                  ))}
+                </div>
+                {extras.filter(e => e.category === 'equipment').map((e, i) => (
+                  <div key={e.name} className="flex items-center gap-3 py-2 border-b border-tumbleweed/10">
+                    <span className="text-[11px] font-bold text-night flex-1">{e.name}</span>
+                    <label className="text-[10px] font-black uppercase text-night/40">Qty</label>
+                    <input type="number" min={1} value={e.quantity}
+                      onChange={ev => setExtras(prev => prev.map((x, j) => x.name === e.name ? { ...x, quantity: parseInt(ev.target.value) || 1 } : x))}
+                      className="w-16 px-2 py-1 bg-bone rounded-lg text-xs font-black text-night outline-none text-center" />
+                  </div>
+                ))}
+              </div>
+
+              {/* ── Space Rental ── */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <FileText size={14} className="text-night/40" />
+                  <label className={labelCls + ' mb-0'}>Space Rental</label>
+                </div>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {SPACE_RENTAL_ITEMS.map(e => (
+                    <button key={e} type="button" onClick={() => toggleExtra(e, 'space_rental')}
+                      className={`px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-widest cursor-pointer transition-all border ${
+                        extras.find(x => x.name === e) ? 'bg-night text-bone border-night' : 'bg-bone text-night/50 border-transparent hover:border-night/20'
+                      }`}>{e}</button>
+                  ))}
+                </div>
+                {extras.filter(e => e.category === 'space_rental').map((e) => (
+                  <div key={e.name} className="flex items-center gap-3 py-2 border-b border-tumbleweed/10">
+                    <span className="text-[11px] font-bold text-night flex-1">{e.name}</span>
+                    <label className="text-[10px] font-black uppercase text-night/40">Qty</label>
+                    <input type="number" min={1} value={e.quantity}
+                      onChange={ev => setExtras(prev => prev.map(x => x.name === e.name ? { ...x, quantity: parseInt(ev.target.value) || 1 } : x))}
+                      className="w-16 px-2 py-1 bg-bone rounded-lg text-xs font-black text-night outline-none text-center" />
+                  </div>
+                ))}
+              </div>
+
+              {/* ── Kids Menu ── */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Coffee size={14} className="text-night/40" />
+                  <label className={labelCls + ' mb-0'}>Kids Menu</label>
+                </div>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {KIDS_ITEMS.map(e => (
+                    <button key={e} type="button" onClick={() => toggleExtra(e, 'kids')}
+                      className={`px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-widest cursor-pointer transition-all border ${
+                        extras.find(x => x.name === e) ? 'bg-night text-bone border-night' : 'bg-bone text-night/50 border-transparent hover:border-night/20'
+                      }`}>{e}</button>
+                  ))}
+                </div>
+                {extras.filter(e => e.category === 'kids').map((e) => (
+                  <div key={e.name} className="flex items-center gap-3 py-2 border-b border-tumbleweed/10">
+                    <span className="text-[11px] font-bold text-night flex-1">{e.name}</span>
+                    <label className="text-[10px] font-black uppercase text-night/40">Qty</label>
+                    <input type="number" min={1} value={e.quantity}
+                      onChange={ev => setExtras(prev => prev.map(x => x.name === e.name ? { ...x, quantity: parseInt(ev.target.value) || 1 } : x))}
                       className="w-16 px-2 py-1 bg-bone rounded-lg text-xs font-black text-night outline-none text-center" />
                   </div>
                 ))}
