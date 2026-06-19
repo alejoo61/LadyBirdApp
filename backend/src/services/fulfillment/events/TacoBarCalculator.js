@@ -4,6 +4,7 @@ const { resolveSalads }          = require('../shared/SaladsResolver');
 const { resolveIndividualTacos, isIndividualTaco } = require('../shared/IndividualTacosResolver');
 const { isDrink, DRINK_KEYWORDS } = require('../shared/DrinksResolver');
 const { resolveAddons, resolveUnknownItems } = require('../shared/AddonsResolver');
+const { buildUtensilContext }              = require('../shared/UtensilContextBuilder');
 
 const TACO_BAR_KEYWORDS = ['build your own taco bar', 'taco bar'];
 
@@ -69,8 +70,17 @@ async function calculateTacoBar(cateringOrder, resolver, pool) {
     addons.push(...unknowns);
   }
 
-  const paperContext = { ..._buildPaperContext(calculated, tortillas, grouped.salsa || [], salads, true), wantsPaper };
-  const paperGoods   = await resolver.calculatePaperGoods('TACO_BAR', guestCount, paperContext);
+  const paperContext = buildUtensilContext({
+    proteins:  grouped.protein || [],
+    toppings:  grouped.topping || [],
+    salsas:    grouped.salsa   || [],
+    tortillas,
+    snacks:    grouped.snack   || [],
+    addons,
+    salads,
+    wantsPaper,
+  });
+  const paperGoods = await resolver.calculatePaperGoods('TACO_BAR', guestCount, paperContext);
 
   // Total chip pans: chips from snack formula + chips from addons (Chips & Guac, etc.)
   const snackChips     = (grouped.snack || []).filter(s => (s.name || '').toLowerCase().includes('chip'));
@@ -139,35 +149,5 @@ function _groupByCategory(items) {
   }, {});
 }
 
-function _buildPaperContext(allItems, tortillas, salsas, salads, hasChips) {
-  const names = allItems.map(i => (i.name || '').toLowerCase());
-  const SPOON_SERVING_ITEMS = [
-    'guacamole', 'esquites', 'black beans', 'pico de gallo', 'potato',
-    'refried beans', 'scrambled eggs', 'salsa verde braised chicken', 'chorizo',
-  ];
-  const salsaSmall = salsas.filter(s => (s.packaging || '').toLowerCase().includes('6 oz')).length;
-  const salsaLarge = salsas.filter(s => {
-    const p = (s.packaging || '').toLowerCase();
-    return p.includes('16 oz') || p.includes('32 oz');
-  }).length;
-
-  return {
-    hasQueso:          names.some(n => n.includes('queso')),
-    hasGuac:           names.some(n => n.includes('guacamole') || n.includes('guac')),
-    hasBunuelos:       names.some(n => n.includes('buñuelo') || n.includes('bunuelo')),
-    hasChips:          hasChips || names.some(n => n.includes('chip')),
-    hasRajas:          names.some(n => n.includes('rajas')),
-    hasBrisket:        names.some(n => n.includes('brisket')),
-    hasAdobo:          names.some(n => n.includes('adobo')),
-    hasBacon:          names.some(n => n.includes('bacon')),
-    hasTortillaFlour:  tortillas.some(t => (t.name || '').toLowerCase().includes('flour')),
-    hasTortillaCorn:   tortillas.some(t => (t.name || '').toLowerCase().includes('corn')),
-    salsaCount:        salsaSmall,
-    salsaLargeCount:   salsaLarge,
-    dressingCount:     salads.length,
-    saladCount:        salads.length,
-    spoonServingCount: names.filter(n => SPOON_SERVING_ITEMS.some(s => n.includes(s))).length,
-  };
-}
 
 module.exports = { calculateTacoBar };
