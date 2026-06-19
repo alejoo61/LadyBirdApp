@@ -218,13 +218,23 @@ class IngredientResolverService {
 
   async calculatePaperGoods(eventType, guestCount, context = {}) {
     const {
+      wantsPaper       = false,
+      // Pre-computed quantities from UtensilContextBuilder
+      tongSmallQty     = 0,
+      tongLargeQty     = 0,
+      ladleQty         = 0,
+      spoonSmallQty    = 0,
+      spoonServingCount = 0,
+      forkServingQty   = 0,
+      saladCount       = 0,
+      // For boat doubling
       hasQueso         = false,
       hasGuac          = false,
       hasBunuelos      = false,
+      // Fallback legacy fields (when called without UtensilContextBuilder)
       salsaCount       = 0,
       salsaLargeCount  = 0,
       dressingCount    = 0,
-      saladCount       = 0,
       hasTortillaFlour = false,
       hasTortillaCorn  = false,
       hasChips         = false,
@@ -232,44 +242,34 @@ class IngredientResolverService {
       hasBrisket       = false,
       hasAdobo         = false,
       hasBacon         = false,
-      spoonServingCount = 0,
-      wantsPaper       = false,
     } = context;
 
     const items = [];
 
-    // ── Cutlery — solo si el cliente pidió paper goods ─────────────────────
+    // ── Cutlery — only if client requested paper goods ─────────────────────
     if (wantsPaper) {
       const boatBase = guestCount + 5;
       const boatQty  = (hasQueso || hasGuac || hasBunuelos) ? boatBase * 2 : boatBase;
-      items.push({ name: 'Taco Boats', qty: boatQty, unit: 'each' });
-      items.push({ name: 'Napkins',    qty: Math.ceil(guestCount * 2.5), unit: 'each' });
-      items.push({ name: 'Fork Small', qty: guestCount + 5, unit: 'each' });
+      items.push({ name: 'Taco Boats', qty: boatQty,                       unit: 'each' });
+      items.push({ name: 'Napkins',    qty: Math.ceil(guestCount * 2.5),   unit: 'each' });
+      items.push({ name: 'Fork Small', qty: guestCount + 5,                unit: 'each' });
     }
 
-    // ── Utensilios de servir — siempre según lo que hay en la orden ────────
+    // ── Serving utensils — always, based on what's in the order ───────────
 
-    // Spoon Small — salsas en 6oz + dressings
-    const spoonSmallQty = salsaCount + dressingCount;
-    if (spoonSmallQty > 0) items.push({ name: 'Spoon Small', qty: spoonSmallQty, unit: 'each' });
+    // Use pre-computed quantities if available, else fall back to legacy fields
+    const effectiveSpoonSmall   = spoonSmallQty   || (salsaCount + dressingCount);
+    const effectiveForkServing  = forkServingQty  || (saladCount * 2);
+    const effectiveTongSmall    = tongSmallQty    || ((hasTortillaFlour ? 1 : 0) + (hasTortillaCorn ? 1 : 0));
+    const effectiveTongLarge    = tongLargeQty    || ([hasChips, hasBunuelos, hasRajas, hasBrisket, hasAdobo, hasBacon].filter(Boolean).length);
+    const effectiveLadle        = ladleQty        || ((hasQueso ? 1 : 0) + salsaLargeCount);
 
-    // Fork Serving — 2 por ensalada
-    if (saladCount > 0) items.push({ name: 'Fork Serving', qty: saladCount * 2, unit: 'each' });
-
-    // Spoon Serving — 1 por item de la lista
-    if (spoonServingCount > 0) items.push({ name: 'Spoon Serving', qty: spoonServingCount, unit: 'each' });
-
-    // Tong Small — 1 por tipo de tortilla
-    const tongSmallQty = (hasTortillaFlour ? 1 : 0) + (hasTortillaCorn ? 1 : 0);
-    if (tongSmallQty > 0) items.push({ name: 'Tong Small', qty: tongSmallQty, unit: 'each' });
-
-    // Tong Large — Chips, Buñuelos, Rajas, Brisket, Adobo, Bacon
-    const tongLargeItems = [hasChips, hasBunuelos, hasRajas, hasBrisket, hasAdobo, hasBacon].filter(Boolean).length;
-    if (tongLargeItems > 0) items.push({ name: 'Tong Large', qty: tongLargeItems, unit: 'each' });
-
-    // Ladle — Queso + salsas en 16/32oz
-    const ladleQty = (hasQueso ? 1 : 0) + salsaLargeCount;
-    if (ladleQty > 0) items.push({ name: 'Ladle', qty: ladleQty, unit: 'each' });
+    if (effectiveSpoonSmall  > 0) items.push({ name: 'Spoon Small',   qty: effectiveSpoonSmall,   unit: 'each' });
+    if (effectiveForkServing > 0) items.push({ name: 'Fork Serving',  qty: effectiveForkServing,  unit: 'each' });
+    if (spoonServingCount    > 0) items.push({ name: 'Spoon Serving', qty: spoonServingCount,     unit: 'each' });
+    if (effectiveTongSmall   > 0) items.push({ name: 'Tong Small',    qty: effectiveTongSmall,    unit: 'each' });
+    if (effectiveTongLarge   > 0) items.push({ name: 'Tong Large',    qty: effectiveTongLarge,    unit: 'each' });
+    if (effectiveLadle       > 0) items.push({ name: 'Ladle',         qty: effectiveLadle,        unit: 'each' });
 
     return { included: items.length > 0, wantsPaper, items };
   }

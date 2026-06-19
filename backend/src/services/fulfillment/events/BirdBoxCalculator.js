@@ -2,6 +2,7 @@
 
 const { resolveSalads }                           = require('../shared/SaladsResolver');
 const { resolveUnknownItems }                      = require('../shared/AddonsResolver');
+const { buildUtensilContext }                      = require('../shared/UtensilContextBuilder');
 const { resolveIndividualTacos, isIndividualTaco } = require('../shared/IndividualTacosResolver');
 const { isDrink, parseDrink }                     = require('../shared/DrinksResolver');
 
@@ -194,18 +195,18 @@ async function _processBirdBoxItems(items, guestCount, cateringOrder, delivery, 
   const anyWantsPaper = boxes.some(b => b.wantsPaper);
   // Always calculate — serving utensils always included, cutlery only if wantsPaper
   const tacoBoatCount = Math.ceil((totalTacos / 2 + 10) / 10) * 10;
-  const bbContext = {
-    hasQueso:         manualSalsas.some(i => (i.name||'').toLowerCase().includes('queso')),
-    hasGuac:          manualSalsas.some(i => (i.name||'').toLowerCase().includes('guac')),
-    hasBunuelos:      manualSalsas.some(i => (i.name||'').toLowerCase().includes('bunuelo')),
-    hasChips:         anyWantsChips,
-    hasTortillaFlour: tacoRows.some(t => (t.tortillaLabel||'').toLowerCase().includes('flour') || (t.flourTortillas||0) > 0),
-    hasTortillaCorn:  tacoRows.some(t => (t.tortillaLabel||'').toLowerCase().includes('corn')  || (t.cornTortillas||0) > 0),
-    salsaCount:       includedSalsas.filter(s => (s.packaging||'').includes('6 oz')).length,
-    salsaLargeCount:  includedSalsas.filter(s => (s.packaging||'').includes('32 oz') || (s.packaging||'').includes('16 oz')).length,
-    dressingCount: 0, saladCount: 0, spoonServingCount: 0,
+  const bbContext = buildUtensilContext({
+    salsas:     [...includedSalsas, ...manualSalsas.filter(s => s.category === 'salsa')],
+    addons:     addonItems,
+    salads,
+    tacoRows,
+    tortillas:  [
+      ...(tacoRows.some(t => (t.flourTortillas||0) > 0) ? [{ name: 'Flour Tortillas' }] : []),
+      ...(tacoRows.some(t => (t.cornTortillas||0)  > 0) ? [{ name: 'Corn Tortillas'  }] : []),
+    ],
+    extraNames: [anyWantsChips ? 'chip' : ''],
     wantsPaper: anyWantsPaper,
-  };
+  });
   let paperGoods = await resolver.calculatePaperGoods('BIRD_BOX', effectiveGuests, bbContext);
   paperGoods.items = (paperGoods.items || []).map(pg => {
     if ((pg.name || '').toLowerCase().includes('taco boat') || (pg.name || '').toLowerCase().includes('boat'))

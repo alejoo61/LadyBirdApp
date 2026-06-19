@@ -5,6 +5,7 @@ const { resolveIndividualTacos, isIndividualTaco } = require('../shared/Individu
 const { isDrink, parseDrink }                     = require('../shared/DrinksResolver');
 const { _processBirdBoxItems }                    = require('./BirdBoxCalculator');
 const { resolveUnknownItems }                      = require('../shared/AddonsResolver');
+const { buildUtensilContext }                      = require('../shared/UtensilContextBuilder');
 const { calculateTacoBar }                        = require('./TacoBarCalculator');
 
 const PERSONAL_BOX_KEYWORDS = [
@@ -144,13 +145,27 @@ async function calculatePersonalBox(cateringOrder, resolver, pool) {
   const chipsRow = totalBoxes > 0 ? { name: 'Personal Chips',     total: totalBoxes, unit: 'each',              tempType: 'dry'  } : null;
   const salsaRow = totalBoxes > 0 ? { name: 'Personal Salsa Roja', total: totalBoxes, unit: 'each', detail: '4 oz cup', tempType: 'cold' } : null;
 
-  const paperGoods = totalBoxes > 0 ? {
-    included: true,
-    items: [
-      { name: 'Fork Small',  qty: guestCount + 5, unit: 'each' },
-      { name: 'Napkin Pack', qty: guestCount + 5, unit: 'each' },
-    ],
-  } : { included: false, items: [] };
+  // Paper goods — always calculate serving utensils, cutlery only if boxes exist
+  // wantsPaper = true when there are personal boxes (cutlery always included per box)
+  let paperGoods = { included: false, items: [] };
+  if (totalBoxes > 0) {
+    const pbContext = buildUtensilContext({
+      addons,
+      salads:    [],
+      wantsPaper: true, // Personal Box always includes Fork Small + Napkins
+    });
+    const pgResult = await resolver.calculatePaperGoods('PERSONAL_BOX', guestCount, pbContext);
+    // Override Fork Small and Napkins with personal box quantities
+    const baseItems = pgResult.items.filter(i => !['Fork Small','Napkin Pack','Napkins'].includes(i.name));
+    paperGoods = {
+      included: true,
+      items: [
+        { name: 'Fork Small',  qty: guestCount + 5, unit: 'each' },
+        { name: 'Napkin Pack', qty: guestCount + 5, unit: 'each' },
+        ...baseItems,
+      ],
+    };
+  }
 
   let birdBoxResult = null;
   if (birdBoxItems.length > 0) {
