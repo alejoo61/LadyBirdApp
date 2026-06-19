@@ -27,7 +27,7 @@ class TacoBarGenerator extends BaseGenerator {
         ${this._renderSection('Salsas',    salsas    || [], '#7d5a00')}
         ${this._renderSection('Tortillas', tortillaItems,   '#4a235a')}
         ${this._renderSection('Snacks',    snacks    || [], '#784212')}
-        ${this._renderIndividualTacos(individualTacos || [])}
+        ${this._renderIndividualTacos(this._sortByComboNumber(individualTacos || []))}
         ${this._renderSalads(salads || [])}
         ${this._renderAddons(addons || [], totalChipPans || 0)}
       </div>
@@ -118,7 +118,7 @@ class TacoBarGenerator extends BaseGenerator {
   }
 
   _renderAddons(addons, totalChipPansOverride = 0) {
-    if (!addons || addons.length === 0 && totalChipPansOverride === 0) return '';
+    if ((!addons || addons.length === 0) && totalChipPansOverride === 0) return '';
 
     let totalChipPans = totalChipPansOverride;
     for (const a of (addons || [])) { if (a.hasChipsPan) totalChipPans += a.chipPans || 0; }
