@@ -9,6 +9,22 @@ const FIXED_AMOUNTS = {
   'Bunuelos':          { amount: 40, unit: 'each' },
 };
 
+// Keywords that identify event-level items — never treat as addons
+const SKIP_KEYWORDS = [
+  'taco bar', 'bird box', 'space rental', 'ez cater', 'open tax',
+  'salad', 'city slicker', 'cowboy', 'farmer',
+  'relish minimum',
+];
+
+// Modifiers that are only tortilla choices — items with only these are still addons
+function hasOnlyTortillaModifiers(modifiers) {
+  if (!modifiers || modifiers.length === 0) return true;
+  return modifiers.every(m => {
+    const mn = (m.displayName || '').toLowerCase();
+    return mn.includes('flour') || mn.includes('corn') || mn.includes('50/50') || mn.includes('tortilla');
+  });
+}
+
 async function resolveAddon(item, resolver, eventType, guestCount) {
   const qty           = item.quantity || 1;
   const dn            = item.displayName || item.name || '';
@@ -49,10 +65,7 @@ async function resolveAddons(items, resolver, eventType, guestCount, skipFn = nu
     const nameLc    = (item.displayName || item.name || '').toLowerCase();
     const modifiers = item.modifiers || [];
 
-    // Skip items with modifiers (they are event-specific items, not standalone addons)
-    if (modifiers.length > 0) continue;
-
-    // Allow caller to skip specific items (e.g. individual tacos, drinks)
+    if (modifiers.length > 0 && !hasOnlyTortillaModifiers(modifiers)) continue;
     if (skipFn && skipFn(nameLc, modifiers)) continue;
 
     const addon = await resolveAddon(item, resolver, eventType, guestCount);
@@ -62,4 +75,54 @@ async function resolveAddons(items, resolver, eventType, guestCount, skipFn = nu
   return addons;
 }
 
-module.exports = { resolveAddon, resolveAddons, CHIPS_ADDONS, FIXED_AMOUNTS };
+// Resolve items that didn't match any known formula — check menu_items as fallback
+// This catches quesadillas, seasonal items, or any new menu item automatically
+async function resolveUnknownItems(items, resolver, existingAddons, pool) {
+  const unknowns = [];
+
+  for (const item of items) {
+    const nameLc    = (item.displayName || item.name || '').toLowerCase();
+    const modifiers = item.modifiers || [];
+
+    // Skip items with non-tortilla modifiers
+    if (!hasOnlyTortillaModifiers(modifiers)) continue;
+
+    // Skip known event-level items
+    if (SKIP_KEYWORDS.some(k => nameLc.includes(k))) continue;
+
+    const dn = item.displayName || item.name || '';
+
+    // Skip if already in addons
+    const canonicalName = await resolver.resolveCanonicalName(dn);
+    const alreadyAdded  = existingAddons.some(a => a.name === (canonicalName || dn));
+    if (alreadyAdded) continue;
+
+    // Check menu_items table — if it exists there, it's a known menu item
+    const menuResult = await pool.query(
+      `SELECT name, category FROM menu_items WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+      [dn]
+    );
+
+    if (menuResult.rows.length > 0) {
+      const menuItem = menuResult.rows[0];
+      // Skip salads — handled separately
+      if (menuItem.category === 'salad' || SKIP_KEYWORDS.some(k => menuItem.name.toLowerCase().includes(k))) continue;
+
+      unknowns.push({
+        name:         menuItem.name,
+        quantity:     item.quantity || 1,
+        totalAmount:  null,
+        unit:         'each',
+        packaging:    '—',
+        packagingQty: item.quantity || 1,
+        tempType:     'hot',
+        hasChipsPan:  false,
+        chipPans:     0,
+      });
+    }
+  }
+
+  return unknowns;
+}
+
+module.exports = { resolveAddon, resolveAddons, resolveUnknownItems, hasOnlyTortillaModifiers, CHIPS_ADDONS, FIXED_AMOUNTS, SKIP_KEYWORDS };

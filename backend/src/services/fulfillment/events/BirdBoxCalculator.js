@@ -1,6 +1,7 @@
 // src/services/fulfillment/events/BirdBoxCalculator.js
 
 const { resolveSalads }                           = require('../shared/SaladsResolver');
+const { resolveUnknownItems }                      = require('../shared/AddonsResolver');
 const { resolveIndividualTacos, isIndividualTaco } = require('../shared/IndividualTacosResolver');
 const { isDrink, parseDrink }                     = require('../shared/DrinksResolver');
 
@@ -9,14 +10,14 @@ const SIDE_PACK_KEYWORD = 'side pack';
 const THREE_SALSAS_THRESHOLD = 30;
 const TACO_HALF_PAN_MAX      = 18;
 
-async function calculateBirdBox(cateringOrder, resolver) {
+async function calculateBirdBox(cateringOrder, resolver, pool) {
   const { guestCount, parsedData } = cateringOrder;
   const delivery = parsedData?.delivery || {};
   const items    = parsedData?.items || [];
-  return _processBirdBoxItems(items, guestCount, cateringOrder, delivery, resolver);
+  return _processBirdBoxItems(items, guestCount, cateringOrder, delivery, resolver, pool);
 }
 
-async function _processBirdBoxItems(items, guestCount, cateringOrder, delivery, resolver) {
+async function _processBirdBoxItems(items, guestCount, cateringOrder, delivery, resolver, pool) {
   const boxes        = [];
   const sidePacks    = [];
   const drinks       = [];
@@ -215,6 +216,13 @@ async function _processBirdBoxItems(items, guestCount, cateringOrder, delivery, 
   }
 
   const salads       = resolveSalads(items);
+
+  // Unknown items — check menu_items table for any item not resolved by formulas
+  if (pool) {
+    const unknowns = await resolveUnknownItems(items, resolver, addonItems, pool);
+    addonItems.push(...unknowns);
+  }
+
   const chipsBreakdown = [];
   if (anyWantsChips) chipsBreakdown.push({ label: `Chips para tacos (${chipsBoxCount} box${chipsBoxCount > 1 ? 'es' : ''} con chips incluido)`, amount: `${chipsBoxCount} Full Pan${chipsBoxCount > 1 ? 's' : ''}`, packaging: `${chipsBoxCount}x Full Pan`, utensil: 'Tongs Large' });
   for (const sp of sidePacks) {
@@ -247,4 +255,4 @@ function _getFixedUnit(canonicalName) {
   return map[canonicalName] || 'each';
 }
 
-module.exports = { calculateBirdBox, _processBirdBoxItems };
+module.exports = { calculateBirdBox, _processBirdBoxItems, _processBirdBoxItemsWithPool: (items, gc, order, delivery, resolver, pool) => _processBirdBoxItems(items, gc, order, delivery, resolver, pool) };

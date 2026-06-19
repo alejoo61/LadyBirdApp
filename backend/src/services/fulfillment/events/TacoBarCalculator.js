@@ -3,11 +3,11 @@
 const { resolveSalads }          = require('../shared/SaladsResolver');
 const { resolveIndividualTacos, isIndividualTaco } = require('../shared/IndividualTacosResolver');
 const { isDrink, DRINK_KEYWORDS } = require('../shared/DrinksResolver');
-const { resolveAddons }          = require('../shared/AddonsResolver');
+const { resolveAddons, resolveUnknownItems } = require('../shared/AddonsResolver');
 
 const TACO_BAR_KEYWORDS = ['build your own taco bar', 'taco bar'];
 
-async function calculateTacoBar(cateringOrder, resolver) {
+async function calculateTacoBar(cateringOrder, resolver, pool) {
   const { parsedData }  = cateringOrder;
   const delivery        = parsedData?.delivery || {};
   const items           = parsedData?.items || [];
@@ -63,48 +63,13 @@ async function calculateTacoBar(cateringOrder, resolver) {
     return isDrink(nameLc) || isIndividualTaco(nameLc, mods);
   });
 
-  // Unknown items (e.g. quesadillas) — items without modifiers that didn't resolve
-  // Add them as generic addons so they show up in the PDF
-  for (const item of items) {
-    const nameLc    = (item.displayName || item.name || '').toLowerCase();
-    const modifiers = item.modifiers || [];
-    // Skip items with non-tortilla modifiers (they are event-specific items)
-    const onlyTortillaModifiers = modifiers.every(m => {
-      const mn = (m.displayName || '').toLowerCase();
-      return mn.includes('flour') || mn.includes('corn') || mn.includes('50/50') || mn.includes('tortilla');
-    });
-    if (modifiers.length > 0 && !onlyTortillaModifiers) continue;
-    if (isDrink(nameLc)) continue;
-    if (isIndividualTaco(nameLc, modifiers)) continue;
-    // Check if already in addons
-    const dn            = item.displayName || item.name || '';
-    const canonicalName = await resolver.resolveCanonicalName(dn);
-    const alreadyAdded  = addons.some(a => a.name === (canonicalName || dn));
-    if (alreadyAdded) continue;
-    // Skip known event items
-    const knownKeywords = ['taco bar', 'bird box', 'space rental', 'ez cater', 'open tax', 'salad', 'city slicker', 'cowboy', 'farmer'];
-    if (knownKeywords.some(k => nameLc.includes(k))) continue;
-    console.log('🔍 UNKNOWN ITEM fallback:', dn, 'qty:', item.quantity, 'alreadyAdded:', alreadyAdded);
-    // Add as generic addon
-    addons.push({
-      name:         dn,
-      quantity:     item.quantity || 1,
-      totalAmount:  null,
-      unit:         'each',
-      packaging:    '—',
-      packagingQty: item.quantity || 1,
-      tempType:     'hot',
-      hasChipsPan:  false,
-      chipPans:     0,
-    });
+  // Unknown items — check menu_items table for any item not resolved by formulas
+  if (pool) {
+    const unknowns = await resolveUnknownItems(items, resolver, addons, pool);
+    addons.push(...unknowns);
   }
 
-  const paperContext = _buildPaperContext(calculated, tortillas, grouped.salsa || [], salads, true);
-  const paperGoods   = wantsPaper
-    ? await resolver.calculatePaperGoods('TACO_BAR', guestCount, paperContext)
-    : { included: false, items: [] };
-
-  // Total chip pans: chips from snack formula + chips from addons (Chips & Guac, etc.)
+    // Total chip pans: chips from snack formula + chips from addons (Chips & Guac, etc.)
   const snackChips     = (grouped.snack || []).filter(s => (s.name || '').toLowerCase().includes('chip'));
   const snackChipPans  = snackChips.reduce((sum, s) => sum + (s.packagingQty || Math.ceil(s.totalAmount || 0)), 0);
   const addonChipPans  = addons.reduce((sum, a) => sum + (a.chipPans || 0), 0);
