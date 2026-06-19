@@ -7,7 +7,7 @@ class PersonalBoxGenerator extends BaseGenerator {
   build(data) {
     const {
       header, personalBoxes, personalTacoRows, chipsRow, salsaRow,
-      totalBoxes, paperGoods, drinks, addons, birdBoxResult, tacoBarResult,
+      totalBoxes, paperGoods, drinks, addons, birdBoxResult, tacoBarResult, salsaRows,
       hotItems, coldItems, dryItems, individualTacos,
     } = data;
     const badge      = this._eventTypeBadge(header.eventType);
@@ -28,7 +28,7 @@ class PersonalBoxGenerator extends BaseGenerator {
       <div class="left-col">
         ${this._renderBoxGroups(this._sortPersonalBoxes(personalBoxes || []), totalBoxes)}
         ${this._renderPersonalTacoRows(this._sortByComboNumber(personalTacoRows || []))}
-        ${this._renderChipsAndSalsa(chipsRow, salsaRow)}
+        ${this._renderPersonalSalsas(salsaRows || [])}
       </div>
       <div class="right-col">
         ${this._renderPaperGoods(consolidatedPaperGoods)}
@@ -180,23 +180,24 @@ class PersonalBoxGenerator extends BaseGenerator {
     </div>`;
   }
 
-  // ─── CHIPS & SALSA ────────────────────────────────────────────────────────
-  _renderChipsAndSalsa(chipsRow, salsaRow) {
-    if (!salsaRow) return '';
+  // ─── PERSONAL SALSAS ─────────────────────────────────────────────────────
+  // Una fila por tipo de salsa (Roja, Patrón, Verde) con su conteo real
+  _renderPersonalSalsas(salsaRows) {
+    if (!salsaRows || salsaRows.length === 0) return '';
+    const rows = salsaRows.map(s => `
+      <tr>
+        <td><strong>${s.name}</strong></td>
+        <td style="text-align:center; font-weight:900">${s.total}</td>
+        <td>${s.detail || s.unit || 'each'}</td>
+        <td class="checkbox-cell"><span class="checkbox"></span></td>
+        <td class="checkbox-cell"><span class="checkbox"></span></td>
+      </tr>`).join('');
     return `
     <div class="section">
       <div class="section-header" style="background:#784212">Personal Salsa</div>
       <table>
         <thead><tr><th>Item</th><th style="text-align:center">Total</th><th>Detail</th><th>Packed?</th><th>Loaded?</th></tr></thead>
-        <tbody>
-          <tr>
-            <td><strong>${salsaRow.name}</strong></td>
-            <td style="text-align:center; font-weight:900">${salsaRow.total}</td>
-            <td>${salsaRow.detail || salsaRow.unit || 'each'}</td>
-            <td class="checkbox-cell"><span class="checkbox"></span></td>
-            <td class="checkbox-cell"><span class="checkbox"></span></td>
-          </tr>
-        </tbody>
+        <tbody>${rows}</tbody>
       </table>
     </div>`;
   }

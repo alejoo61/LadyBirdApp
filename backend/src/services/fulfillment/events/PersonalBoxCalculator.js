@@ -142,8 +142,19 @@ async function calculatePersonalBox(cateringOrder, resolver, pool) {
     packagingQty: data.total, tempType: 'hot',
   }));
 
-  const chipsRow = totalBoxes > 0 ? { name: 'Personal Chips',      total: totalBoxes, unit: 'each',               tempType: 'dry'  } : null;
-  const salsaRow = totalBoxes > 0 ? { name: 'Personal Salsa Roja', total: totalBoxes, unit: 'each', detail: '4 oz cup', tempType: 'cold' } : null;
+  const chipsRow = totalBoxes > 0 ? { name: 'Personal Chips', total: totalBoxes, unit: 'each', tempType: 'dry' } : null;
+
+  // Agrupar salsas por tipo — cada box puede tener una salsa distinta
+  const salsaCounts = {};
+  for (const box of personalBoxes) {
+    const salsaName = box.salsa || 'Salsa Roja';
+    salsaCounts[salsaName] = (salsaCounts[salsaName] || 0) + (box.quantity || 1);
+  }
+  const salsaRows = Object.entries(salsaCounts).map(([name, total]) => ({
+    name: `Personal ${name}`, total, unit: 'each', detail: '4 oz cup', tempType: 'cold',
+  }));
+  // salsaRow = primera fila para compatibilidad con coldItems
+  const salsaRow = salsaRows.length > 0 ? salsaRows[0] : null;
 
   // ─── Paper goods Personal Box ─────────────────────────────────────────────
   // Personal Box siempre incluye Fork Small + Napkins (wantsPaper: true).
@@ -209,12 +220,12 @@ async function calculatePersonalBox(cateringOrder, resolver, pool) {
 
   return {
     individualTacos,
-    personalBoxes, personalTacoRows, chipsRow, salsaRow,
+    personalBoxes, personalTacoRows, chipsRow, salsaRow, salsaRows,
     totalBoxes, paperGoods, birdBoxResult, tacoBarResult,
     drinks: allDrinks, addons,
     proteins: [], toppings: [], salsas: [], tortillas: [], snacks: [],
     hotItems:  [...individualTacos, ...personalTacoRows, ...(birdBoxResult?.hotItems || []), ...(tacoBarResult?.hotItems || []), ...allDrinks.filter(d => d.tempType === 'hot')],
-    coldItems: [...(salsaRow ? [salsaRow] : []), ...(birdBoxResult?.coldItems || []), ...(tacoBarResult?.coldItems || []), ...allDrinks.filter(d => d.tempType === 'cold')],
+    coldItems: [...(salsaRows.length > 0 ? salsaRows : []), ...(birdBoxResult?.coldItems || []), ...(tacoBarResult?.coldItems || []), ...allDrinks.filter(d => d.tempType === 'cold')],
     dryItems:  [...(chipsRow ? [chipsRow] : []), ...(birdBoxResult?.dryItems || []), ...(tacoBarResult?.dryItems || [])],
   };
 }
