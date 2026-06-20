@@ -1038,15 +1038,17 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess, ed
     setError(null);
     setLoading(true);
     try {
-      const items = buildItems(events, drinks, addons, extras);
-
-      // Si hay múltiples eventos, usar PERSONAL_BOX porque ese handler
-      // del calculator sabe combinar TACO_BAR + BIRD_BOX + PERSONAL_BOX en un solo sheet.
-      // Si hay un solo evento, usar su tipo directamente.
-      const eventType = events.length === 1 ? events[0].type : 'PERSONAL_BOX';
+      // Determinar eventType desde los tipos de eventos seleccionados
+      // PERSONAL_BOX es el orquestador que maneja mixed events
+      const eventTypes = [...new Set(events.map(e => e.type))];
+      const eventType = eventTypes.length === 1 ? eventTypes[0] : 'PERSONAL_BOX';
 
       // guestCount: auto-calculated from events
       const effectiveGuestCount = totalGuests || 1;
+
+      // Construir items solo desde eventos (no extras/equipment/kids)
+      // extras van separados para que el backend los procese correctamente
+      const items = buildItems(events, drinks, addons);
 
       const body = {
         storeId, clientName, clientPhone, clientEmail,
@@ -1059,6 +1061,8 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess, ed
         kitchenFinishTime: kitchenFinishTime || null,
         distanceMiles:    distanceMiles ? parseFloat(distanceMiles) : null,
         items,
+        // extras van separados: Equipment, Space Rental, Kids Menu
+        extras: extras.map(e => ({ displayName: e.name, quantity: e.quantity, price: 0, category: e.category, modifiers: [] })),
       };
 
       // Edit mode: PATCH existing order. Create mode: POST new order.

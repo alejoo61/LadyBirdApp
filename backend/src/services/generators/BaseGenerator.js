@@ -211,6 +211,70 @@ class BaseGenerator {
   }
 
   // ─── INDIVIDUAL TACOS ─────────────────────────────────────────────────────
+  // ─── EXTRAS (Equipment / Space Rental / Kids) ───────────────────────────
+  // Sección adicional para items que no forman parte del flujo de tacos
+  _renderExtras(extras) {
+    if (!extras || !extras.hasExtras) return '';
+
+    const sections = [];
+
+    if (extras.equipment?.length > 0) {
+      const rows = extras.equipment.map(e => `
+        <tr>
+          <td><strong>${e.displayName || e.name}</strong></td>
+          <td style="text-align:center; font-weight:900">${e.quantity || 1}</td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+        </tr>`).join('');
+      sections.push(`
+        <div style="margin-bottom:6px">
+          <div style="font-size:8px; font-weight:900; text-transform:uppercase; letter-spacing:0.08em; color:#555; padding:4px 8px; background:#f5f5f5; border-radius:4px; margin-bottom:4px">Equipment</div>
+          <table><thead><tr><th>Item</th><th style="text-align:center">Qty</th><th>Packed?</th><th>Loaded?</th></tr></thead>
+          <tbody>${rows}</tbody></table>
+        </div>`);
+    }
+
+    if (extras.spaceRental?.length > 0) {
+      const rows = extras.spaceRental.map(e => `
+        <tr>
+          <td><strong>${e.displayName || e.name}</strong></td>
+          <td style="text-align:center; font-weight:900">${e.quantity || 1}</td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+        </tr>`).join('');
+      sections.push(`
+        <div style="margin-bottom:6px">
+          <div style="font-size:8px; font-weight:900; text-transform:uppercase; letter-spacing:0.08em; color:#555; padding:4px 8px; background:#f5f5f5; border-radius:4px; margin-bottom:4px">Space Rental</div>
+          <table><thead><tr><th>Item</th><th style="text-align:center">Qty</th><th>Packed?</th><th>Loaded?</th></tr></thead>
+          <tbody>${rows}</tbody></table>
+        </div>`);
+    }
+
+    if (extras.kids?.length > 0) {
+      const rows = extras.kids.map(e => `
+        <tr>
+          <td><strong>${e.displayName || e.name}</strong></td>
+          <td style="text-align:center; font-weight:900">${e.quantity || 1}</td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+        </tr>`).join('');
+      sections.push(`
+        <div style="margin-bottom:6px">
+          <div style="font-size:8px; font-weight:900; text-transform:uppercase; letter-spacing:0.08em; color:#555; padding:4px 8px; background:#f5f5f5; border-radius:4px; margin-bottom:4px">Kids Menu</div>
+          <table><thead><tr><th>Item</th><th style="text-align:center">Qty</th><th>Packed?</th><th>Loaded?</th></tr></thead>
+          <tbody>${rows}</tbody></table>
+        </div>`);
+    }
+
+    if (sections.length === 0) return '';
+
+    return `
+    <div class="section">
+      <div class="section-header" style="background:#374151">Extras</div>
+      ${sections.join('')}
+    </div>`;
+  }
+
   _sortByComboNumber(rows) {
     if (!rows || rows.length === 0) return rows;
     return [...rows].sort((a, b) => {
