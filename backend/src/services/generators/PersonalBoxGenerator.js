@@ -23,17 +23,17 @@ class PersonalBoxGenerator extends BaseGenerator {
     <style>${this._baseCSS(badge.color)}</style></head><body>
     ${this._headerHTML(header, badge)}
 
-    ${totalBoxes > 0 ? `
     <div class="main-grid">
+      ${totalBoxes > 0 ? `
       <div class="left-col">
         ${this._renderBoxGroups(personalBoxes || [], totalBoxes)}
         ${this._renderPersonalTacoRows(this._sortByComboNumber(personalTacoRows || []))}
         ${this._renderChipsAndSalsa(chipsRow, salsaRow)}
-      </div>
+      </div>` : '<div class="left-col"></div>'}
       <div class="right-col">
         ${this._renderPaperGoods(consolidatedPaperGoods)}
       </div>
-    </div>` : ''}
+    </div>
 
     ${hasBirdBox ? `
     <div style="margin-top:12px; border-top:3px solid #457b9d; padding-top:8px;">
@@ -113,7 +113,7 @@ class PersonalBoxGenerator extends BaseGenerator {
       }
     }
 
-    return { included: true, items: Object.values(merged) };
+    return { included: true, wantsPaper: personalPG.wantsPaper || birdBoxPG.wantsPaper || false, items: Object.values(merged) };
   }
 
   // ─── PERSONAL BOX GROUPS ──────────────────────────────────────────────────

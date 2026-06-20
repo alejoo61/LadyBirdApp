@@ -812,13 +812,25 @@ function parseParsedDataToWizardState(parsedData: Record<string, unknown> | null
     modifiers: Array<{ displayName: string; quantity: number; price: number }>;
   }>) || [];
 
+  // Restore extras from parsedData.extras (stored separately since they don't go through calculator)
+  const storedExtras = (parsedData?.extras as Array<{ displayName?: string; name?: string; quantity: number; category: string }>) || [];
+
   const events: EventBlock[]  = [];
   const drinks: DrinkItem[]   = [];
   const addons: AddonItem[]   = [];
-  const extras: ExtrasItem[]  = [];
+  const extras: ExtrasItem[]  = storedExtras.map(e => ({
+    name: e.displayName || e.name || '',
+    quantity: e.quantity || 1,
+    category: e.category as ExtrasItem['category'],
+  }));
 
-  // Keywords to identify item types
-  const DRINK_KEYWORDS    = ['coffee', 'agua fresca', 'limeade', 'lemonade', 'cold brew', 'half & half'];
+  // ── Known category sets from DB ─────────────────────────────────────────
+  // Used to distinguish proteins/toppings/salsas in Taco Bar modifiers
+  const PROTEIN_KEYWORDS  = ['adobo chicken', 'bacon', 'brisket', 'chorizo', 'eggs', 'salsa verde braised chicken', 'tenderbelly'];
+  const TOPPING_KEYWORDS  = ['black beans', 'cotija', 'monterrey', 'pickled', 'pico', 'potato', 'rajas', 'shredded cabbage', 'sliced avocado'];
+  const SALSA_KEYWORDS    = ['salsa roja', 'salsa verde', 'patron', 'verde (mild', 'roja (mild', 'chili de árbol', 'chili de arbol'];
+  // Drinks — match DB names exactly (category='drink' + known drinks)
+  const DRINK_KEYWORDS    = ['coffee', 'agua fresca', 'limeade', 'lemonade', 'cold brew', 'watermelon', 'hibiscus', 'lavender'];
   const EQUIPMENT_NAMES   = EQUIPMENT_ITEMS.map(e => e.toLowerCase());
   const SPACE_NAMES       = SPACE_RENTAL_ITEMS.map(e => e.toLowerCase());
   const KIDS_NAMES        = KIDS_ITEMS.map(e => e.toLowerCase());
@@ -834,54 +846,87 @@ function parseParsedDataToWizardState(parsedData: Record<string, unknown> | null
   const isBirdBox      = (name: string) => name.toLowerCase().includes("bird box") && !name.toLowerCase().includes('personal');
   const isPersonalBox  = (name: string) => name.toLowerCase().includes('personal') && name.toLowerCase().includes('bird box');
 
+  // Classify a Taco Bar modifier by category
+  const classifyTBMod = (modName: string): 'protein' | 'topping' | 'salsa' | 'tortilla' | 'extra' | 'ignore' => {
+    const lc = modName.toLowerCase();
+    if (lc.includes('tortilla'))                                          return 'tortilla';
+    if (lc.includes('paper') || lc.includes('chip'))                     return 'extra';
+    if (lc.includes('no paper') || lc.includes('not needed'))            return 'ignore';
+    if (SALSA_KEYWORDS.some(k => lc.includes(k)))                       return 'salsa';
+    if (PROTEIN_KEYWORDS.some(k => lc.includes(k)))                     return 'protein';
+    if (TOPPING_KEYWORDS.some(k => lc.includes(k)))                     return 'topping';
+    return 'protein'; // fallback — better to show than miss
+  };
+
   for (const item of items) {
     const nameLc = item.displayName.toLowerCase();
     const mods   = item.modifiers || [];
 
     // ── Drinks ──────────────────────────────────────────────────────────────
     if (isDrink(nameLc)) {
-      const creamers   = mods
-        .filter(m => !m.displayName.toLowerCase().includes('cup') && !m.displayName.toLowerCase().includes('lid') && !m.displayName.toLowerCase().includes('no,'))
+      const creamers  = mods
+        .filter(m => {
+          const lc = m.displayName.toLowerCase();
+          return !lc.includes('cup') && !lc.includes('lid') && !lc.includes('no,') && !lc.includes('no i');
+        })
         .map(m => m.displayName);
-      const wantsCups  = mods.some(m => m.displayName.toLowerCase().includes('yes') && m.displayName.toLowerCase().includes('cup'));
+      const wantsCups = mods.some(m => m.displayName.toLowerCase().includes('yes') && m.displayName.toLowerCase().includes('cup'));
       drinks.push({ name: item.displayName, quantity: item.quantity, creamers, wantsCups });
       continue;
     }
 
     // ── Equipment ────────────────────────────────────────────────────────────
     if (isEquip(nameLc)) {
-      extras.push({ name: item.displayName, quantity: item.quantity, category: 'equipment' });
+      // Only add if not already restored from parsedData.extras
+      if (!extras.find(e => e.name === item.displayName)) {
+        extras.push({ name: item.displayName, quantity: item.quantity, category: 'equipment' });
+      }
       continue;
     }
 
     // ── Space Rental ─────────────────────────────────────────────────────────
     if (isSpace(nameLc)) {
-      extras.push({ name: item.displayName, quantity: item.quantity, category: 'space_rental' });
+      if (!extras.find(e => e.name === item.displayName)) {
+        extras.push({ name: item.displayName, quantity: item.quantity, category: 'space_rental' });
+      }
       continue;
     }
 
     // ── Kids Menu ────────────────────────────────────────────────────────────
     if (isKids(nameLc)) {
-      extras.push({ name: item.displayName, quantity: item.quantity, category: 'kids' });
+      if (!extras.find(e => e.name === item.displayName)) {
+        extras.push({ name: item.displayName, quantity: item.quantity, category: 'kids' });
+      }
       continue;
     }
 
     // ── Taco Bar ─────────────────────────────────────────────────────────────
     if (isTacoBar(nameLc)) {
-      const proteins  = mods.filter(m => !m.displayName.toLowerCase().includes('tortilla') && !m.displayName.toLowerCase().includes('salsa') && !m.displayName.toLowerCase().includes('paper') && !m.displayName.toLowerCase().includes('chip')).map(m => m.displayName);
-      const tortilla  = mods.find(m => m.displayName.toLowerCase().includes('tortilla'))?.displayName || '';
-      const wantsPaper = mods.some(m => m.displayName.toLowerCase().includes('yes') && m.displayName.toLowerCase().includes('paper'));
-      const extras_tb = mods.filter(m => m.displayName.toLowerCase().includes('paper') || m.displayName.toLowerCase().includes('chip')).map(m => m.displayName);
+      const proteins: string[]  = [];
+      const toppings: string[]  = [];
+      const salsas: string[]    = [];
+      const tbExtras: string[]  = [];
+      let tortilla = '';
+
+      for (const mod of mods) {
+        const cat = classifyTBMod(mod.displayName);
+        if (cat === 'protein')  proteins.push(mod.displayName);
+        if (cat === 'topping')  toppings.push(mod.displayName);
+        if (cat === 'salsa')    salsas.push(mod.displayName);
+        if (cat === 'tortilla') tortilla = mod.displayName;
+        if (cat === 'extra')    tbExtras.push(mod.displayName);
+      }
+
       events.push({
         id: uid(),
         type: 'TACO_BAR',
         tacoBar: {
           guestCount: item.quantity,
           proteins,
-          toppings: [],
-          salsas: [],
+          toppings,
+          salsas,
           tortilla,
-          extras: extras_tb,
+          extras: tbExtras,
         },
       });
       continue;
