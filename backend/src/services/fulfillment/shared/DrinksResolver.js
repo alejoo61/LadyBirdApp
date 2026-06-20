@@ -9,13 +9,26 @@ function isDrink(nameLc) {
 
 function parseDrink(item, modifiers, qty) {
   const nameLc    = (item.displayName || item.name || '').toLowerCase();
-  const isHot     = nameLc.includes('coffee') || nameLc.includes('tea') || nameLc.includes('hot');
+  // Hot drinks: coffee, hot tea, hot drip
+  // Cold drinks: hibiscus tea, iced tea, agua fresca, limeade, watermelon, half & half
+  const isHot = (nameLc.includes('coffee') || nameLc.includes('hot')) &&
+                !nameLc.includes('iced coffee');
+  // Hibiscus Tea y otros teas fríos son cold
+  // Solo 'hot tea' explícito sería hot
   const tempType  = isHot ? 'hot' : 'cold';
 
-  const wantsCups = modifiers.some(m => {
+  // Hot drinks → 8 oz hot cups/lids (solo si cliente lo pidió)
+  // Cold drinks → 16 oz cold cups/lids/straws (siempre, si el drink lo requiere)
+  const cupsModifier = modifiers.some(m => {
     const n = (m.displayName || '').toLowerCase();
     return n.includes('yes, i want cups') || n.includes('cups and lids') || n.includes('cups & lids');
   });
+  const noCupsModifier = modifiers.some(m => {
+    const n = (m.displayName || '').toLowerCase();
+    return n.includes('no') && (n.includes('cup') || n.includes('lid'));
+  });
+  // Hot: requiere que cliente lo pida. Cold: incluye cups por default a menos que diga no
+  const wantsCups = isHot ? cupsModifier : !noCupsModifier;
 
   if (nameLc.includes('coffee')) {
     const creamers = modifiers
