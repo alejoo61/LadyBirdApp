@@ -28,27 +28,47 @@ module.exports = (
         company, eventType, guestCount,
         deliveryMethod, deliveryAddress, deliveryNotes,
         eventDate, eventTime, kitchenFinishTime,
-        distanceMiles,
+        distanceMiles, ezCaterCode,
         items = [], drinks = [], addons = [],
       } = req.body;
 
-      if (!storeId || !clientName || !eventType || !guestCount || !eventDate) {
+      if (!storeId || !clientName || !eventType || !eventDate) {
         return res.status(400).json({
           success: false,
-          error: 'Missing required fields: storeId, clientName, eventType, guestCount, eventDate',
+          error: 'Missing required fields: storeId, clientName, eventType, eventDate',
         });
       }
 
-      const fulfillmentDate = eventTime
-        ? new Date(`${eventDate}T${eventTime}`)
-        : new Date(`${eventDate}T12:00:00`);
+      // Parsear time en formato AM/PM (e.g. "2:30 PM") o 24h (e.g. "14:30")
+      function parseEventTime(dateStr, timeStr) {
+        if (!timeStr) return new Date(`${dateStr}T12:00:00`);
+        // Si ya es formato 24h (HH:MM) usarlo directo
+        if (/^\d{1,2}:\d{2}$/.test(timeStr.trim())) {
+          return new Date(`${dateStr}T${timeStr.trim()}:00`);
+        }
+        // Parsear AM/PM
+        const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+        if (match) {
+          let hours = parseInt(match[1]);
+          const mins = match[2];
+          const period = match[3].toUpperCase();
+          if (period === 'PM' && hours !== 12) hours += 12;
+          if (period === 'AM' && hours === 12) hours = 0;
+          const hh = String(hours).padStart(2, '0');
+          return new Date(`${dateStr}T${hh}:${mins}:00`);
+        }
+        // Fallback: intentar parseo directo
+        return new Date(`${dateStr}T${timeStr}`);
+      }
+
+      const fulfillmentDate = parseEventTime(eventDate, eventTime);
 
       if (isNaN(fulfillmentDate.getTime())) {
-        return res.status(400).json({ success: false, error: 'Invalid eventDate or eventTime' });
+        return res.status(400).json({ success: false, error: 'Invalid eventDate or eventTime. Use format like "2:30 PM"' });
       }
 
       const kitchenFinish = kitchenFinishTime
-        ? new Date(`${eventDate}T${kitchenFinishTime}`)
+        ? parseEventTime(eventDate, kitchenFinishTime)
         : null;
 
       const storeResult = await pool.query(
@@ -59,8 +79,10 @@ module.exports = (
       }
       const store = storeResult.rows[0];
 
+      const isEzCater = !!ezCaterCode;
       const parsedData = {
         items: [...items, ...drinks, ...addons],
+        ...(ezCaterCode ? { ezCaterCode } : {}),
       };
 
       const displayNumber = `M-${Date.now()}`;
@@ -74,7 +96,7 @@ module.exports = (
           delivery_method, delivery_address, delivery_notes,
           parsed_data, guest_count, total_amount,
           delivery_distance_miles,
-          is_manually_edited, is_manual_sheet,
+          is_manually_edited, is_manual_sheet, is_ez_cater,
           payment_status, pdf_version,
           created_at, updated_at
         ) VALUES (
@@ -84,7 +106,7 @@ module.exports = (
           $10, $11, $12,
           $13, $14, 0,
           $15,
-          true, true,
+          true, true, $16,
           'PAID', 1,
           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         ) RETURNING id
@@ -97,8 +119,9 @@ module.exports = (
         deliveryAddress || null,
         deliveryNotes || null,
         JSON.stringify(parsedData),
-        guestCount,
+        guestCount || 1,
         distanceMiles || null,
+        isEzCater,
       ]);
 
       const orderId = insertResult.rows[0].id;
@@ -127,6 +150,8 @@ module.exports = (
         overrideData:             {},
         overrideNotes:            null,
         isManuallyEdited:         true,
+        isEzCater:                isEzCater,
+        ezCaterCode:              ezCaterCode || null,
         isManualSheet:            true,
         pdfVersion:               1,
         paymentStatus:            'PAID',
@@ -154,6 +179,127 @@ module.exports = (
 
     } catch (error) {
       console.error('❌ Manual fulfillment error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ── Edit Manual Sheet ─────────────────────────────────────────────────────
+  router.patch('/:id/manual-fulfillment', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const {
+        storeId, clientName, clientPhone, clientEmail,
+        company, eventType, guestCount,
+        deliveryMethod, deliveryAddress, deliveryNotes,
+        eventDate, eventTime, kitchenFinishTime,
+        distanceMiles, ezCaterCode,
+        items = [], drinks = [], addons = [], extras = [],
+      } = req.body;
+
+      function parseEventTime(dateStr, timeStr) {
+        if (!timeStr) return new Date(`${dateStr}T12:00:00`);
+        if (/^\d{1,2}:\d{2}$/.test(timeStr.trim())) return new Date(`${dateStr}T${timeStr.trim()}:00`);
+        const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+        if (match) {
+          let hours = parseInt(match[1]);
+          const mins = match[2];
+          const period = match[3].toUpperCase();
+          if (period === 'PM' && hours !== 12) hours += 12;
+          if (period === 'AM' && hours === 12) hours = 0;
+          return new Date(`${dateStr}T${String(hours).padStart(2,'0')}:${mins}:00`);
+        }
+        return new Date(`${dateStr}T${timeStr}`);
+      }
+
+      const fulfillmentDate = eventDate ? parseEventTime(eventDate, eventTime) : null;
+      const kitchenFinish   = kitchenFinishTime && eventDate ? parseEventTime(eventDate, kitchenFinishTime) : null;
+      const isEzCater       = !!ezCaterCode;
+      const parsedData      = {
+        items: [...items, ...drinks, ...addons, ...(extras || [])],
+        ...(ezCaterCode ? { ezCaterCode } : {}),
+      };
+
+      await pool.query(`
+        UPDATE catering_orders SET
+          store_id                   = COALESCE($1, store_id),
+          event_type                 = COALESCE($2, event_type),
+          client_name                = COALESCE($3, client_name),
+          client_email               = $4,
+          client_phone               = $5,
+          estimated_fulfillment_date = COALESCE($6, estimated_fulfillment_date),
+          kitchen_finish_time        = $7,
+          delivery_method            = COALESCE($8, delivery_method),
+          delivery_address           = $9,
+          delivery_notes             = $10,
+          guest_count                = COALESCE($11, guest_count),
+          delivery_distance_miles    = $12,
+          parsed_data                = $13,
+          is_ez_cater                = $14,
+          is_manually_edited         = true,
+          updated_at                 = CURRENT_TIMESTAMP
+        WHERE id = $15 AND is_manual_sheet = true
+      `, [
+        storeId || null,
+        eventType || null,
+        clientName || null,
+        clientEmail || null,
+        clientPhone || null,
+        fulfillmentDate?.toISOString() || null,
+        kitchenFinish?.toISOString() || null,
+        deliveryMethod || null,
+        deliveryAddress || null,
+        deliveryNotes || null,
+        guestCount || null,
+        distanceMiles || null,
+        JSON.stringify(parsedData),
+        isEzCater,
+        id,
+      ]);
+
+      // Re-generate PDF with updated data
+      const storeResult = await pool.query('SELECT id, name, code FROM stores WHERE id = $1', [storeId]);
+      const store = storeResult.rows[0];
+      if (!store) return res.status(404).json({ success: false, error: 'Store not found' });
+
+      const orderResult = await pool.query('SELECT * FROM catering_orders WHERE id = $1', [id]);
+      const row = orderResult.rows[0];
+
+      const order = {
+        id, storeId: row.store_id, storeName: store.name, storeCode: store.code,
+        toastOrderGuid: row.toast_order_guid, displayNumber: row.display_number,
+        eventType: row.event_type, status: row.status,
+        clientName: row.client_name, clientEmail: row.client_email, clientPhone: row.client_phone,
+        estimatedFulfillmentDate: row.estimated_fulfillment_date,
+        kitchenFinishTime: row.kitchen_finish_time || null,
+        deliveryMethod: row.delivery_method, deliveryAddress: row.delivery_address,
+        deliveryNotes: row.delivery_notes, parsedData: row.parsed_data,
+        items: row.parsed_data?.items || [],
+        guestCount: row.guest_count, totalAmount: row.total_amount,
+        isManuallyEdited: true, isManualSheet: true,
+        pdfVersion: row.pdf_version || 1,
+        distanceMiles: row.delivery_distance_miles || null,
+        getKitchenFinishTime: () => row.kitchen_finish_time || null,
+        getEventTypeLabel: () => row.event_type,
+        getStatusLabel: () => row.status,
+        isUpcoming: () => new Date(row.estimated_fulfillment_date) > new Date(),
+      };
+
+      const calculatedData = await fulfillmentCalculator.calculate(order);
+      calculatedData.header.isManuallyEdited = true;
+      calculatedData.header.isManualSheet    = true;
+
+      const pdf     = await fulfillmentGenerator.generate(calculatedData);
+      const pdfName = fulfillmentGenerator.buildFilename(order, store.code);
+
+      res.set({
+        'Content-Type':        'application/pdf',
+        'Content-Disposition': `inline; filename="${pdfName}"`,
+        'Content-Length':      pdf.length,
+      });
+      res.send(pdf);
+
+    } catch (error) {
+      console.error('❌ Manual fulfillment edit error:', error.message);
       res.status(500).json({ success: false, error: error.message });
     }
   });
