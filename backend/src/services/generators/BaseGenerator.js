@@ -527,23 +527,26 @@ class BaseGenerator {
       }
     }
 
+    // Cups: Guest Qty + 5 — una sola línea por tipo (no una por drink)
+    // Se muestran al final de la sección de drinks
+    const cupsQty = (guestCount || 0) + 5;
     const cupRows = [];
-    if (needsColdCups && guestCount) {
+    if (needsColdCups) {
       cupRows.push(`
         <tr style="background:#e8f5e9; border-top:2px solid #2e7d32">
           <td style="padding-left:20px;color:#2e7d32;font-weight:900">↳ 16 oz Cold Cups / Lids</td>
-          <td>${guestCount} each</td>
-          <td>${guestCount}x 16 oz cold cups/lids</td>
+          <td>${cupsQty} each</td>
+          <td>${cupsQty}x 16 oz cold cups/lids</td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
         </tr>`);
     }
-    if (needsHotCups && guestCount) {
+    if (needsHotCups) {
       cupRows.push(`
         <tr style="background:#fde8e8; border-top:2px solid #c0392b">
           <td style="padding-left:20px;color:#c0392b;font-weight:900">↳ 8 oz Hot Cups / Lids</td>
-          <td>${guestCount} each</td>
-          <td>${guestCount}x 8 oz hot cups/lids</td>
+          <td>${cupsQty} each</td>
+          <td>${cupsQty}x 8 oz hot cups/lids</td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
           <td class="checkbox-cell"><span class="checkbox"></span></td>
         </tr>`);
