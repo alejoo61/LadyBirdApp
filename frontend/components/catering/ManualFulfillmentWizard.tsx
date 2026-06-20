@@ -27,14 +27,14 @@ interface BirdBoxConfig {
   tortilla:   string;
   chipsIncluded: boolean;
   paperItems: boolean;
-  mealType:   'breakfast' | 'lunch';
+  mealType:   'breakfast' | 'lunch' | 'all';
 }
 
 interface PersonalBoxConfig {
   quantity:   number;
   tacos:      { name: string; tortilla: string }[];
   salsa:      string;
-  mealType:   'breakfast' | 'lunch';
+  mealType:   'breakfast' | 'lunch' | 'all';
 }
 
 interface EventBlock {
@@ -83,7 +83,7 @@ interface WizardProps {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 // Drinks now loaded from DB via useMenuItems — DRINKS_FALLBACK used if DB empty
-const DRINKS_FALLBACK = ["Hot Drip Coffee - 96oz", "Crema Drip Coffee - 96oz", "Watermelon Aqua Fresca", "Lavender Limeade", "Hibiscus Lemonade", "Agua Fresca"];
+const DRINKS_FALLBACK = ["Drip Coffee - 96oz", "Watermelon Aqua Fresca", "Lavender Limeade (1/2 Gal)", "Hibiscus Tea (1/2 Gal)", "Iced Coffee", "Half & Half (1/2 Gal)"];
 const ADDONS              = ["Chips & Salsa", "Chips & Guacamole", "Chips & Queso", "Bunuelos (serves 10)"];
 const BB_TACO_COUNTS      = [30, 40, 50];
 
@@ -159,10 +159,12 @@ function buildItems(events: EventBlock[], drinks: DrinkItem[], addons: AddonItem
 
     if (ev.type === 'BIRD_BOX' && ev.birdBox) {
       const bb   = ev.birdBox;
-      const name = bb.mealType === 'breakfast' ? "Breakfast 'Bird Box" : "Lunch 'Bird Box";
+      const name = bb.mealType === 'breakfast' ? "Breakfast 'Bird Box" : bb.mealType === 'lunch' ? "Lunch 'Bird Box" : "Build Your Own 'Bird Box";
       const sizeLabel = bb.mealType === 'breakfast'
         ? `Breakfast 'Bird Box - ${bb.tacoCount} Tacos`
-        : `Lunch 'Bird Box - ${bb.tacoCount} Tacos`;
+        : bb.mealType === 'lunch'
+          ? `Lunch 'Bird Box - ${bb.tacoCount} Tacos`
+          : `BYO 'Bird Box - ${bb.tacoCount} Tacos`;
       const modifiers = [
         { displayName: sizeLabel, quantity: 1, price: 0 },
         ...bb.tacos.map(t    => ({ displayName: t, quantity: 1, price: 0 })),
@@ -175,7 +177,7 @@ function buildItems(events: EventBlock[], drinks: DrinkItem[], addons: AddonItem
 
     if (ev.type === 'PERSONAL_BOX' && ev.personalBox) {
       const pb   = ev.personalBox;
-      const name = pb.mealType === 'breakfast' ? "Personal Breakfast 'Bird Box" : "Personal Lunch 'Bird Box";
+      const name = pb.mealType === 'breakfast' ? "Personal Breakfast 'Bird Box" : pb.mealType === 'lunch' ? "Personal Lunch 'Bird Box" : "BYO Personal 'Bird Box";
       for (let i = 0; i < pb.quantity; i++) {
         const tacoModifiers = pb.tacos.map(t => ({ displayName: t.name, quantity: 1, price: 0 }));
         const tortillaModifiers = [...new Set(pb.tacos.map(t => t.tortilla))].map(t => ({ displayName: t, quantity: 1, price: 0 }));
@@ -327,8 +329,9 @@ function BirdBoxForm({ value, onChange }: { value: BirdBoxConfig; onChange: (v: 
       active ? 'bg-night text-bone border-night' : 'bg-bone text-night/50 border-transparent hover:border-night/20'
     }`;
 
-  // Breakfast: #1-#6 | Lunch: #7-#12
+  // Breakfast: #1-#6 | Lunch: #7-#12 | All: todos juntos
   const tacoOpts = allCombos.filter(c => {
+    if (value.mealType === 'all') return true;
     const match = c.match(/^#(\d+)/);
     if (!match) return true;
     const num = parseInt(match[1]);
@@ -342,8 +345,10 @@ function BirdBoxForm({ value, onChange }: { value: BirdBoxConfig; onChange: (v: 
       <div>
         <label className="text-[10px] font-black uppercase tracking-widest text-night/40 block mb-2">Meal Type</label>
         <div className="flex gap-2">
-          {(['breakfast','lunch'] as const).map(m => (
-            <button key={m} type="button" onClick={() => onChange({ ...value, mealType: m, tacos: [] })} className={cls(value.mealType === m)}>{m}</button>
+          {(['breakfast','lunch','all'] as const).map(m => (
+            <button key={m} type="button" onClick={() => onChange({ ...value, mealType: m, tacos: [] })} className={cls(value.mealType === m)}>
+              {m === 'all' ? 'All Tacos' : m}
+            </button>
           ))}
         </div>
       </div>
@@ -392,8 +397,9 @@ function PersonalBoxForm({ value, onChange }: { value: PersonalBoxConfig; onChan
   const rawTortillas = byCategory['tortilla'] || [];
   const salsas       = byCategory['salsa'] || [];
 
-  // Breakfast: #1-#6 | Lunch: #7-#12
+  // Breakfast: #1-#6 | Lunch: #7-#12 | All: todos juntos
   const tacoOpts = allCombos.filter(c => {
+    if (value.mealType === 'all') return true;
     const match = c.match(/^#(\d+)/);
     if (!match) return true;
     const num = parseInt(match[1]);
@@ -428,8 +434,10 @@ function PersonalBoxForm({ value, onChange }: { value: PersonalBoxConfig; onChan
         <div>
           <label className="text-[10px] font-black uppercase tracking-widest text-night/40 block mb-2">Meal Type</label>
           <div className="flex gap-2">
-            {(['breakfast','lunch'] as const).map(m => (
-              <button key={m} type="button" onClick={() => onChange({ ...value, mealType: m, tacos: [] })} className={cls(value.mealType === m)}>{m}</button>
+            {(['breakfast','lunch','all'] as const).map(m => (
+              <button key={m} type="button" onClick={() => onChange({ ...value, mealType: m, tacos: [] })} className={cls(value.mealType === m)}>
+                {m === 'all' ? 'All Tacos' : m}
+              </button>
             ))}
           </div>
         </div>
@@ -830,7 +838,7 @@ function parseParsedDataToWizardState(parsedData: Record<string, unknown> | null
   const TOPPING_KEYWORDS  = ['black beans', 'cotija', 'monterrey', 'pickled', 'pico', 'potato', 'rajas', 'shredded cabbage', 'sliced avocado'];
   const SALSA_KEYWORDS    = ['salsa roja', 'salsa verde', 'patron', 'verde (mild', 'roja (mild', 'chili de árbol', 'chili de arbol'];
   // Drinks — match DB names exactly (category='drink' + known drinks)
-  const DRINK_KEYWORDS    = ['coffee', 'agua fresca', 'limeade', 'lemonade', 'cold brew', 'watermelon', 'hibiscus', 'lavender'];
+  const DRINK_KEYWORDS    = ['coffee', 'agua fresca', 'limeade', 'lemonade', 'cold brew', 'watermelon', 'hibiscus', 'lavender', 'half & half', 'iced coffee'];
   const EQUIPMENT_NAMES   = EQUIPMENT_ITEMS.map(e => e.toLowerCase());
   const SPACE_NAMES       = SPACE_RENTAL_ITEMS.map(e => e.toLowerCase());
   const KIDS_NAMES        = KIDS_ITEMS.map(e => e.toLowerCase());
@@ -941,7 +949,9 @@ function parseParsedDataToWizardState(parsedData: Record<string, unknown> | null
       const tortilla   = tortillaMod?.displayName || 'Flour Tortillas';
       const wantsChips = mods.some(m => m.displayName.toLowerCase().includes('yes') && m.displayName.toLowerCase().includes('chip'));
       const wantsPaper = mods.some(m => m.displayName.toLowerCase().includes('yes') && m.displayName.toLowerCase().includes('paper'));
-      const mealType   = combos.some(c => { const n = parseInt(c.match(/^#(\d+)/)?.[1] || '99'); return n <= 6; }) ? 'breakfast' : 'lunch';
+      const hasBreakfast = combos.some(c => { const n = parseInt(c.match(/^#(\d+)/)?.[1] || '99'); return n <= 6; });
+      const hasLunch     = combos.some(c => { const n = parseInt(c.match(/^#(\d+)/)?.[1] || '99'); return n > 6; });
+      const mealType     = (hasBreakfast && hasLunch) ? 'all' : hasBreakfast ? 'breakfast' : 'lunch';
       events.push({
         id: uid(),
         type: 'BIRD_BOX',
