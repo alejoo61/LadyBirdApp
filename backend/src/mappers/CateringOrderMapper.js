@@ -100,12 +100,14 @@ class CateringOrderMapper {
       deliveryNotes:            entity.deliveryNotes,
       driverName:               entity.driverName,
       items,
+      parsedData:               entity.parsedData || null,
       guestCount:               entity.guestCount,
       totalAmount:              entity.totalAmount,
       overrideData:             entity.overrideData,
       overrideNotes:            entity.overrideNotes,
       isUpcoming:               entity.isUpcoming(),
       createdAt:                entity.createdAt,
+      deliveryDistanceMiles:    entity.distanceMiles || null,
     };
   }
 
