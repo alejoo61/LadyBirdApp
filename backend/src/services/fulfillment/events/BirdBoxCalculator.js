@@ -58,17 +58,23 @@ async function _processBirdBoxItems(items, guestCount, cateringOrder, delivery, 
     }
 
     if (nameLc.startsWith('chips & salsa') || nameLc === 'chips & salsa') {
+      // Si tiene modifier de salsa → es un chips con salsa específica (salsa manual)
+      // Si NO tiene modifiers → es un addon standalone con chip pan
       const salsaMod = modifiers.find(m => {
         const n = (m.displayName || '').toLowerCase();
         return n.includes('roja') || n.includes('verde') || n.includes('patron') || n.includes('patrón');
       });
-      let salsaName = 'Salsa Roja';
       if (salsaMod) {
+        // Chips & Salsa con salsa específica → salsa manual
+        let salsaName = 'Salsa Roja';
         const sn = (salsaMod.displayName || '').toLowerCase();
         if (sn.includes('verde'))                                 salsaName = 'Salsa Verde';
         else if (sn.includes('patron') || sn.includes('patrón')) salsaName = 'Salsa Patrón';
+        manualSalsas.push({ name: salsaName, category: 'salsa', tempType: 'cold', unit: 'oz', utensil: 'Ladle', totalAmount: 32*qty, packaging: '32 oz container', packagingQty: qty, included: 'Yes', quantity: qty });
+      } else {
+        // Chips & Salsa standalone → addon con chip pan
+        addonItems.push({ name: 'Chips & Salsa', quantity: qty, totalAmount: 32*qty, unit: 'oz', packaging: '32 oz container', packagingQty: qty, tempType: 'dry', hasChipsPan: true, chipPans: qty });
       }
-      manualSalsas.push({ name: salsaName, category: 'salsa', tempType: 'cold', unit: 'oz', utensil: 'Ladle', totalAmount: 32*qty, packaging: '32 oz container', packagingQty: qty, included: 'Yes', quantity: qty });
       continue;
     }
 

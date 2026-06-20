@@ -105,8 +105,9 @@ async function resolveUnknownItems(items, resolver, existingAddons, pool) {
 
     if (menuResult.rows.length > 0) {
       const menuItem = menuResult.rows[0];
-      // Skip salads — handled separately
-      if (menuItem.category === 'salad' || SKIP_KEYWORDS.some(k => menuItem.name.toLowerCase().includes(k))) continue;
+      // Skip salads and drinks — handled separately by their own resolvers
+      if (['salad', 'drink', 'creamer', 'drink_cups'].includes(menuItem.category)) continue;
+      if (SKIP_KEYWORDS.some(k => menuItem.name.toLowerCase().includes(k))) continue;
 
       unknowns.push({
         name:         menuItem.name,

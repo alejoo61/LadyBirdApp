@@ -838,7 +838,12 @@ function parseParsedDataToWizardState(parsedData: Record<string, unknown> | null
   const TOPPING_KEYWORDS  = ['black beans', 'cotija', 'monterrey', 'pickled', 'pico', 'potato', 'rajas', 'shredded cabbage', 'sliced avocado'];
   const SALSA_KEYWORDS    = ['salsa roja', 'salsa verde', 'patron', 'verde (mild', 'roja (mild', 'chili de árbol', 'chili de arbol'];
   // Drinks — match DB names exactly (category='drink' + known drinks)
-  const DRINK_KEYWORDS    = ['coffee', 'agua fresca', 'limeade', 'lemonade', 'cold brew', 'watermelon', 'hibiscus', 'lavender', 'half & half', 'iced coffee'];
+  // Keywords para detectar drinks — incluye todos los nombres de la DB category='drink'
+  const DRINK_KEYWORDS    = [
+    'coffee', 'agua fresca', 'limeade', 'lemonade', 'cold brew',
+    'watermelon', 'hibiscus', 'lavender', 'half & half', 'iced coffee',
+    '1/2 gal', '½ gal', '96oz', '96 oz',
+  ];
   const EQUIPMENT_NAMES   = EQUIPMENT_ITEMS.map(e => e.toLowerCase());
   const SPACE_NAMES       = SPACE_RENTAL_ITEMS.map(e => e.toLowerCase());
   const KIDS_NAMES        = KIDS_ITEMS.map(e => e.toLowerCase());
