@@ -24,7 +24,7 @@ export default function CateringOrdersList({
 
       <StandaloneToast message={c.toast} />
 
-      {c.editingOrder && (
+      {c.editingOrder && !c.editingOrder.isManualSheet && (
         <EditOrderModal
           order={c.editingOrder}
           stores={c.stores}
@@ -36,11 +36,19 @@ export default function CateringOrdersList({
         />
       )}
 
-      {showManualWizard && (
+      {/* Manual sheets use the wizard in edit mode */}
+      {(showManualWizard || (c.editingOrder?.isManualSheet)) && (
         <ManualFulfillmentWizard
           stores={c.stores}
-          onClose={() => setShowManualWizard(false)}
-          onSuccess={() => c.loadOrders()}
+          editingOrder={c.editingOrder?.isManualSheet ? c.editingOrder : undefined}
+          onClose={() => {
+            setShowManualWizard(false);
+            c.setEditingOrder(null);
+          }}
+          onSuccess={() => {
+            c.setEditingOrder(null);
+            c.loadOrders();
+          }}
         />
       )}
 

@@ -6,6 +6,7 @@ import {
   FileText, ClipboardList, Coffee, UtensilsCrossed,
 } from 'lucide-react';
 import type { Store } from '@/services/api/storesApi';
+import type { CateringOrder } from '@/services/api/cateringApi';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -73,9 +74,10 @@ interface ExtrasItem {
 }
 
 interface WizardProps {
-  stores:   Store[];
-  onClose:  () => void;
-  onSuccess?: () => void;
+  stores:        Store[];
+  onClose:       () => void;
+  onSuccess?:    () => void;
+  editingOrder?: CateringOrder;  // when set, wizard runs in edit mode
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -789,37 +791,214 @@ function DrinksSection({
   );
 }
 
+
+// ─── parseParsedDataToWizardState ─────────────────────────────────────────────
+// Reconstructs wizard state (events, drinks, addons, extras) from parsedData.items
+// so the wizard can be pre-populated when editing an existing manual sheet.
+
+interface WizardState {
+  events: EventBlock[];
+  drinks: DrinkItem[];
+  addons: AddonItem[];
+  extras: ExtrasItem[];
+}
+
+function parseParsedDataToWizardState(parsedData: Record<string, unknown> | null | undefined): WizardState {
+  const items = (parsedData?.items as Array<{
+    guid: string;
+    displayName: string;
+    quantity: number;
+    price: number;
+    modifiers: Array<{ displayName: string; quantity: number; price: number }>;
+  }>) || [];
+
+  const events: EventBlock[]  = [];
+  const drinks: DrinkItem[]   = [];
+  const addons: AddonItem[]   = [];
+  const extras: ExtrasItem[]  = [];
+
+  // Keywords to identify item types
+  const DRINK_KEYWORDS    = ['coffee', 'agua fresca', 'limeade', 'lemonade', 'cold brew', 'half & half'];
+  const EQUIPMENT_NAMES   = EQUIPMENT_ITEMS.map(e => e.toLowerCase());
+  const SPACE_NAMES       = SPACE_RENTAL_ITEMS.map(e => e.toLowerCase());
+  const KIDS_NAMES        = KIDS_ITEMS.map(e => e.toLowerCase());
+  const ADDON_NAMES       = ADDONS.map(a => a.toLowerCase());
+
+  const isDrink    = (name: string) => DRINK_KEYWORDS.some(k => name.toLowerCase().includes(k));
+  const isEquip    = (name: string) => EQUIPMENT_NAMES.some(k => name.toLowerCase().includes(k));
+  const isSpace    = (name: string) => SPACE_NAMES.some(k => name.toLowerCase() === k);
+  const isKids     = (name: string) => KIDS_NAMES.some(k => name.toLowerCase() === k);
+  const isAddon    = (name: string) => ADDON_NAMES.some(k => name.toLowerCase().includes(k));
+
+  const isTacoBar      = (name: string) => name.toLowerCase().includes('taco bar');
+  const isBirdBox      = (name: string) => name.toLowerCase().includes("bird box") && !name.toLowerCase().includes('personal');
+  const isPersonalBox  = (name: string) => name.toLowerCase().includes('personal') && name.toLowerCase().includes('bird box');
+
+  for (const item of items) {
+    const nameLc = item.displayName.toLowerCase();
+    const mods   = item.modifiers || [];
+
+    // ── Drinks ──────────────────────────────────────────────────────────────
+    if (isDrink(nameLc)) {
+      const creamers   = mods
+        .filter(m => !m.displayName.toLowerCase().includes('cup') && !m.displayName.toLowerCase().includes('lid') && !m.displayName.toLowerCase().includes('no,'))
+        .map(m => m.displayName);
+      const wantsCups  = mods.some(m => m.displayName.toLowerCase().includes('yes') && m.displayName.toLowerCase().includes('cup'));
+      drinks.push({ name: item.displayName, quantity: item.quantity, creamers, wantsCups });
+      continue;
+    }
+
+    // ── Equipment ────────────────────────────────────────────────────────────
+    if (isEquip(nameLc)) {
+      extras.push({ name: item.displayName, quantity: item.quantity, category: 'equipment' });
+      continue;
+    }
+
+    // ── Space Rental ─────────────────────────────────────────────────────────
+    if (isSpace(nameLc)) {
+      extras.push({ name: item.displayName, quantity: item.quantity, category: 'space_rental' });
+      continue;
+    }
+
+    // ── Kids Menu ────────────────────────────────────────────────────────────
+    if (isKids(nameLc)) {
+      extras.push({ name: item.displayName, quantity: item.quantity, category: 'kids' });
+      continue;
+    }
+
+    // ── Taco Bar ─────────────────────────────────────────────────────────────
+    if (isTacoBar(nameLc)) {
+      const proteins  = mods.filter(m => !m.displayName.toLowerCase().includes('tortilla') && !m.displayName.toLowerCase().includes('salsa') && !m.displayName.toLowerCase().includes('paper') && !m.displayName.toLowerCase().includes('chip')).map(m => m.displayName);
+      const tortilla  = mods.find(m => m.displayName.toLowerCase().includes('tortilla'))?.displayName || '';
+      const wantsPaper = mods.some(m => m.displayName.toLowerCase().includes('yes') && m.displayName.toLowerCase().includes('paper'));
+      const extras_tb = mods.filter(m => m.displayName.toLowerCase().includes('paper') || m.displayName.toLowerCase().includes('chip')).map(m => m.displayName);
+      events.push({
+        id: uid(),
+        type: 'TACO_BAR',
+        tacoBar: {
+          guestCount: item.quantity,
+          proteins,
+          toppings: [],
+          salsas: [],
+          tortilla,
+          extras: extras_tb,
+        },
+      });
+      continue;
+    }
+
+    // ── Bird Box ─────────────────────────────────────────────────────────────
+    if (isBirdBox(nameLc)) {
+      const sizeM      = mods.find(m => /\d+\s*tacos?/i.test(m.displayName));
+      const tacoCount  = sizeM ? parseInt(sizeM.displayName.match(/(\d+)/)?.[1] || '30') : 30;
+      const combos     = mods.filter(m => /^#\d+/.test(m.displayName.trim())).map(m => m.displayName);
+      const tortillaMod = mods.find(m => m.displayName.toLowerCase().includes('tortilla'));
+      const tortilla   = tortillaMod?.displayName || 'Flour Tortillas';
+      const wantsChips = mods.some(m => m.displayName.toLowerCase().includes('yes') && m.displayName.toLowerCase().includes('chip'));
+      const wantsPaper = mods.some(m => m.displayName.toLowerCase().includes('yes') && m.displayName.toLowerCase().includes('paper'));
+      const mealType   = combos.some(c => { const n = parseInt(c.match(/^#(\d+)/)?.[1] || '99'); return n <= 6; }) ? 'breakfast' : 'lunch';
+      events.push({
+        id: uid(),
+        type: 'BIRD_BOX',
+        birdBox: { tacoCount, tacos: combos, tortilla, chipsIncluded: wantsChips, paperItems: wantsPaper, mealType },
+      });
+      continue;
+    }
+
+    // ── Personal Box ─────────────────────────────────────────────────────────
+    if (isPersonalBox(nameLc)) {
+      const combos    = mods.filter(m => /^#\d+/.test(m.displayName.trim())).map(m => m.displayName);
+      const tortillaMod = mods.find(m => m.displayName.toLowerCase().includes('tortilla'));
+      const tortilla  = tortillaMod?.displayName || 'Flour Tortillas';
+      const salsaMod  = mods.find(m => m.displayName.toLowerCase().match(/\.75 oz|roja|verde|patron|patrón/));
+      const salsa     = salsaMod?.displayName || '';
+      const mealType  = nameLc.includes('breakfast') ? 'breakfast' : 'lunch';
+      // Each personal box item is quantity boxes — add one event per item
+      const existingPB = events.find(e => e.type === 'PERSONAL_BOX');
+      if (existingPB && existingPB.personalBox) {
+        // Merge into existing personal box event
+        existingPB.personalBox.quantity += item.quantity;
+        // Add unique combos
+        for (const combo of combos) {
+          if (!existingPB.personalBox.tacos.find(t => t.name === combo)) {
+            existingPB.personalBox.tacos.push({ name: combo, tortilla });
+          }
+        }
+      } else {
+        events.push({
+          id: uid(),
+          type: 'PERSONAL_BOX',
+          personalBox: {
+            quantity: item.quantity,
+            tacos: combos.map(c => ({ name: c, tortilla })),
+            salsa,
+            mealType,
+          },
+        });
+      }
+      continue;
+    }
+
+    // ── Addons (Bunuelos, Chips & Queso, etc.) ───────────────────────────────
+    if (isAddon(nameLc) || mods.length === 0) {
+      addons.push({ name: item.displayName, quantity: item.quantity });
+      continue;
+    }
+  }
+
+  return { events, drinks, addons, extras };
+}
+
 // ─── Main Wizard ──────────────────────────────────────────────────────────────
 
-export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: WizardProps) {
+export default function ManualFulfillmentWizard({ stores, onClose, onSuccess, editingOrder }: WizardProps) {
   const [step, setStep]           = useState(1);
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState<string | null>(null);
 
-  // Step 1 — Order info
-  const [storeId, setStoreId]               = useState(stores[0]?.id || '');
-  const [clientName, setClientName]         = useState('');
-  const [clientPhone, setClientPhone]       = useState('');
-  const [clientEmail, setClientEmail]       = useState('');
-  const [eventDate, setEventDate]           = useState('');
-  const [eventTime, setEventTime]           = useState('');
-  const [deliveryMethod, setDeliveryMethod] = useState<'PICKUP'|'DELIVERY'>('PICKUP');
-  const [deliveryAddress, setDeliveryAddress] = useState('');
-  const [deliveryNotes, setDeliveryNotes]   = useState('');
-  const [company, setCompany]               = useState('');
-  const [distanceMiles, setDistanceMiles]   = useState('');
-  const [kitchenFinishTime, setKitchenFinishTime] = useState('');
-  const [guestCount, setGuestCount]             = useState('');
+  // Step 1 — Order info — pre-populate from editingOrder if in edit mode
+  const isEditMode = !!editingOrder;
 
-  // Step 2 — Events
-  const [events, setEvents] = useState<EventBlock[]>([
-    { id: uid(), type: 'TACO_BAR', tacoBar: { guestCount: 10, proteins: [], toppings: [], salsas: [], tortilla: '', extras: [] } },
-  ]);
+  // Parse event date/time from editingOrder
+  const _editDate = editingOrder?.estimatedFulfillmentDate
+    ? new Date(editingOrder.estimatedFulfillmentDate).toLocaleDateString('en-CA') // YYYY-MM-DD
+    : '';
+  const _editTime = editingOrder?.estimatedFulfillmentDate
+    ? new Date(editingOrder.estimatedFulfillmentDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+    : '';
+  const _editKitchenTime = editingOrder?.kitchenFinishTime
+    ? new Date(editingOrder.kitchenFinishTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+    : '';
+
+  const [storeId, setStoreId]               = useState(editingOrder?.storeId || stores[0]?.id || '');
+  const [clientName, setClientName]         = useState(editingOrder?.clientName || '');
+  const [clientPhone, setClientPhone]       = useState(editingOrder?.clientPhone || '');
+  const [clientEmail, setClientEmail]       = useState(editingOrder?.clientEmail || '');
+  const [eventDate, setEventDate]           = useState(_editDate);
+  const [eventTime, setEventTime]           = useState(_editTime);
+  const [deliveryMethod, setDeliveryMethod] = useState<'PICKUP'|'DELIVERY'>((editingOrder?.deliveryMethod as 'PICKUP'|'DELIVERY') || 'PICKUP');
+  const [deliveryAddress, setDeliveryAddress] = useState(editingOrder?.deliveryAddress || '');
+  const [deliveryNotes, setDeliveryNotes]   = useState(editingOrder?.deliveryNotes || '');
+  const [company, setCompany]               = useState('');
+  const [distanceMiles, setDistanceMiles]   = useState<string>(editingOrder?.deliveryDistanceMiles != null ? String(editingOrder.deliveryDistanceMiles) : '');
+  const [kitchenFinishTime, setKitchenFinishTime] = useState(_editKitchenTime);
+  const [ezCaterCode, setEzCaterCode]       = useState<string>((editingOrder?.parsedData?.ezCaterCode as string) || '');
+
+  // Step 2 & 3 — pre-populate from editingOrder if in edit mode
+  const _initialState = isEditMode && editingOrder?.parsedData
+    ? parseParsedDataToWizardState(editingOrder.parsedData as Record<string, unknown>)
+    : null;
+
+  const [events, setEvents] = useState<EventBlock[]>(
+    _initialState?.events.length
+      ? _initialState.events
+      : [{ id: uid(), type: 'TACO_BAR', tacoBar: { guestCount: 10, proteins: [], toppings: [], salsas: [], tortilla: '', extras: [] } }]
+  );
 
   // Step 3 — Extras
-  const [drinks, setDrinks] = useState<DrinkItem[]>([]);
-  const [addons, setAddons] = useState<AddonItem[]>([]);
-  const [extras, setExtras] = useState<ExtrasItem[]>([]);
+  const [drinks, setDrinks] = useState<DrinkItem[]>(_initialState?.drinks || []);
+  const [addons, setAddons] = useState<AddonItem[]>(_initialState?.addons || []);
+  const [extras, setExtras] = useState<ExtrasItem[]>(_initialState?.extras || []);
 
   const addEvent = () => setEvents(prev => [...prev, {
     id: uid(), type: 'TACO_BAR',
@@ -866,13 +1045,14 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
       // Si hay un solo evento, usar su tipo directamente.
       const eventType = events.length === 1 ? events[0].type : 'PERSONAL_BOX';
 
-      // guestCount: manual override > auto-calculated from events
-      const effectiveGuestCount = guestCount ? parseInt(guestCount) : (totalGuests || 1);
+      // guestCount: auto-calculated from events
+      const effectiveGuestCount = totalGuests || 1;
 
       const body = {
         storeId, clientName, clientPhone, clientEmail,
         company:          company || null,
         eventType, guestCount: effectiveGuestCount,
+        ezCaterCode:      ezCaterCode || null,
         deliveryMethod, deliveryAddress: deliveryMethod === 'DELIVERY' ? deliveryAddress : null,
         deliveryNotes:    deliveryNotes || null,
         eventDate, eventTime,
@@ -881,10 +1061,16 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
         items,
       };
 
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/catering/orders/manual-fulfillment`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-      );
+      // Edit mode: PATCH existing order. Create mode: POST new order.
+      const apiUrl = isEditMode
+        ? `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/catering/orders/${editingOrder!.id}/manual-fulfillment`
+        : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/catering/orders/manual-fulfillment`;
+
+      const res = await fetch(apiUrl, {
+        method: isEditMode ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
 
       if (!res.ok) {
         const text = await res.text().catch(() => '');
@@ -927,7 +1113,7 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
               <ClipboardList size={16} className="text-emerald-700" />
             </div>
             <div>
-              <h2 className="font-black text-night text-base">Fulfillment Sheet Builder</h2>
+              <h2 className="font-black text-night text-base">{isEditMode ? 'Edit Manual Sheet' : 'Fulfillment Sheet Builder'}</h2>
               <p className="text-[10px] font-black uppercase tracking-widest text-night/30">
                 Step {step} of 3 — {step === 1 ? 'Order Info' : step === 2 ? 'Events' : 'Extras'}
               </p>
@@ -993,10 +1179,10 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
                   <input type="number" step="0.1" min="0" value={distanceMiles} onChange={e => setDistanceMiles(e.target.value)} placeholder="0.0" className={inputCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>Guest Count</label>
-                  <input type="number" min={1} value={guestCount} onChange={e => setGuestCount(e.target.value)}
-                    placeholder="e.g. 25" className={inputCls} />
-                  <p className="text-[9px] text-night/30 font-medium mt-1">Leave empty to auto-calculate from events</p>
+                  <label className={labelCls}>EZ Cater Code</label>
+                  <input type="text" value={ezCaterCode} onChange={e => setEzCaterCode(e.target.value)}
+                    placeholder="e.g. EZC-123456" className={inputCls} />
+                  <p className="text-[9px] text-night/30 font-medium mt-1">Optional — only for EZ Cater orders</p>
                 </div>
               </div>
 

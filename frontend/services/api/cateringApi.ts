@@ -51,6 +51,9 @@ export interface CateringOrder {
   pdfVersion: number;
   pdfNeedsUpdate: boolean;
   calendarNeedsUpdate: boolean;
+  deliveryDistanceMiles?: number | null;
+  parsedData?: Record<string, unknown> | null;
+  ezCaterCode?: string | null;
 }
 
 export interface CateringOrdersParams {
