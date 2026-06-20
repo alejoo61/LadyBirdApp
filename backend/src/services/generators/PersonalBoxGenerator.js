@@ -7,8 +7,8 @@ class PersonalBoxGenerator extends BaseGenerator {
   build(data) {
     const {
       header, personalBoxes, personalTacoRows, chipsRow, salsaRow,
-      totalBoxes, paperGoods, drinks, addons, birdBoxResult, tacoBarResult, salsaRows,
-      hotItems, coldItems, dryItems, individualTacos,
+      totalBoxes, paperGoods, drinks, addons, birdBoxResult, tacoBarResult,
+      hotItems, coldItems, dryItems, individualTacos, extras,
     } = data;
     const badge      = this._eventTypeBadge(header.eventType);
     const bbGen      = new BirdBoxGenerator();
@@ -26,9 +26,9 @@ class PersonalBoxGenerator extends BaseGenerator {
     ${totalBoxes > 0 ? `
     <div class="main-grid">
       <div class="left-col">
-        ${this._renderBoxGroups(this._sortPersonalBoxes(personalBoxes || []), totalBoxes)}
+        ${this._renderBoxGroups(personalBoxes || [], totalBoxes)}
         ${this._renderPersonalTacoRows(this._sortByComboNumber(personalTacoRows || []))}
-        ${this._renderPersonalSalsas(salsaRows || [])}
+        ${this._renderChipsAndSalsa(chipsRow, salsaRow)}
       </div>
       <div class="right-col">
         ${this._renderPaperGoods(consolidatedPaperGoods)}
@@ -67,6 +67,7 @@ class PersonalBoxGenerator extends BaseGenerator {
 
     ${this._renderIndividualTacos(individualTacos || [])}
     ${this._renderAddons(addons || [], chipsRow, birdBoxResult, tacoBarResult)}
+    ${this._renderExtras(extras)}
     ${this._renderDrinksConsolidated(drinks || [], header.guestCount)}
     ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
     ${this._renderQC([
@@ -112,17 +113,7 @@ class PersonalBoxGenerator extends BaseGenerator {
       }
     }
 
-    return { included: true, wantsPaper: personalPG.wantsPaper || birdBoxPG.wantsPaper || false, items: Object.values(merged) };
-  }
-
-  // ─── SORT PERSONAL BOXES BY FIRST COMBO NUMBER ───────────────────────────
-  _sortPersonalBoxes(personalBoxes) {
-    if (!personalBoxes || personalBoxes.length === 0) return personalBoxes;
-    return [...personalBoxes].sort((a, b) => {
-      const numA = parseInt((a.comboLabel || a.combos?.[0] || '').match(/#(\d+)/)?.[1] ?? '999');
-      const numB = parseInt((b.comboLabel || b.combos?.[0] || '').match(/#(\d+)/)?.[1] ?? '999');
-      return numA - numB;
-    });
+    return { included: true, items: Object.values(merged) };
   }
 
   // ─── PERSONAL BOX GROUPS ──────────────────────────────────────────────────
@@ -180,24 +171,23 @@ class PersonalBoxGenerator extends BaseGenerator {
     </div>`;
   }
 
-  // ─── PERSONAL SALSAS ─────────────────────────────────────────────────────
-  // Una fila por tipo de salsa (Roja, Patrón, Verde) con su conteo real
-  _renderPersonalSalsas(salsaRows) {
-    if (!salsaRows || salsaRows.length === 0) return '';
-    const rows = salsaRows.map(s => `
-      <tr>
-        <td><strong>${s.name}</strong></td>
-        <td style="text-align:center; font-weight:900">${s.total}</td>
-        <td>${s.detail || s.unit || 'each'}</td>
-        <td class="checkbox-cell"><span class="checkbox"></span></td>
-        <td class="checkbox-cell"><span class="checkbox"></span></td>
-      </tr>`).join('');
+  // ─── CHIPS & SALSA ────────────────────────────────────────────────────────
+  _renderChipsAndSalsa(chipsRow, salsaRow) {
+    if (!salsaRow) return '';
     return `
     <div class="section">
       <div class="section-header" style="background:#784212">Personal Salsa</div>
       <table>
         <thead><tr><th>Item</th><th style="text-align:center">Total</th><th>Detail</th><th>Packed?</th><th>Loaded?</th></tr></thead>
-        <tbody>${rows}</tbody>
+        <tbody>
+          <tr>
+            <td><strong>${salsaRow.name}</strong></td>
+            <td style="text-align:center; font-weight:900">${salsaRow.total}</td>
+            <td>${salsaRow.detail || salsaRow.unit || 'each'}</td>
+            <td class="checkbox-cell"><span class="checkbox"></span></td>
+            <td class="checkbox-cell"><span class="checkbox"></span></td>
+          </tr>
+        </tbody>
       </table>
     </div>`;
   }

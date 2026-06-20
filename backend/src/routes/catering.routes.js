@@ -29,7 +29,7 @@ module.exports = (
         deliveryMethod, deliveryAddress, deliveryNotes,
         eventDate, eventTime, kitchenFinishTime,
         distanceMiles, ezCaterCode,
-        items = [], drinks = [], addons = [],
+        items = [], drinks = [], addons = [], extras = [],
       } = req.body;
 
       if (!storeId || !clientName || !eventType || !eventDate) {
@@ -81,7 +81,10 @@ module.exports = (
 
       const isEzCater = !!ezCaterCode;
       const parsedData = {
+        // items: solo eventos (taco bar, bird box, personal box) + drinks + addons
+        // extras (equipment, space rental, kids) van separados para no contaminar el calculator
         items: [...items, ...drinks, ...addons],
+        extras: extras || [],
         ...(ezCaterCode ? { ezCaterCode } : {}),
       };
 
@@ -215,7 +218,8 @@ module.exports = (
       const kitchenFinish   = kitchenFinishTime && eventDate ? parseEventTime(eventDate, kitchenFinishTime) : null;
       const isEzCater       = !!ezCaterCode;
       const parsedData      = {
-        items: [...items, ...drinks, ...addons, ...(extras || [])],
+        items: [...items, ...drinks, ...addons],
+        extras: extras || [],
         ...(ezCaterCode ? { ezCaterCode } : {}),
       };
 

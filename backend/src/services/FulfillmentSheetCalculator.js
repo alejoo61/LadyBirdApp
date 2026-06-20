@@ -42,7 +42,17 @@ class FulfillmentSheetCalculator {
         result = await calculateTacoBar(cateringOrder, this.resolver, this.pool);
     }
 
-    return { header, ...result };
+    // Inyectar extras (Equipment, Space Rental, Kids) desde parsedData
+    // Vienen separados del flujo principal para no contaminar los calculators
+    const extrasRaw = cateringOrder.parsedData?.extras || [];
+    const extras = {
+      equipment:    extrasRaw.filter(e => e.category === 'equipment'),
+      spaceRental:  extrasRaw.filter(e => e.category === 'space_rental'),
+      kids:         extrasRaw.filter(e => e.category === 'kids'),
+      hasExtras:    extrasRaw.length > 0,
+    };
+
+    return { header, ...result, extras };
   }
 
   // ─── FOODA ────────────────────────────────────────────────────────────────

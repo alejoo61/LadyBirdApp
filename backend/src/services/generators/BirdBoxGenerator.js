@@ -8,7 +8,7 @@ class BirdBoxGenerator extends BaseGenerator {
       header, summaryItems, boxes, tacoRows, chipsAndSalsa,
       chipsBreakdown, salsas, hasManuasSalsas, drinks, paperGoods,
       hotItems, coldItems, dryItems, addons, salads, sidePacks,
-      individualTacos,
+      individualTacos, extras,
     } = data;
 
     const badge = this._eventTypeBadge(header.eventType);
@@ -29,6 +29,7 @@ class BirdBoxGenerator extends BaseGenerator {
         ${this._renderPaperGoods(paperGoods)}
       </div>
     </div>
+    ${this._renderExtras(extras)}
     ${this._renderDrinksConsolidated(drinks || [], header.guestCount)}
     ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
     ${this._renderQC([

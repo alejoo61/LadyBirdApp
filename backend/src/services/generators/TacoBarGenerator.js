@@ -7,7 +7,7 @@ class TacoBarGenerator extends BaseGenerator {
     const {
       header, proteins, toppings, salsas, tortillas, snacks,
       paperGoods, hotItems, coldItems, dryItems, salads, addons,
-      individualTacos, totalChipPans,
+      individualTacos, totalChipPans, extras,
     } = data;
     const badge = this._eventTypeBadge(header.eventType);
 
@@ -35,6 +35,7 @@ class TacoBarGenerator extends BaseGenerator {
         ${this._renderPaperGoods(paperGoods)}
       </div>
     </div>
+    ${this._renderExtras(extras)}
     ${this._renderFoodSummary(hotItems || [], coldItems || [], dryItems || [])}
     ${this._renderQC(individualTacos && individualTacos.length > 0 ? [
       'All HOT items temped and packed in correct packaging',
