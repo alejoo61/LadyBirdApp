@@ -317,6 +317,18 @@ class ToastSyncService {
         );
         catering++;
 
+        // Órdenes EZ Cater — solo guardar en DB, sin PDF ni calendario
+        // El equipo las maneja manualmente via el Fulfillment Sheet Builder
+        if (parsed.isEZCater) {
+          console.log(`⏭️  Orden EZ Cater ignorada para PDF/Calendar: ${parsed.client?.name}`);
+          if (this.auditService) {
+            this.auditService.logToastSync(cateringOrderId)
+              .catch(e => console.error('⚠️  Audit log error:', e.message));
+          }
+          synced++;
+          continue;
+        }
+
         if (isNew) {
           console.log(`🆕 Nueva orden catering: ${parsed.client?.name} (${eventType})`);
 

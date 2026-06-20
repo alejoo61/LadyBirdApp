@@ -809,6 +809,7 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
   const [company, setCompany]               = useState('');
   const [distanceMiles, setDistanceMiles]   = useState('');
   const [kitchenFinishTime, setKitchenFinishTime] = useState('');
+  const [guestCount, setGuestCount]             = useState('');
 
   // Step 2 — Events
   const [events, setEvents] = useState<EventBlock[]>([
@@ -865,13 +866,13 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
       // Si hay un solo evento, usar su tipo directamente.
       const eventType = events.length === 1 ? events[0].type : 'PERSONAL_BOX';
 
-      // guestCount: total de guests de todos los eventos
-      const guestCount = totalGuests || 1;
+      // guestCount: manual override > auto-calculated from events
+      const effectiveGuestCount = guestCount ? parseInt(guestCount) : (totalGuests || 1);
 
       const body = {
         storeId, clientName, clientPhone, clientEmail,
         company:          company || null,
-        eventType, guestCount,
+        eventType, guestCount: effectiveGuestCount,
         deliveryMethod, deliveryAddress: deliveryMethod === 'DELIVERY' ? deliveryAddress : null,
         deliveryNotes:    deliveryNotes || null,
         eventDate, eventTime,
@@ -979,15 +980,23 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess }: 
                 </div>
                 <div>
                   <label className={labelCls}>Event Time *</label>
-                  <input type="time" value={eventTime} onChange={e => setEventTime(e.target.value)} className={inputCls} />
+                  <input type="text" value={eventTime} onChange={e => setEventTime(e.target.value)}
+                    placeholder="e.g. 2:30 PM" className={inputCls} />
                 </div>
                 <div>
                   <label className={labelCls}>Kitchen Finish Time</label>
-                  <input type="time" value={kitchenFinishTime} onChange={e => setKitchenFinishTime(e.target.value)} className={inputCls} />
+                  <input type="text" value={kitchenFinishTime} onChange={e => setKitchenFinishTime(e.target.value)}
+                    placeholder="e.g. 1:45 PM" className={inputCls} />
                 </div>
                 <div>
                   <label className={labelCls}>Distance (miles)</label>
                   <input type="number" step="0.1" min="0" value={distanceMiles} onChange={e => setDistanceMiles(e.target.value)} placeholder="0.0" className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Guest Count</label>
+                  <input type="number" min={1} value={guestCount} onChange={e => setGuestCount(e.target.value)}
+                    placeholder="e.g. 25" className={inputCls} />
+                  <p className="text-[9px] text-night/30 font-medium mt-1">Leave empty to auto-calculate from events</p>
                 </div>
               </div>
 

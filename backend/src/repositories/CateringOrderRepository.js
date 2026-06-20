@@ -30,6 +30,12 @@ class CateringOrderRepository {
       params.push(filters.deliveryMethod);
       conditions.push(`co.delivery_method = $${params.length}`);
     }
+    // Excluir órdenes EZ Cater que vienen de Toast — se manejan via wizard manual
+    // Las órdenes manuales EZ Cater (is_manual_sheet = true) SÍ se muestran
+    // Pasar includeEzCater: true para ver todas incluyendo las de Toast
+    if (!filters.includeEzCater) {
+      conditions.push(`(co.is_ez_cater = false OR co.is_manual_sheet = true)`);
+    }
     if (filters.dateFrom) {
       params.push(filters.dateFrom);
       conditions.push(`co.estimated_fulfillment_date >= $${params.length}`);
