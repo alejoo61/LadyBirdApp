@@ -7,9 +7,9 @@ const os         = require('os');
 // Calendar IDs por store code
 const STORE_CALENDARS = {
   '002': 'c_5180aeb27d1682079c6843eb35a504b01f692ef32de39acf7274f4a93ec7414b@group.calendar.google.com',
+  '004': 'c_eeaabbf1d44ea1d2dfb6fed01cfb25613ec6ad19bd10e91b5e8baf50accf8b63@group.calendar.google.com',
   // '001': 'xxx@group.calendar.google.com',
   // '003': 'xxx@group.calendar.google.com',
-  // '004': 'xxx@group.calendar.google.com',
   // '005': 'xxx@group.calendar.google.com',
 };
 
@@ -68,7 +68,7 @@ class GoogleCalendarService {
   _buildEventTitle(order) {
     const status = (order.status || 'pending').toUpperCase();
     const name   = order.clientName || 'Unknown';
-    const prefix = IS_TEST_MODE ? '[TEST] ' : '';
+    const prefix = '[APP] ';
 
     const isSpaceRental = order.eventType === 'SPACE_RENTAL' ||
       (order.parsedData?.items || order.items || []).some(i =>
