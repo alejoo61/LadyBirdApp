@@ -258,9 +258,13 @@ class GoogleCalendarService {
     const cal   = await this._getCal();
     const dates = this._buildEventDates(order, calculatedData);
 
-    // Traer attachments existentes
+    // Traer attachments existentes — filtrar PDFs viejos de fulfillment sheets
+    // Solo se mantiene el último PDF generado por tipo
     const existing            = await cal.events.get({ calendarId, eventId: googleEventId });
-    const existingAttachments = existing.data.attachments || [];
+    const FULFILLMENT_PATTERNS = ['_BirdBox_', '_TacoBar_', '_PersonalBox_', '_NeedsReview_', '_Fooda_', '_SpaceRental_', 'ManualSheet_'];
+    const existingAttachments = (existing.data.attachments || []).filter(a =>
+      !FULFILLMENT_PATTERNS.some(p => (a.title || '').includes(p))
+    );
 
     const attachments = [...existingAttachments];
 
