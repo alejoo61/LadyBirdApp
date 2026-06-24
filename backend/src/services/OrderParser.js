@@ -31,13 +31,28 @@ class OrderParser {
     };
   }
 
-  // Detectado por el descuento "3pd EZ Cater Fees/Promos" en appliedDiscounts
+  // Detectado por:
+  // 1. Descuento "3pd EZ Cater Fees/Promos" en appliedDiscounts
+  // 2. AlternatePaymentType GUID de EZ Cater en payments
+  //    (cuando no viene el descuento pero sí el pago alternativo de EZ Cater)
   _isEZCater(rawOrder) {
+    // Check 1: descuento EZ Cater
     const rootDiscounts  = rawOrder.appliedDiscounts || [];
     const checkDiscounts = rawOrder.checks?.[0]?.appliedDiscounts || [];
     const allDiscounts   = [...rootDiscounts, ...checkDiscounts];
-    return allDiscounts.some(d =>
+    const hasDiscount    = allDiscounts.some(d =>
       (d.name || '').toLowerCase().includes('ez cater')
+    );
+    if (hasDiscount) return true;
+
+    // Check 2: AlternatePaymentType GUID de EZ Cater
+    // Este GUID es el identificador del método de pago EZ Cater en Toast
+    const EZ_CATER_PAYMENT_GUID = '3596355a-ef9c-409f-ac74-2805c5267051';
+    const checkPayments = rawOrder.checks?.flatMap(c => c.payments || []) || [];
+    const rootPayments  = rawOrder.payments || [];
+    const allPayments   = [...rootPayments, ...checkPayments];
+    return allPayments.some(p =>
+      p.otherPayment?.guid === EZ_CATER_PAYMENT_GUID
     );
   }
 
