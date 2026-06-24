@@ -317,17 +317,8 @@ class ToastSyncService {
         );
         catering++;
 
-        // Órdenes EZ Cater — solo guardar en DB, sin PDF ni calendario
-        // El equipo las maneja manualmente via el Fulfillment Sheet Builder
-        if (parsed.isEZCater) {
-          console.log(`⏭️  Orden EZ Cater ignorada para PDF/Calendar: ${parsed.client?.name}`);
-          if (this.auditService) {
-            this.auditService.logToastSync(cateringOrderId)
-              .catch(e => console.error('⚠️  Audit log error:', e.message));
-          }
-          synced++;
-          continue;
-        }
+        // Respetar GOOGLE_CALENDAR_ENABLED — si es false, no crear/actualizar eventos
+        const calendarEnabled = process.env.GOOGLE_CALENDAR_ENABLED !== 'false';
 
         if (isNew) {
           console.log(`🆕 Nueva orden catering: ${parsed.client?.name} (${eventType})`);
@@ -337,14 +328,15 @@ class ToastSyncService {
               .catch(e => console.error('⚠️  Audit log error:', e.message));
           }
 
-          // Kitchen Finish Time primero (await) → luego PDF para que el PDF lo incluya
-          if (this.fulfillmentCalculator && this.googleCalendarService) {
+          if (this.fulfillmentCalculator && this.googleCalendarService && calendarEnabled) {
             setImmediate(async () => {
               if (parsed.delivery?.method === 'DELIVERY') {
                 await this._calculateKitchenFinishTime(cateringOrderId);
               }
               await this._autoPdfAndCalendar(cateringOrderId, storeCode, storeName);
             });
+          } else if (!calendarEnabled) {
+            console.log(`⏭️  Calendar disabled — skipping PDF/Calendar for ${parsed.client?.name}`);
           }
 
         } else if (changed) {
@@ -357,8 +349,7 @@ class ToastSyncService {
           );
           const isManual = manualCheck.rows[0]?.is_manually_edited || false;
 
-          if (!isManual) {
-            // Kitchen Finish Time primero (await) → luego PDF para que el PDF lo incluya
+          if (!isManual && calendarEnabled) {
             if (this.fulfillmentCalculator && this.googleCalendarService) {
               setImmediate(async () => {
                 if (parsed.delivery?.method === 'DELIVERY') {
@@ -367,6 +358,8 @@ class ToastSyncService {
                 await this._autoPdfAndCalendar(cateringOrderId, storeCode, storeName);
               });
             }
+          } else if (!calendarEnabled) {
+            console.log(`⏭️  Calendar disabled — skipping PDF/Calendar update for ${parsed.client?.name}`);
           } else {
             console.log(`⚠️  Orden ${cateringOrderId} editada manualmente — PDF/Calendar no regenerado`);
           }
