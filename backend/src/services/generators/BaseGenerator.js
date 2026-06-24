@@ -154,7 +154,7 @@ class BaseGenerator {
     .food-type.dry  .count { color: #2e7d32; }
     .food-type .label { font-size: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; color: #555; margin-top: 2px; }
 
-    .qc-section { margin-top: 8px; border: 2px solid #1a1a1a; }
+    .qc-section { margin-top: 8px; border: 2px solid #1a1a1a; page-break-before: auto; page-break-inside: avoid; }
     .qc-header { background: #1a1a1a; color: white; padding: 4px 10px; font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; }
     .qc-body { padding: 8px 10px; background: white; }
     .qc-item { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; font-size: 9px; }

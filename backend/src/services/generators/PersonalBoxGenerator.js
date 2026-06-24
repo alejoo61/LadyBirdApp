@@ -195,7 +195,10 @@ class PersonalBoxGenerator extends BaseGenerator {
   // ─── ADD-ONS ──────────────────────────────────────────────────────────────
   // Cuenta chips de TODOS los eventos: personal boxes, bird box, taco bar, y addons standalone
   _renderAddons(addons, chipsRow, birdBoxResult, tacoBarResult) {
-    if (!addons || addons.length === 0) return '';
+    // No retornar vacío si hay chips del Bird Box aunque no haya addons standalone
+    const hasBirdBoxChips = (birdBoxResult?.chipsBreakdown?.length > 0) ||
+                            (birdBoxResult?.addons || []).some(a => a.hasChipsPan);
+    if ((!addons || addons.length === 0) && !hasBirdBoxChips) return '';
 
     let totalChipPans = 0;
 
