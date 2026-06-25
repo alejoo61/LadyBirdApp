@@ -521,6 +521,20 @@ class BaseGenerator {
         }
       }
 
+      // Condimentos (sweeteners) — incluir en el PDF para que el equipo sepa
+      if (drink.condiments?.length > 0) {
+        for (const cond of drink.condiments) {
+          drinkRows.push(`
+            <tr style="background:#f8f8f8">
+              <td style="padding-left:20px;color:#555;font-style:italic">↳ ${cond}</td>
+              <td>—</td>
+              <td>as needed</td>
+              <td class="checkbox-cell"><span class="checkbox"></span></td>
+              <td class="checkbox-cell"><span class="checkbox"></span></td>
+            </tr>`);
+        }
+      }
+
       if (drink.wantsCups) {
         if (isHot)  needsHotCups  = true;
         else        needsColdCups = true;

@@ -41,10 +41,14 @@ function parseDrink(item, modifiers, qty) {
         };
       });
 
+    const condiments = modifiers
+      .filter(m => CONDIMENT_KEYWORDS.some(k => (m.displayName || '').toLowerCase().includes(k)))
+      .map(m => m.displayName);
+
     return {
       name: item.displayName || item.name, quantity: qty,
       totalOz: qty * 96, packaging: '96 oz coffee', packagingQty: qty,
-      utensil: '—', tempType: 'hot', wantsCups, cupSize: '8 oz hot cups/lids', creamers,
+      utensil: '—', tempType: 'hot', wantsCups, cupSize: '8 oz hot cups/lids', creamers, condiments,
     };
   }
 
