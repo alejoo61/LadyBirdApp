@@ -49,32 +49,26 @@ async function _processBirdBoxItems(items, guestCount, cateringOrder, delivery, 
       sidePacks.push({
         name: item.displayName || item.name, quantity: qty, salsaName,
         contents: [
-          { item: 'Guacamole', amount: `${32*qty} oz`, packaging: `${qty}x 32 oz container`, utensil: 'Spoon Serving', tempType: 'cold' },
-          { item: 'Queso',     amount: `${32*qty} oz`, packaging: `${qty}x 32 oz container`, utensil: 'Ladle',         tempType: 'hot'  },
-          { item: salsaName,   amount: `${32*qty} oz`, packaging: `${qty}x 32 oz container`, utensil: 'Ladle',         tempType: 'cold' },
+          { item: 'Guacamole', amount: `${32*qty} oz`, packaging: `${qty}x 32 oz container`, utensil: 'Spoon',        tempType: 'cold' },
+          { item: 'Queso',     amount: `${32*qty} oz`, packaging: `${qty}x 32 oz container`, utensil: 'Ladle',        tempType: 'hot'  },
+          { item: salsaName,   amount: `${32*qty} oz`, packaging: `${qty}x 32 oz container`, utensil: 'Ladle',        tempType: 'cold' },
         ],
       });
       continue;
     }
 
     if (nameLc.startsWith('chips & salsa') || nameLc === 'chips & salsa') {
-      // Si tiene modifier de salsa → es un chips con salsa específica (salsa manual)
-      // Si NO tiene modifiers → es un addon standalone con chip pan
       const salsaMod = modifiers.find(m => {
         const n = (m.displayName || '').toLowerCase();
         return n.includes('roja') || n.includes('verde') || n.includes('patron') || n.includes('patrón');
       });
+      let salsaName = 'Salsa Roja';
       if (salsaMod) {
-        // Chips & Salsa con salsa específica → salsa manual
-        let salsaName = 'Salsa Roja';
         const sn = (salsaMod.displayName || '').toLowerCase();
         if (sn.includes('verde'))                                 salsaName = 'Salsa Verde';
         else if (sn.includes('patron') || sn.includes('patrón')) salsaName = 'Salsa Patrón';
-        manualSalsas.push({ name: salsaName, category: 'salsa', tempType: 'cold', unit: 'oz', utensil: 'Ladle', totalAmount: 32*qty, packaging: '32 oz container', packagingQty: qty, included: 'Yes', quantity: qty });
-      } else {
-        // Chips & Salsa standalone → addon con chip pan
-        addonItems.push({ name: 'Chips & Salsa', quantity: qty, totalAmount: 32*qty, unit: 'oz', packaging: '32 oz container', packagingQty: qty, tempType: 'dry', hasChipsPan: true, chipPans: qty });
       }
+      manualSalsas.push({ name: salsaName, category: 'salsa', tempType: 'cold', unit: 'oz', utensil: 'Ladle', totalAmount: 32*qty, packaging: '32 oz container', packagingQty: qty, included: 'Yes', quantity: qty });
       continue;
     }
 
@@ -88,7 +82,7 @@ async function _processBirdBoxItems(items, guestCount, cateringOrder, delivery, 
     }
 
     if (isDrink(nameLc)) {
-      drinks.push(parseDrink(item, modifiers, qty));
+      drinks.push(parseDrink(item, modifiers, qty, guestCount));
       continue;
     }
 
@@ -117,7 +111,7 @@ async function _processBirdBoxItems(items, guestCount, cateringOrder, delivery, 
       continue;
     }
 
-    // Bird Box con tacos
+    // Bird Box with tacos
     const sizeMod   = modifiers.find(m => resolver.isSizeModifier(m.displayName || ''));
     const tacoCount = sizeMod
       ? parseInt((sizeMod.displayName || '').match(/(\d+)\s*tacos?/i)?.[1] || 0)
@@ -199,43 +193,19 @@ async function _processBirdBoxItems(items, guestCount, cateringOrder, delivery, 
     : [{ name: 'Chips & Salsa', included: 'No', tempType: 'dry' }];
 
   const anyWantsPaper = boxes.some(b => b.wantsPaper);
-  const salads        = resolveSalads(items);
+  const salads       = resolveSalads(items);
 
-  // ─── Tortillas para utensil context ──────────────────────────────────────
-  // En Bird Box los tacos vienen pre-armados. Solo las tortillas necesitan
-  // Tong Small (1 por tipo flour/corn). Los combo ingredients NO se pasan.
-  const tortillaTypes = [];
-  if (tacoRows.some(r => r.flourTortillas > 0)) tortillaTypes.push({ name: 'Flour Tortillas' });
-  if (tacoRows.some(r => r.cornTortillas  > 0)) tortillaTypes.push({ name: 'Corn Tortillas'  });
-
-  // ─── Chips para utensil context ───────────────────────────────────────────
-  // Si hay chips incluidos en boxes → Tong Large.
-  // Se pasa como snack con nombre 'Chips' (sin 'churro'/'bunuelo') para que
-  // hasChips=true en UtensilContextBuilder sin interferir con hasBunuelos.
-  // NO usar extraNames — causa doble conteo cuando anyWantsChips=true y
-  // addonItems ya tiene Bunuelos (ambos triggerean Tong Large por separado).
-  const chipsSnack = anyWantsChips
-    ? [{ name: 'Chips' }]
-    : [];
-
-  // ─── Side pack salsas → Ladle ─────────────────────────────────────────────
-  const sidePackSalsas = sidePacks.flatMap(sp =>
-    sp.contents
-      .filter(c => c.utensil === 'Ladle')
-      .map(c => ({ name: c.item, packaging: '32 oz deli cup' }))
-  );
-
-  const bbContext = buildUtensilContext({
-    salsas:    [...includedSalsas, ...manualSalsas.filter(s => s.category === 'salsa'), ...sidePackSalsas],
-    addons:    addonItems,       // Bunuelos, Chips & Queso, etc. — standalone
-    snacks:    chipsSnack,       // Chips del box → hasChips sin contaminar hasBunuelos
-    salads,
-    tortillas: tortillaTypes,    // Tong Small por tipo
-    wantsPaper: anyWantsPaper,
-    // extraNames: [] — nunca usar 'chip' como string suelto, causa doble conteo
-  });
-
+  // Always calculate — serving utensils always included, cutlery only if wantsPaper
   const tacoBoatCount = Math.ceil((totalTacos / 2 + 10) / 10) * 10;
+  const bbContext = buildUtensilContext({
+    // Bird Box tacos come pre-packed — no serving utensils needed for combo ingredients
+    // Only salsas, addons, side packs and salads need utensils
+    salsas:     [...includedSalsas, ...manualSalsas.filter(s => s.category === 'salsa')],
+    addons:     [...addonItems, ...sidePacks.flatMap(sp => sp.contents.map(c => ({ name: c.item })))],
+    salads,
+    extraNames: [anyWantsChips ? 'chip' : ''],
+    wantsPaper: anyWantsPaper,
+  });
   let paperGoods = await resolver.calculatePaperGoods('BIRD_BOX', effectiveGuests, bbContext);
   paperGoods.items = (paperGoods.items || []).map(pg => {
     if ((pg.name || '').toLowerCase().includes('taco boat') || (pg.name || '').toLowerCase().includes('boat'))
@@ -243,7 +213,7 @@ async function _processBirdBoxItems(items, guestCount, cateringOrder, delivery, 
     return pg;
   });
 
-  // Unknown items — check menu_items table
+  // Unknown items — check menu_items table for any item not resolved by formulas
   if (pool) {
     const unknowns = await resolveUnknownItems(items, resolver, addonItems, pool);
     addonItems.push(...unknowns);

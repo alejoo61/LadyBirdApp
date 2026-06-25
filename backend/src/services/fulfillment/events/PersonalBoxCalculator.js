@@ -43,7 +43,7 @@ async function calculatePersonalBox(cateringOrder, resolver, pool) {
     const qty       = item.quantity || 1;
 
     if (isDrink(nameLc)) {
-      drinks.push(parseDrink(item, modifiers, qty));
+      drinks.push(parseDrink(item, modifiers, qty, guestCount));
       continue;
     }
 
@@ -186,7 +186,7 @@ async function calculatePersonalBox(cateringOrder, resolver, pool) {
       paperGoods: tbResult.paperGoods,
       salads:    tbResult.salads,
       addons:    tbResult.addons,
-      drinks:    tbResult.drinks || [],
+      drinks:    [],
       hotItems:  tbResult.hotItems,
       coldItems: tbResult.coldItems,
       dryItems:  tbResult.dryItems,
