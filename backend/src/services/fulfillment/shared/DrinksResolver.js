@@ -9,33 +9,27 @@ function isDrink(nameLc) {
 
 function parseDrink(item, modifiers, qty) {
   const nameLc    = (item.displayName || item.name || '').toLowerCase();
-  // Hot drinks: coffee, hot tea, hot drip
-  // Cold drinks: hibiscus tea, iced tea, agua fresca, limeade, watermelon, half & half
-  const isHot = (nameLc.includes('coffee') || nameLc.includes('hot')) &&
-                !nameLc.includes('iced coffee');
-  // Hibiscus Tea y otros teas fríos son cold
-  // Solo 'hot tea' explícito sería hot
+  const isHot     = nameLc.includes('coffee') || nameLc.includes('tea') || nameLc.includes('hot');
   const tempType  = isHot ? 'hot' : 'cold';
 
-  // Hot drinks → 8 oz hot cups/lids (solo si cliente lo pidió)
-  // Cold drinks → 16 oz cold cups/lids/straws (siempre, si el drink lo requiere)
-  const cupsModifier = modifiers.some(m => {
+  const wantsCups = modifiers.some(m => {
     const n = (m.displayName || '').toLowerCase();
-    return n.includes('yes, i want cups') || n.includes('cups and lids') || n.includes('cups & lids');
+    return n.includes('yes, i want cups') || n.includes('cups and lids') || 
+           n.includes('cups & lids') || n.includes('cups and lids included');
   });
-  const noCupsModifier = modifiers.some(m => {
-    const n = (m.displayName || '').toLowerCase();
-    return n.includes('no') && (n.includes('cup') || n.includes('lid'));
-  });
-  // Hot: requiere que cliente lo pida. Cold: incluye cups por default a menos que diga no
-  const wantsCups = isHot ? cupsModifier : !noCupsModifier;
 
   if (nameLc.includes('coffee')) {
+    // Separar creamers de condimentos (sweeteners no son creamers)
+    const CREAMER_KEYWORDS   = ['milk', 'oat', 'cream', 'whole', 'skim', 'half', 'breve', 'almond', 'soy'];
+    const CONDIMENT_KEYWORDS = ['sugar', 'stevia', 'sweetener', 'honey', 'splenda', 'equal', 'packet'];
     const creamers = modifiers
       .filter(m => {
         const n = (m.displayName || '').toLowerCase();
-        return n.includes('milk') || n.includes('oat') || n.includes('cream') ||
-               n.includes('whole') || n.includes('skim');
+        // Skip condimentos (sweeteners)
+        if (CONDIMENT_KEYWORDS.some(k => n.includes(k))) return false;
+        // Skip cups/lids modifiers
+        if (n.includes('cup') || n.includes('lid')) return false;
+        return CREAMER_KEYWORDS.some(k => n.includes(k));
       })
       .map(m => {
         const totalOz = (m.quantity || qty) * 32;

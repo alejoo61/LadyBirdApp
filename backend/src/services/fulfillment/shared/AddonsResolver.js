@@ -14,6 +14,10 @@ const SKIP_KEYWORDS = [
   'taco bar', 'bird box', 'space rental', 'ez cater', 'open tax',
   'salad', 'city slicker', 'cowboy', 'farmer',
   'relish minimum',
+  // Condimentos de café — no son addons de comida
+  'sweetener', 'sugar in the raw', 'stevia', 'splenda', 'equal',
+  // Modifiers de cups que no son addons
+  'cup options', 'catering creamer options',
 ];
 
 // Modifiers that are only tortilla choices — items with only these are still addons
