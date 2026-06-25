@@ -127,7 +127,7 @@ async function calculatePersonalBox(cateringOrder, resolver, pool) {
     }
   }
 
-  // Combo totals para personal boxes
+  // Combo totals for personal boxes
   const comboTotals = {};
   for (const box of personalBoxes) {
     for (const combo of box.combos) {
@@ -142,71 +142,54 @@ async function calculatePersonalBox(cateringOrder, resolver, pool) {
     packagingQty: data.total, tempType: 'hot',
   }));
 
-  const chipsRow = totalBoxes > 0 ? { name: 'Personal Chips', total: totalBoxes, unit: 'each', tempType: 'dry' } : null;
+  const chipsRow = totalBoxes > 0 ? { name: 'Personal Chips',     total: totalBoxes, unit: 'each',              tempType: 'dry'  } : null;
+  const salsaRow = totalBoxes > 0 ? { name: 'Personal Salsa Roja', total: totalBoxes, unit: 'each', detail: '4 oz cup', tempType: 'cold' } : null;
 
-  // Agrupar salsas por tipo — cada box puede tener una salsa distinta
-  const salsaCounts = {};
-  for (const box of personalBoxes) {
-    const salsaName = box.salsa || 'Salsa Roja';
-    salsaCounts[salsaName] = (salsaCounts[salsaName] || 0) + (box.quantity || 1);
-  }
-  const salsaRows = Object.entries(salsaCounts).map(([name, total]) => ({
-    name: `Personal ${name}`, total, unit: 'each', detail: '4 oz cup', tempType: 'cold',
-  }));
-  // salsaRow = primera fila para compatibilidad con coldItems
-  const salsaRow = salsaRows.length > 0 ? salsaRows[0] : null;
-
-  // ─── Paper goods Personal Box ─────────────────────────────────────────────
-  // Personal Box siempre incluye Fork Small + Napkins (wantsPaper: true).
-  // Serving utensils se calculan desde los addons standalone del nivel raíz.
-  // Sub-eventos (BirdBox/TacoBar) calculan sus propios utensils separados.
+  // Paper goods — always calculate serving utensils, cutlery only if boxes exist
+  // wantsPaper = true when there are personal boxes (cutlery always included per box)
   let paperGoods = { included: false, items: [] };
   if (totalBoxes > 0) {
     const pbContext = buildUtensilContext({
-      addons,    // addons standalone del nivel raíz (Bunuelos, Chips & Queso, etc.)
+      addons,
       salads:    [],
-      wantsPaper: true, // Personal Box siempre incluye Fork Small + Napkins
-      // No se pasan tortillas aquí — las tortillas van dentro de cada personal box
-      // y no requieren Tong Small (el kitchen las maneja individualmente)
+      wantsPaper: true, // Personal Box always includes Fork Small + Napkins
     });
     const pgResult = await resolver.calculatePaperGoods('PERSONAL_BOX', guestCount, pbContext);
-    // Override Fork Small y Napkins con cantidades basadas en boxes
-    const baseItems = pgResult.items.filter(i => !['Fork Small', 'Napkin Pack', 'Napkins'].includes(i.name));
+    // Override Fork Small and Napkins with personal box quantities
+    const baseItems = pgResult.items.filter(i => !['Fork Small','Napkin Pack','Napkins'].includes(i.name));
     paperGoods = {
       included: true,
-      wantsPaper: true,
       items: [
-        { name: 'Fork Small',  qty: totalBoxes + 5, unit: 'each' },
-        { name: 'Napkin Pack', qty: totalBoxes + 5, unit: 'each' },
+        { name: 'Fork Small',  qty: guestCount + 5, unit: 'each' },
+        { name: 'Napkin Pack', qty: guestCount + 5, unit: 'each' },
         ...baseItems,
       ],
     };
   }
 
-  // Sub-evento Bird Box (si hay items de bird box en la misma orden)
   let birdBoxResult = null;
   if (birdBoxItems.length > 0) {
     birdBoxResult = await _processBirdBoxItems(birdBoxItems, guestCount, cateringOrder, delivery, resolver, pool);
   }
 
-  // Sub-evento Taco Bar (si hay items de taco bar en la misma orden)
   let tacoBarResult = null;
   if (tacoBarItems.length > 0) {
+    // Create virtual order for taco bar sub-calculation
     const virtualOrder = { ...cateringOrder, parsedData: { ...(parsedData || {}), items: tacoBarItems } };
-    const tbResult = await calculateTacoBar(virtualOrder, resolver, pool);
+    const tbResult = await calculateTacoBar(virtualOrder, resolver);
     tacoBarResult = {
-      proteins:   tbResult.proteins,
-      toppings:   tbResult.toppings,
-      salsas:     tbResult.salsas,
-      snacks:     tbResult.snacks,
-      tortillas:  tbResult.tortillas,
+      proteins:  tbResult.proteins,
+      toppings:  tbResult.toppings,
+      salsas:    tbResult.salsas,
+      snacks:    tbResult.snacks,
+      tortillas: tbResult.tortillas,
       paperGoods: tbResult.paperGoods,
-      salads:     tbResult.salads,
-      addons:     tbResult.addons,
-      drinks:     [],
-      hotItems:   tbResult.hotItems,
-      coldItems:  tbResult.coldItems,
-      dryItems:   tbResult.dryItems,
+      salads:    tbResult.salads,
+      addons:    tbResult.addons,
+      drinks:    tbResult.drinks || [],
+      hotItems:  tbResult.hotItems,
+      coldItems: tbResult.coldItems,
+      dryItems:  tbResult.dryItems,
     };
   }
 
@@ -220,12 +203,12 @@ async function calculatePersonalBox(cateringOrder, resolver, pool) {
 
   return {
     individualTacos,
-    personalBoxes, personalTacoRows, chipsRow, salsaRow, salsaRows,
+    personalBoxes, personalTacoRows, chipsRow, salsaRow,
     totalBoxes, paperGoods, birdBoxResult, tacoBarResult,
     drinks: allDrinks, addons,
     proteins: [], toppings: [], salsas: [], tortillas: [], snacks: [],
     hotItems:  [...individualTacos, ...personalTacoRows, ...(birdBoxResult?.hotItems || []), ...(tacoBarResult?.hotItems || []), ...allDrinks.filter(d => d.tempType === 'hot')],
-    coldItems: [...(salsaRows.length > 0 ? salsaRows : []), ...(birdBoxResult?.coldItems || []), ...(tacoBarResult?.coldItems || []), ...allDrinks.filter(d => d.tempType === 'cold')],
+    coldItems: [...(salsaRow ? [salsaRow] : []), ...(birdBoxResult?.coldItems || []), ...(tacoBarResult?.coldItems || []), ...allDrinks.filter(d => d.tempType === 'cold')],
     dryItems:  [...(chipsRow ? [chipsRow] : []), ...(birdBoxResult?.dryItems || []), ...(tacoBarResult?.dryItems || [])],
   };
 }
