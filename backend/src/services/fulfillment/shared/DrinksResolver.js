@@ -7,7 +7,7 @@ function isDrink(nameLc) {
   return DRINK_KEYWORDS.some(k => nameLc.includes(k));
 }
 
-function parseDrink(item, modifiers, qty) {
+function parseDrink(item, modifiers, qty, guestCount) {
   const nameLc    = (item.displayName || item.name || '').toLowerCase();
   const isHot     = nameLc.includes('coffee') || nameLc.includes('tea') || nameLc.includes('hot');
   const tempType  = isHot ? 'hot' : 'cold';
@@ -39,12 +39,14 @@ function parseDrink(item, modifiers, qty) {
         const isSweetener = SWEETENER_KEYWORDS.some(k => n.includes(k));
         const isStirrer   = STIRRER_KEYWORDS.some(k => n.includes(k));
         if (isSweetener) {
-          // 0.25 packets per person
-          const packets = Math.ceil(qty * 0.25);
+          // 0.25 packets per person (basado en guests, no en qty de cafés)
+          const guests  = guestCount || qty;
+          const packets = Math.ceil(guests * 0.25);
           return { name: m.displayName, totalOz: null, packaging: `${packets} packets`, tempType: 'dry', isSweetener: true };
         }
         // Regular creamer: 1 oz per person
-        const totalOz = qty * 1;
+        const guests  = guestCount || qty;
+        const totalOz = guests * 1;
         return {
           name:      m.displayName,
           totalOz,
@@ -54,7 +56,7 @@ function parseDrink(item, modifiers, qty) {
       });
 
     // Stirrers: 0.25 per person — agregar automáticamente si hay café
-    const stirrerQty = Math.ceil(qty * 0.25);
+    const stirrerQty = Math.ceil((guestCount || qty) * 0.25);
     const stirrers = [{ name: 'Stirrers', totalOz: null, packaging: `${stirrerQty} each`, tempType: 'dry', isSweetener: false }];
 
     return {
@@ -83,13 +85,13 @@ function parseDrink(item, modifiers, qty) {
   };
 }
 
-function resolveDrinks(items) {
+function resolveDrinks(items, guestCount) {
   const drinks = [];
   for (const item of items) {
     const nameLc    = (item.displayName || item.name || '').toLowerCase();
     const modifiers = item.modifiers || [];
     const qty       = item.quantity || 1;
-    if (isDrink(nameLc)) drinks.push(parseDrink(item, modifiers, qty));
+    if (isDrink(nameLc)) drinks.push(parseDrink(item, modifiers, qty, guestCount));
   }
   return drinks;
 }

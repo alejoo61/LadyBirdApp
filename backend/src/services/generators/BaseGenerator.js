@@ -478,6 +478,19 @@ class BaseGenerator {
     let needsColdCups = false;
     let needsHotCups  = false;
 
+    // Pre-consolidar creamers de todos los drinks de café en un solo mapa
+    const allCreamerMap = new Map();
+    for (const drink of drinks) {
+      for (const cr of (drink.creamers || [])) {
+        if (allCreamerMap.has(cr.name)) {
+          const ex = allCreamerMap.get(cr.name);
+          if (cr.totalOz) ex.totalOz = (ex.totalOz || 0) + cr.totalOz;
+        } else {
+          allCreamerMap.set(cr.name, { ...cr });
+        }
+      }
+    }
+
     for (const drink of drinks) {
       const isHot     = drink.tempType === 'hot';
       const pkgStr    = drink.packaging
@@ -508,30 +521,30 @@ class BaseGenerator {
           </tr>`);
       }
 
-      if (drink.creamers?.length > 0) {
-        for (const cr of drink.creamers) {
-          const amountCol = cr.totalOz ? `${cr.totalOz} oz` : '—';
-          drinkRows.push(`
-            <tr style="background:#f0f4ff">
-              <td style="padding-left:20px;color:#444">↳ ${cr.name}</td>
-              <td>${amountCol}</td>
-              <td>${cr.packaging}</td>
-              <td class="checkbox-cell"><span class="checkbox"></span></td>
-              <td class="checkbox-cell"><span class="checkbox"></span></td>
-            </tr>`);
-        }
-      }
-
-
-
       if (drink.wantsCups) {
         if (isHot)  needsHotCups  = true;
         else        needsColdCups = true;
       }
     }
 
-    // Cups: Guest Qty + 5 — una sola línea por tipo (no una por drink)
-    // Se muestran al final de la sección de drinks
+    // Renderizar creamers consolidados una sola vez al final
+    for (const cr of allCreamerMap.values()) {
+      const amountCol = cr.totalOz ? `${cr.totalOz} oz` : '—';
+      let pkg = cr.packaging;
+      if (cr.totalOz && !cr.isSweetener) {
+        pkg = cr.totalOz > 32 ? '½ Gallon Jug' : '32 oz deli cup';
+      }
+      drinkRows.push(`
+        <tr style="background:#f0f4ff">
+          <td style="padding-left:20px;color:#444">↳ ${cr.name}</td>
+          <td>${amountCol}</td>
+          <td>${pkg}</td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+          <td class="checkbox-cell"><span class="checkbox"></span></td>
+        </tr>`);
+    }
+
+    // Cups: Guest Qty + 5 — una sola línea por tipo
     const cupsQty = (guestCount || 0) + 5;
     const cupRows = [];
     if (needsColdCups) {
