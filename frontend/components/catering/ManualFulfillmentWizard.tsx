@@ -214,23 +214,70 @@ function buildItems(events: EventBlock[], drinks: DrinkItem[], addons: AddonItem
   return items;
 }
 
-// ─── Hook: carga items del menu API una sola vez por eventType ────────────────
-// FIX: este hook ahora se usa SOLO en EventEditor (nivel padre),
-// y los sub-forms reciben byCategory como prop — evita re-renders dentro de los
-// sub-forms que causaban stale closures al seleccionar múltiples items.
+// ─── Module-level cache — persiste entre renders, nunca se resetea ────────────
+// FIX RAIZ: cada EventEditor instanciaba su propio useMenuItems con useState local.
+// Cuando uno de ellos terminaba el fetch y hacía setState, React re-renderizaba
+// ese EventEditor — y si en ese momento el usuario tenía items seleccionados en
+// OTRO EventEditor, el re-render del primero podía interferir con el estado del
+// padre (events array) dejando los valores anteriores del render stale.
+//
+// Con el cache a nivel módulo:
+// - El fetch se hace UNA sola vez por eventType en toda la vida de la app
+// - Todas las instancias de EventEditor comparten el mismo resultado
+// - No hay setState async que pueda corromper el estado del padre
+
+type MenuItem = import('@/services/api/menuApi').MenuItem;
+
+const menuCache: Record<string, MenuItem[]>          = {};
+const menuLoading: Record<string, boolean>           = {};
+const menuListeners: Record<string, Array<() => void>> = {};
+
+function fetchMenuItems(eventType: string): Promise<MenuItem[]> {
+  if (menuCache[eventType])  return Promise.resolve(menuCache[eventType]);
+  if (menuLoading[eventType]) {
+    // Ya hay un fetch en vuelo — devolver una promise que resuelve cuando termine
+    return new Promise(resolve => {
+      if (!menuListeners[eventType]) menuListeners[eventType] = [];
+      menuListeners[eventType].push(() => resolve(menuCache[eventType]));
+    });
+  }
+
+  menuLoading[eventType] = true;
+  return import('@/services/api/menuApi')
+    .then(({ menuApi }) => menuApi.getForOrderCreation(eventType))
+    .then(res => {
+      menuCache[eventType]   = res.data.data;
+      menuLoading[eventType] = false;
+      // Notificar a todos los que esperaban
+      (menuListeners[eventType] || []).forEach(fn => fn());
+      menuListeners[eventType] = [];
+      return menuCache[eventType];
+    })
+    .catch(err => {
+      menuLoading[eventType] = false;
+      console.error('menuApi error:', err);
+      return [];
+    });
+}
 
 function useMenuItems(eventType: string) {
-  const [items, setItems] = useState<import('@/services/api/menuApi').MenuItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  // Estado inicializado directamente desde cache si ya existe — evita el
+  // "setState synchronously within an effect" warning de React.
+  // El useState lazy initializer corre solo en el primer render, sin effect.
+  const [items, setItems]     = useState<MenuItem[]>(() => menuCache[eventType] || []);
+  const [loading, setLoading] = useState<boolean>(() => !menuCache[eventType]);
 
   useEffect(() => {
-    setLoading(true);
-    import('@/services/api/menuApi').then(({ menuApi }) =>
-      menuApi.getForOrderCreation(eventType)
-    ).then(res => {
-      setItems(res.data.data);
-    }).catch(console.error)
-    .finally(() => setLoading(false));
+    // Cache hit: no hay nada que hacer — el estado ya fue inicializado correctamente
+    // con el lazy initializer arriba. Evitamos llamar setState dentro del effect
+    // para no triggear cascading renders (eslint react-hooks/exhaustive-deps warning).
+    if (menuCache[eventType]) return;
+
+    // Cache miss: fetch y actualizar cuando llegue la respuesta
+    fetchMenuItems(eventType).then(data => {
+      setItems(data);
+      setLoading(false);
+    });
   }, [eventType]);
 
   const byCategory = items.reduce<ByCategory>((acc, item) => {
@@ -695,13 +742,24 @@ function EventEditor({
   const evRef = useRef(ev);
   useEffect(() => { evRef.current = ev; }, [ev]);
 
-  // Carga items según el tipo de evento activo
-  const menuEventType =
-    ev.type === 'BIRD_BOX'      ? 'BIRD_BOX'    :
-    ev.type === 'PERSONAL_BOX'  ? 'PERSONAL_BOX' :
-    'TACO_BAR'; // TACO_BAR, INDIVIDUAL_TACOS, SALADS comparten el mismo endpoint
+  // FIX: pre-cargar los 3 endpoints al montar — gracias al cache de módulo, cada
+  // fetch se ejecuta una sola vez aunque haya N EventEditors en pantalla.
+  // Cuando el usuario cambia de tab (BIRD_BOX → PERSONAL_BOX → TACO_BAR),
+  // los datos ya están en cache → loading=false → byCategory nunca queda vacío
+  // → los pills no se deseleccionan visualmente.
+  const { byCategory: bcTacoBar,     loading: loadingTB } = useMenuItems('TACO_BAR');
+  const { byCategory: bcBirdBox,     loading: loadingBB } = useMenuItems('BIRD_BOX');
+  const { byCategory: bcPersonalBox, loading: loadingPB } = useMenuItems('PERSONAL_BOX');
 
-  const { byCategory, loading } = useMenuItems(menuEventType);
+  const byCategory =
+    ev.type === 'BIRD_BOX'     ? bcBirdBox     :
+    ev.type === 'PERSONAL_BOX' ? bcPersonalBox :
+    bcTacoBar;
+
+  const loading =
+    ev.type === 'BIRD_BOX'     ? loadingBB :
+    ev.type === 'PERSONAL_BOX' ? loadingPB :
+    loadingTB;
 
   // Handlers que siempre leen evRef.current (no el ev closureado del render)
   const handleTacoBarChange     = (v: TacoBarConfig)       => onChange({ ...evRef.current, tacoBar: v });
@@ -1252,7 +1310,23 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess, ed
                 </div>
                 <div>
                   <label className={labelCls}>Event Date *</label>
-                  <input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} className={inputCls} />
+                  {/* Formato USA MM/DD/YYYY — valor interno YYYY-MM-DD para el backend */}
+                  <input
+                    type="text"
+                    placeholder="MM/DD/YYYY"
+                    value={eventDate ? eventDate.replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$2/$3/$1') : ''}
+                    onChange={e => {
+                      const raw = e.target.value.replace(/[^\d/]/g, '');
+                      const match = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                      if (match) setEventDate(`${match[3]}-${match[1]}-${match[2]}`);
+                      else if (!raw) setEventDate('');
+                    }}
+                    onBlur={e => {
+                      const match = e.target.value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                      if (match) setEventDate(`${match[3]}-${match[1].padStart(2,'0')}-${match[2].padStart(2,'0')}`);
+                    }}
+                    className={inputCls}
+                  />
                 </div>
                 <div>
                   <label className={labelCls}>Event Time *</label>
