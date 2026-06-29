@@ -1132,6 +1132,10 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess, ed
   const [clientPhone,      setClientPhone]      = useState(editingOrder?.clientPhone || '');
   const [clientEmail,      setClientEmail]      = useState(editingOrder?.clientEmail || '');
   const [eventDate,        setEventDate]        = useState(_editDate);
+  // displayDate: lo que el usuario ve mientras tipea (libre). eventDate: YYYY-MM-DD para el backend.
+  const [displayDate,      setDisplayDate]      = useState(
+    _editDate ? _editDate.replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$2/$3/$1') : ''
+  );
   const [eventTime,        setEventTime]        = useState(_editTime);
   const [deliveryMethod,   setDeliveryMethod]   = useState<'PICKUP'|'DELIVERY'>((editingOrder?.deliveryMethod as 'PICKUP'|'DELIVERY') || 'PICKUP');
   const [deliveryAddress,  setDeliveryAddress]  = useState(editingOrder?.deliveryAddress || '');
@@ -1310,20 +1314,36 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess, ed
                 </div>
                 <div>
                   <label className={labelCls}>Event Date *</label>
-                  {/* Formato USA MM/DD/YYYY — valor interno YYYY-MM-DD para el backend */}
+                  {/* displayDate: valor libre mientras el usuario tipea
+                      eventDate:   YYYY-MM-DD que va al backend — solo se setea cuando el formato es válido */}
                   <input
                     type="text"
                     placeholder="MM/DD/YYYY"
-                    value={eventDate ? eventDate.replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$2/$3/$1') : ''}
+                    value={displayDate}
                     onChange={e => {
-                      const raw = e.target.value.replace(/[^\d/]/g, '');
-                      const match = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-                      if (match) setEventDate(`${match[3]}-${match[1]}-${match[2]}`);
-                      else if (!raw) setEventDate('');
+                      const raw = e.target.value;
+                      setDisplayDate(raw);  // siempre actualizar display — el usuario puede tipear libremente
+                      // Parsear solo cuando el formato está completo
+                      const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                      if (match) {
+                        const m = match[1].padStart(2, '0');
+                        const d = match[2].padStart(2, '0');
+                        setEventDate(`${match[3]}-${m}-${d}`);
+                      } else if (!raw) {
+                        setEventDate('');
+                      }
                     }}
                     onBlur={e => {
-                      const match = e.target.value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-                      if (match) setEventDate(`${match[3]}-${match[1].padStart(2,'0')}-${match[2].padStart(2,'0')}`);
+                      // Al salir: si el formato es válido pero eventDate aún no se seteó, parsearlo
+                      const raw = e.target.value;
+                      const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                      if (match) {
+                        const m = match[1].padStart(2, '0');
+                        const d = match[2].padStart(2, '0');
+                        const iso = `${match[3]}-${m}-${d}`;
+                        setEventDate(iso);
+                        setDisplayDate(`${m}/${d}/${match[3]}`);  // normalizar display con ceros
+                      }
                     }}
                     className={inputCls}
                   />
