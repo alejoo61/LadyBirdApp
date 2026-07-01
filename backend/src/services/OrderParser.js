@@ -34,9 +34,7 @@ class OrderParser {
   // Detectado por:
   // 1. Descuento "3pd EZ Cater Fees/Promos" en appliedDiscounts
   // 2. AlternatePaymentType GUID de EZ Cater en payments
-  //    (cuando no viene el descuento pero sí el pago alternativo de EZ Cater)
   _isEZCater(rawOrder) {
-    // Check 1: descuento EZ Cater
     const rootDiscounts  = rawOrder.appliedDiscounts || [];
     const checkDiscounts = rawOrder.checks?.[0]?.appliedDiscounts || [];
     const allDiscounts   = [...rootDiscounts, ...checkDiscounts];
@@ -45,8 +43,6 @@ class OrderParser {
     );
     if (hasDiscount) return true;
 
-    // Check 2: AlternatePaymentType GUID de EZ Cater
-    // Este GUID es el identificador del método de pago EZ Cater en Toast
     const EZ_CATER_PAYMENT_GUID = '3596355a-ef9c-409f-ac74-2805c5267051';
     const checkPayments = rawOrder.checks?.flatMap(c => c.payments || []) || [];
     const rootPayments  = rawOrder.payments || [];
@@ -63,11 +59,21 @@ class OrderParser {
     );
   }
 
+  // FIX: antes solo usaba la fecha para inferir status, ignorando paymentStatus.
+  // Una orden futura PAID seguía mostrando PENDING en el calendario.
+  // Ahora: PAID/CLOSED → confirmed (independiente de la fecha)
   _inferStatus(rawOrder) {
     if (rawOrder.voided === true) return 'cancelled';
     if (!rawOrder.estimatedFulfillmentDate) return 'pending';
+
+    const paymentStatus = rawOrder.checks?.[0]?.paymentStatus || 'OPEN';
+
+    // Pagada → confirmed aunque la fecha sea futura
+    if (['PAID', 'CLOSED'].includes(paymentStatus)) return 'confirmed';
+
     const fulfillmentDate = new Date(rawOrder.estimatedFulfillmentDate);
     if (fulfillmentDate > new Date()) return 'pending';
+
     return 'completed';
   }
 
