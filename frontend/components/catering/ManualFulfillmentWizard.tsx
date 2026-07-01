@@ -1149,6 +1149,7 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess, ed
     ? parseParsedDataToWizardState(editingOrder.parsedData as Record<string, unknown>)
     : null;
 
+  const [notes, setNotes] = useState<string>((isEditMode && editingOrder?.parsedData?.notes as string) || '');
   const [events, setEvents] = useState<EventBlock[]>(
     _initialState?.events.length
       ? _initialState.events
@@ -1211,6 +1212,7 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess, ed
         kitchenFinishTime: kitchenFinishTime || null,
         distanceMiles:     distanceMiles ? parseFloat(distanceMiles) : null,
         items,
+        notes:  notes || null,
         extras: extras.map(e => ({ displayName: e.name, quantity: e.quantity, price: 0, category: e.category, modifiers: [] })),
       };
 
@@ -1411,6 +1413,20 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess, ed
                 className="w-full py-3 rounded-2xl border-2 border-dashed border-tumbleweed/40 text-[11px] font-black uppercase tracking-widest text-night/40 hover:border-emerald-400 hover:text-emerald-700 transition-all flex items-center justify-center gap-2">
                 <Plus size={14} /> Add Event
               </button>
+
+              {/* Notas generales de la orden */}
+              <div className="mt-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-night/40 block mb-1.5">
+                  Order Notes
+                </label>
+                <textarea
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  placeholder="Internal notes, special instructions, etc."
+                  rows={3}
+                  className="w-full px-4 py-2.5 bg-bone rounded-xl text-sm font-medium text-night outline-none placeholder:text-night/30 resize-none"
+                />
+              </div>
               {totalGuests > 0 && (
                 <p className="text-[11px] font-black text-night/40 text-right">{totalGuests} total guests</p>
               )}
