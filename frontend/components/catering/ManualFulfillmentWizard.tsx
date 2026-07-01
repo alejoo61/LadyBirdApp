@@ -1409,13 +1409,8 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess, ed
                   onRemove={() => removeEvent(ev.id)}
                 />
               ))}
-              <button type="button" onClick={addEvent}
-                className="w-full py-3 rounded-2xl border-2 border-dashed border-tumbleweed/40 text-[11px] font-black uppercase tracking-widest text-night/40 hover:border-emerald-400 hover:text-emerald-700 transition-all flex items-center justify-center gap-2">
-                <Plus size={14} /> Add Event
-              </button>
-
-              {/* Notas generales de la orden */}
-              <div className="mt-2">
+              {/* Notas generales de la orden — arriba del Add Event para que sea siempre visible */}
+              <div className="px-1">
                 <label className="text-[10px] font-black uppercase tracking-widest text-night/40 block mb-1.5">
                   Order Notes
                 </label>
@@ -1423,10 +1418,15 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess, ed
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
                   placeholder="Internal notes, special instructions, etc."
-                  rows={3}
+                  rows={2}
                   className="w-full px-4 py-2.5 bg-bone rounded-xl text-sm font-medium text-night outline-none placeholder:text-night/30 resize-none"
                 />
               </div>
+
+              <button type="button" onClick={addEvent}
+                className="w-full py-3 rounded-2xl border-2 border-dashed border-tumbleweed/40 text-[11px] font-black uppercase tracking-widest text-night/40 hover:border-emerald-400 hover:text-emerald-700 transition-all flex items-center justify-center gap-2">
+                <Plus size={14} /> Add Event
+              </button>
               {totalGuests > 0 && (
                 <p className="text-[11px] font-black text-night/40 text-right">{totalGuests} total guests</p>
               )}
