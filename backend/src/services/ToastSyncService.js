@@ -219,17 +219,18 @@ class ToastSyncService {
         clientEmail:              row.client_email,
         clientPhone:              row.client_phone,
         estimatedFulfillmentDate: row.estimated_fulfillment_date,
-        kitchenFinishTime:        row.kitchen_finish_time || null,
+        kitchenFinishTime:        row.kitchen_finish_time        || null,
+        deliveryDistanceMiles:    row.delivery_distance_miles    || null,  // ← FIX: campo que faltaba
         deliveryMethod:           row.delivery_method,
         deliveryAddress:          row.delivery_address,
         deliveryNotes:            row.delivery_notes,
         parsedData:               row.parsed_data,
-        items:                    row.parsed_data?.items || [],
+        items:                    row.parsed_data?.items         || [],
         guestCount:               row.guest_count,
         totalAmount:              row.total_amount,
-        isManuallyEdited:         row.is_manually_edited || false,
-        isEZCater:                row.is_ez_cater || false,
-        pdfVersion:               row.pdf_version || 1,
+        isManuallyEdited:         row.is_manually_edited         || false,
+        isEZCater:                row.is_ez_cater                || false,
+        pdfVersion:               row.pdf_version                || 1,
         googleEventId:            row.google_event_id,
       };
 
@@ -317,7 +318,6 @@ class ToastSyncService {
         );
         catering++;
 
-        // Respetar GOOGLE_CALENDAR_ENABLED — si es false, no crear/actualizar eventos
         const calendarEnabled = process.env.GOOGLE_CALENDAR_ENABLED !== 'false';
 
         if (isNew) {
@@ -330,6 +330,8 @@ class ToastSyncService {
 
           if (this.fulfillmentCalculator && this.googleCalendarService && calendarEnabled) {
             setImmediate(async () => {
+              // FIX: para delivery, calcular millas ANTES de generar el PDF
+              // así el PDF del Calendar ya tiene las millas correctas desde el primer momento
               if (parsed.delivery?.method === 'DELIVERY') {
                 await this._calculateKitchenFinishTime(cateringOrderId);
               }
@@ -352,6 +354,7 @@ class ToastSyncService {
           if (!isManual && calendarEnabled) {
             if (this.fulfillmentCalculator && this.googleCalendarService) {
               setImmediate(async () => {
+                // FIX: mismo fix para órdenes actualizadas
                 if (parsed.delivery?.method === 'DELIVERY') {
                   await this._calculateKitchenFinishTime(cateringOrderId);
                 }

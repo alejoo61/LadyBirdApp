@@ -14,6 +14,7 @@ function buildHeader(order, delivery = {}) {
     deliveryMethod:           order.deliveryMethod,
     deliveryAddress:          order.deliveryAddress,
     deliveryNotes:            delivery.notes || order.deliveryNotes,
+    notes:                    order.parsedData?.notes || order.notes || null,  // ← notas generales de la orden
     storeName:                order.storeName,
     storeCode:                order.storeCode,
     isManuallyEdited:         order.isManuallyEdited,

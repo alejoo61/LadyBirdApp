@@ -1149,6 +1149,7 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess, ed
     ? parseParsedDataToWizardState(editingOrder.parsedData as Record<string, unknown>)
     : null;
 
+  const [notes, setNotes] = useState<string>((isEditMode && editingOrder?.parsedData?.notes as string) || '');
   const [events, setEvents] = useState<EventBlock[]>(
     _initialState?.events.length
       ? _initialState.events
@@ -1211,6 +1212,7 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess, ed
         kitchenFinishTime: kitchenFinishTime || null,
         distanceMiles:     distanceMiles ? parseFloat(distanceMiles) : null,
         items,
+        notes:  notes || null,
         extras: extras.map(e => ({ displayName: e.name, quantity: e.quantity, price: 0, category: e.category, modifiers: [] })),
       };
 
@@ -1314,35 +1316,48 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess, ed
                 </div>
                 <div>
                   <label className={labelCls}>Event Date *</label>
-                  {/* displayDate: valor libre mientras el usuario tipea
-                      eventDate:   YYYY-MM-DD que va al backend — solo se setea cuando el formato es válido */}
+                  {/* Auto-format MM/DD/YYYY — inserta "/" automáticamente mientras el usuario tipea */}
                   <input
                     type="text"
                     placeholder="MM/DD/YYYY"
                     value={displayDate}
                     onChange={e => {
-                      const raw = e.target.value;
-                      setDisplayDate(raw);  // siempre actualizar display — el usuario puede tipear libremente
-                      // Parsear solo cuando el formato está completo
-                      const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                      const prev = displayDate;
+                      const val  = e.target.value;
+
+                      // Si el usuario está borrando, no auto-formatear
+                      if (val.length < prev.length) {
+                        setDisplayDate(val);
+                        if (!val) setEventDate('');
+                        return;
+                      }
+
+                      // Solo dígitos y "/"
+                      const digits = val.replace(/\D/g, '');
+
+                      // Auto-insertar "/" después de MM y DD
+                      let formatted = digits;
+                      if (digits.length > 2) formatted = digits.slice(0,2) + '/' + digits.slice(2);
+                      if (digits.length > 4) formatted = digits.slice(0,2) + '/' + digits.slice(2,4) + '/' + digits.slice(4,8);
+
+                      setDisplayDate(formatted);
+
+                      // Parsear cuando el formato está completo MM/DD/YYYY
+                      const match = formatted.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
                       if (match) {
-                        const m = match[1].padStart(2, '0');
-                        const d = match[2].padStart(2, '0');
-                        setEventDate(`${match[3]}-${m}-${d}`);
-                      } else if (!raw) {
+                        setEventDate(`${match[3]}-${match[1]}-${match[2]}`);
+                      } else if (!formatted) {
                         setEventDate('');
                       }
                     }}
                     onBlur={e => {
-                      // Al salir: si el formato es válido pero eventDate aún no se seteó, parsearlo
-                      const raw = e.target.value;
+                      const raw   = e.target.value;
                       const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
                       if (match) {
-                        const m = match[1].padStart(2, '0');
-                        const d = match[2].padStart(2, '0');
-                        const iso = `${match[3]}-${m}-${d}`;
-                        setEventDate(iso);
-                        setDisplayDate(`${m}/${d}/${match[3]}`);  // normalizar display con ceros
+                        const m   = match[1].padStart(2, '0');
+                        const d   = match[2].padStart(2, '0');
+                        setEventDate(`${match[3]}-${m}-${d}`);
+                        setDisplayDate(`${m}/${d}/${match[3]}`);
                       }
                     }}
                     className={inputCls}
@@ -1407,6 +1422,20 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess, ed
                   onRemove={() => removeEvent(ev.id)}
                 />
               ))}
+              {/* Notas generales de la orden — arriba del Add Event para que sea siempre visible */}
+              <div className="px-1">
+                <label className="text-[10px] font-black uppercase tracking-widest text-night/40 block mb-1.5">
+                  Order Notes
+                </label>
+                <textarea
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  placeholder="Internal notes, special instructions, etc."
+                  rows={2}
+                  className="w-full px-4 py-2.5 bg-bone rounded-xl text-sm font-medium text-night outline-none placeholder:text-night/30 resize-none"
+                />
+              </div>
+
               <button type="button" onClick={addEvent}
                 className="w-full py-3 rounded-2xl border-2 border-dashed border-tumbleweed/40 text-[11px] font-black uppercase tracking-widest text-night/40 hover:border-emerald-400 hover:text-emerald-700 transition-all flex items-center justify-center gap-2">
                 <Plus size={14} /> Add Event
