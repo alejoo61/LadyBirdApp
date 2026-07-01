@@ -1316,35 +1316,48 @@ export default function ManualFulfillmentWizard({ stores, onClose, onSuccess, ed
                 </div>
                 <div>
                   <label className={labelCls}>Event Date *</label>
-                  {/* displayDate: valor libre mientras el usuario tipea
-                      eventDate:   YYYY-MM-DD que va al backend — solo se setea cuando el formato es válido */}
+                  {/* Auto-format MM/DD/YYYY — inserta "/" automáticamente mientras el usuario tipea */}
                   <input
                     type="text"
                     placeholder="MM/DD/YYYY"
                     value={displayDate}
                     onChange={e => {
-                      const raw = e.target.value;
-                      setDisplayDate(raw);  // siempre actualizar display — el usuario puede tipear libremente
-                      // Parsear solo cuando el formato está completo
-                      const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                      const prev = displayDate;
+                      const val  = e.target.value;
+
+                      // Si el usuario está borrando, no auto-formatear
+                      if (val.length < prev.length) {
+                        setDisplayDate(val);
+                        if (!val) setEventDate('');
+                        return;
+                      }
+
+                      // Solo dígitos y "/"
+                      const digits = val.replace(/\D/g, '');
+
+                      // Auto-insertar "/" después de MM y DD
+                      let formatted = digits;
+                      if (digits.length > 2) formatted = digits.slice(0,2) + '/' + digits.slice(2);
+                      if (digits.length > 4) formatted = digits.slice(0,2) + '/' + digits.slice(2,4) + '/' + digits.slice(4,8);
+
+                      setDisplayDate(formatted);
+
+                      // Parsear cuando el formato está completo MM/DD/YYYY
+                      const match = formatted.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
                       if (match) {
-                        const m = match[1].padStart(2, '0');
-                        const d = match[2].padStart(2, '0');
-                        setEventDate(`${match[3]}-${m}-${d}`);
-                      } else if (!raw) {
+                        setEventDate(`${match[3]}-${match[1]}-${match[2]}`);
+                      } else if (!formatted) {
                         setEventDate('');
                       }
                     }}
                     onBlur={e => {
-                      // Al salir: si el formato es válido pero eventDate aún no se seteó, parsearlo
-                      const raw = e.target.value;
+                      const raw   = e.target.value;
                       const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
                       if (match) {
-                        const m = match[1].padStart(2, '0');
-                        const d = match[2].padStart(2, '0');
-                        const iso = `${match[3]}-${m}-${d}`;
-                        setEventDate(iso);
-                        setDisplayDate(`${m}/${d}/${match[3]}`);  // normalizar display con ceros
+                        const m   = match[1].padStart(2, '0');
+                        const d   = match[2].padStart(2, '0');
+                        setEventDate(`${match[3]}-${m}-${d}`);
+                        setDisplayDate(`${m}/${d}/${match[3]}`);
                       }
                     }}
                     className={inputCls}
