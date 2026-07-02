@@ -16,13 +16,12 @@ const STORE_CALENDARS = {
 const DRIVE_FOLDER_ID   = '1-cJOkjMm4c3hSBkW-52UPx_Edqw_9tJg';
 const CREDENTIALS_PATH  = process.env.GOOGLE_APPLICATION_CREDENTIALS
   || path.join(__dirname, '../../google-credentials.json');
-const IS_TEST_MODE      = process.env.GOOGLE_CALENDAR_TEST_MODE !== 'false';
 
 class GoogleCalendarService {
   constructor() {
-    this.auth   = null;
-    this.drive  = null;
-    this.cal    = null;
+    this.auth  = null;
+    this.drive = null;
+    this.cal   = null;
   }
 
   // ─── AUTH ─────────────────────────────────────────────────────────────────
@@ -123,8 +122,6 @@ class GoogleCalendarService {
       itemsList,
       '',
       `Total = $${parseFloat(order.totalAmount || 0).toFixed(2)}`,
-      '',
-      IS_TEST_MODE ? '\n⚠️ TEST EVENT — Do not action this event' : '',
     ].filter(l => l !== null).join('\n');
   }
 
@@ -150,8 +147,8 @@ class GoogleCalendarService {
   // ─── DRIVE: UPLOAD PDF ────────────────────────────────────────────────────
 
   async uploadPdfToDrive(pdfBuffer, filename) {
-    const drive    = await this._getDrive();
-    const tmpPath  = path.join(os.tmpdir(), filename);
+    const drive   = await this._getDrive();
+    const tmpPath = path.join(os.tmpdir(), filename);
     fs.writeFileSync(tmpPath, pdfBuffer);
 
     try {
